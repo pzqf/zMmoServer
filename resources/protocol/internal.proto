@@ -1,0 +1,356 @@
+syntax = "proto3";
+
+package interop;
+
+option go_package = "./interop;interop";
+
+// 服务间消息ID
+enum InternalMsgId {
+  MSG_INTERNAL_INVALID = 0;
+
+  // 服务注册相关 100-199
+  MSG_INTERNAL_SERVICE_REGISTER = 100;
+  MSG_INTERNAL_SERVICE_DEREGISTER = 101;
+  MSG_INTERNAL_SERVICE_HEARTBEAT = 102;
+  MSG_INTERNAL_SERVICE_DISCOVER = 103;
+
+  // 网关路由相关 200-299
+  MSG_INTERNAL_GATEWAY_ROUTE = 200;
+  MSG_INTERNAL_GATEWAY_BROADCAST = 201;
+  MSG_INTERNAL_GATEWAY_KICK = 202;
+
+  // 玩家路由相关 300-399
+  MSG_INTERNAL_PLAYER_ROUTE = 300;
+  MSG_INTERNAL_PLAYER_BIND_SERVER = 301;
+  MSG_INTERNAL_PLAYER_UNBIND_SERVER = 302;
+  MSG_INTERNAL_PLAYER_TRANSFER = 303;
+
+  // 地图服务器相关 400-499
+  MSG_INTERNAL_MAP_ENTER_REQUEST = 400;
+  MSG_INTERNAL_MAP_ENTER_RESPONSE = 401;
+  MSG_INTERNAL_MAP_LEAVE_REQUEST = 402;
+  MSG_INTERNAL_MAP_LEAVE_RESPONSE = 403;
+  MSG_INTERNAL_MAP_MOVE_SYNC = 404;
+  MSG_INTERNAL_MAP_AOI_ENTER = 405;
+  MSG_INTERNAL_MAP_AOI_LEAVE = 406;
+  MSG_INTERNAL_MAP_AOI_UPDATE = 407;
+
+  // 战斗相关 500-599
+  MSG_INTERNAL_COMBAT_START = 500;
+  MSG_INTERNAL_COMBAT_ACTION = 501;
+  MSG_INTERNAL_COMBAT_END = 502;
+
+  // 跨服相关 600-699
+  MSG_INTERNAL_CROSS_SERVER_REQUEST = 600;
+  MSG_INTERNAL_CROSS_SERVER_RESPONSE = 601;
+}
+
+// 服务类型
+enum ServiceType {
+  SERVICE_TYPE_INVALID = 0;
+  SERVICE_TYPE_GLOBAL = 1;
+  SERVICE_TYPE_GATEWAY = 2;
+  SERVICE_TYPE_GAME = 3;
+  SERVICE_TYPE_MAP = 4;
+  SERVICE_TYPE_ADMIN = 5;
+}
+
+// 服务信息
+message ServiceInfo {
+  int32 server_id = 1;
+  ServiceType service_type = 2;
+  string service_name = 3;
+  string address = 4;
+  int32 port = 5;
+  int32 group_id = 6;
+  int32 online_count = 7;
+  int32 max_online = 8;
+  int32 status = 9;
+  int64 register_time = 10;
+  int64 last_heartbeat = 11;
+  map<string, string> metadata = 12;
+}
+
+// 服务注册请求
+message ServiceRegisterRequest {
+  ServiceInfo service = 1;
+}
+
+// 服务注册响应
+message ServiceRegisterResponse {
+  bool success = 1;
+  string error_msg = 2;
+}
+
+// 服务注销请求
+message ServiceDeregisterRequest {
+  int32 server_id = 1;
+  ServiceType service_type = 2;
+}
+
+// 服务心跳请求
+message ServiceHeartbeatRequest {
+  int32 server_id = 1;
+  ServiceType service_type = 2;
+  int32 online_count = 3;
+  int32 status = 4;
+  float load = 5;
+}
+
+// 服务发现请求
+message ServiceDiscoverRequest {
+  ServiceType service_type = 1;
+  int32 group_id = 2;
+}
+
+// 服务发现响应
+message ServiceDiscoverResponse {
+  bool success = 1;
+  string error_msg = 2;
+  repeated ServiceInfo services = 3;
+}
+
+// 网关路由消息（Gateway转发到GameServer/MapServer）
+message GatewayRouteMessage {
+  int64 session_id = 1;
+  int64 player_id = 2;
+  int32 msg_id = 3;
+  bytes data = 4;
+  int64 timestamp = 5;
+}
+
+// 网关广播消息
+message GatewayBroadcastMessage {
+  repeated int64 session_ids = 1;
+  repeated int64 player_ids = 2;
+  int32 msg_id = 3;
+  bytes data = 4;
+}
+
+// 网关踢人请求
+message GatewayKickRequest {
+  int64 session_id = 1;
+  int64 player_id = 2;
+  int32 reason = 3;
+  string message = 4;
+}
+
+// 玩家路由信息
+message PlayerRouteInfo {
+  int64 player_id = 1;
+  int64 session_id = 2;
+  int64 account_id = 3;
+  int32 game_server_id = 4;
+  int32 map_server_id = 5;
+  int64 current_map_id = 6;
+}
+
+// 玩家绑定服务器请求
+message PlayerBindServerRequest {
+  int64 player_id = 1;
+  int64 session_id = 2;
+  int32 game_server_id = 3;
+  int32 map_server_id = 4;
+}
+
+// 玩家绑定服务器响应
+message PlayerBindServerResponse {
+  bool success = 1;
+  string error_msg = 2;
+  PlayerRouteInfo route_info = 3;
+}
+
+// 玩家解绑服务器请求
+message PlayerUnbindServerRequest {
+  int64 player_id = 1;
+  int32 game_server_id = 2;
+  int32 map_server_id = 3;
+}
+
+// 玩家转移请求
+message PlayerTransferRequest {
+  int64 player_id = 1;
+  int32 from_server_id = 2;
+  int32 to_server_id = 3;
+  bytes player_data = 4;
+}
+
+// 玩家转移响应
+message PlayerTransferResponse {
+  bool success = 1;
+  string error_msg = 2;
+}
+
+// 地图进入请求（GameServer -> MapServer）
+message MapEnterRequest {
+  int64 player_id = 1;
+  int64 session_id = 2;
+  int64 map_id = 3;
+  float x = 4;
+  float y = 5;
+  float z = 6;
+  int32 game_server_id = 7;
+  bytes player_data = 8;
+}
+
+// 地图进入响应（MapServer -> GameServer）
+message MapEnterResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 object_id = 3;
+  int64 map_id = 4;
+  float x = 5;
+  float y = 6;
+  float z = 7;
+}
+
+// 地图离开请求（GameServer -> MapServer）
+message MapLeaveRequest {
+  int64 player_id = 1;
+  int64 object_id = 2;
+  int64 map_id = 3;
+  int32 reason = 4;
+}
+
+// 地图离开响应（MapServer -> GameServer）
+message MapLeaveResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+}
+
+// 地图移动同步（MapServer -> Gateway -> Client）
+message MapMoveSync {
+  int64 object_id = 1;
+  int64 map_id = 2;
+  float x = 3;
+  float y = 4;
+  float z = 5;
+  float orientation = 6;
+  float speed = 7;
+  int32 move_type = 8;
+  int64 timestamp = 9;
+}
+
+// AOI进入通知（MapServer -> GameServer）
+message AoiEnterNotify {
+  int64 player_id = 1;
+  int64 map_id = 2;
+  repeated AoiObjectInfo objects = 3;
+}
+
+// AOI离开通知（MapServer -> GameServer）
+message AoiLeaveNotify {
+  int64 player_id = 1;
+  int64 map_id = 2;
+  repeated int64 object_ids = 3;
+}
+
+// AOI更新通知（MapServer -> GameServer）
+message AoiUpdateNotify {
+  int64 player_id = 1;
+  int64 map_id = 2;
+  repeated AoiObjectInfo objects = 3;
+}
+
+// AOI对象信息
+message AoiObjectInfo {
+  int64 object_id = 1;
+  int32 object_type = 2;
+  int64 entity_id = 3;
+  string name = 4;
+  float x = 5;
+  float y = 6;
+  float z = 7;
+  float orientation = 8;
+  int32 status = 9;
+  map<int32, int64> attributes = 10;
+}
+
+// 战斗开始通知
+message CombatStartNotify {
+  int64 combat_id = 1;
+  int64 map_id = 2;
+  repeated CombatUnitInfo attackers = 3;
+  repeated CombatUnitInfo defenders = 4;
+}
+
+// 战斗单位信息
+message CombatUnitInfo {
+  int64 unit_id = 1;
+  int32 unit_type = 2;
+  int64 entity_id = 3;
+  int32 hp = 4;
+  int32 max_hp = 5;
+  int32 mp = 6;
+  int32 max_mp = 7;
+}
+
+// 战斗行动通知
+message CombatActionNotify {
+  int64 combat_id = 1;
+  int64 actor_id = 2;
+  int32 action_type = 3;
+  int32 skill_id = 4;
+  repeated CombatEffect effects = 5;
+}
+
+// 战斗效果
+message CombatEffect {
+  int64 target_id = 1;
+  int32 effect_type = 2;
+  int32 value = 3;
+  int32 current_hp = 4;
+  int32 current_mp = 5;
+}
+
+// 战斗结束通知
+message CombatEndNotify {
+  int64 combat_id = 1;
+  int32 result = 2;
+  repeated CombatReward rewards = 3;
+}
+
+// 战斗奖励
+message CombatReward {
+  int64 unit_id = 1;
+  int64 exp = 2;
+  int64 gold = 3;
+  repeated ItemInfo items = 4;
+}
+
+// 物品信息
+message ItemInfo {
+  int64 item_id = 1;
+  int32 config_id = 2;
+  int32 count = 3;
+}
+
+// 跨服请求
+message CrossServerRequest {
+  int64 request_id = 1;
+  int32 from_server_id = 2;
+  int32 to_server_id = 3;
+  int32 msg_id = 4;
+  bytes data = 5;
+  int64 timestamp = 6;
+}
+
+// 跨服响应
+message CrossServerResponse {
+  int64 request_id = 1;
+  int32 from_server_id = 2;
+  int32 to_server_id = 3;
+  bool success = 4;
+  string error_msg = 5;
+  bytes data = 6;
+}
+
+// 内部消息包装
+message InternalMessage {
+  int32 msg_id = 1;
+  bytes data = 2;
+  int64 timestamp = 3;
+  int32 source_server_id = 4;
+  int32 target_server_id = 5;
+}

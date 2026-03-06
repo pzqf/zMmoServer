@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: global-config
+  namespace: game
+data:
+  config.ini: |
+    ; ============================================
+    ; GlobalServer 配置文件
+    ; 全局服务器 - 账号管理和服务器列表维护
+    ; ============================================
+
+    [server]
+    ; -------------------------------------------
+    ; 服务器基本配置
+    ; -------------------------------------------
+    server_id = 1
+    server_name = GlobalServer
+    worker_id = 1
+    datacenter_id = 1
+
+    [http]
+    ; -------------------------------------------
+    ; HTTP服务配置
+    ; -------------------------------------------
+    listen_address = 0.0.0.0:8082
+    max_client_count = 10000
+    max_packet_data_size = 1048576
+
+    [log]
+    ; -------------------------------------------
+    ; 日志配置
+    ; -------------------------------------------
+    level = 0
+    console = true
+    filename = ./logs/server.log
+    max-size = 100
+    max-days = 15
+    max-backups = 10
+    compress = true
+    show-caller = true
+    stacktrace = 3
+    sampling = true
+    sampling-initial = 100
+    sampling-thereafter = 10
+    async = true
+    async-buffer-size = 2048
+    async-flush-interval = 50
+
+    [database.global]
+    ; -------------------------------------------
+    ; 全局数据库配置
+    ; -------------------------------------------
+    host = mysql.game
+    port = 3306
+    user = root
+    password = ${DB_PASSWORD}
+    dbname = global
+    driver = mysql
+    max_pool_size = 100
+    min_pool_size = 10
+    connect_timeout = 30
+
+    [pprof]
+    ; -------------------------------------------
+    ; pprof性能分析配置
+    ; -------------------------------------------
+    enabled = false
+    listen_address = localhost:6060

@@ -1,0 +1,62 @@
+{
+  "map_id": 1,
+  "name": "Demo",
+  "map_type": 1,
+  "width": 1000,
+  "height": 1000,
+  "region_size": 100,
+  "tile_width": 10,
+  "tile_height": 10,
+  "is_instance": false,
+  "max_players": 100,
+  "tile_map": [
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0, 0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0, 0, 1, 1, 1, 0],
+    [0, 1, 0, 0, 1, 1, 0, 0, 1, 0],
+    [0, 1, 0, 0, 1, 1, 0, 0, 1, 0],
+    [0, 1, 1, 1, 0, 0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 0, 0, 1, 1, 1, 0],
+    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  ],
+  "spawn_points": [
+    {
+      "type": "player",
+      "id": 0,
+      "x": 500,
+      "y": 500,
+      "z": 0,
+      "name": "PlayerSpawn"
+    },
+    {
+      "type": "monster",
+      "id": 1,
+      "x": 5,
+      "y": 5,
+      "z": 0,
+      "name": "Monster1",
+      "count": 1
+    },
+    {
+      "type": "monster",
+      "id": 2,
+      "x": -5,
+      "y": 5,
+      "z": 0,
+      "name": "Monster2",
+      "count": 1
+    },
+    {
+      "type": "monster",
+      "id": 3,
+      "x": 10,
+      "y": -5,
+      "z": 0,
+      "name": "Monster3",
+      "count": 1
+    }
+  ],
+  "teleport_points": []
+}

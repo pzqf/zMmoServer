@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+  namespace: game
+data:
+  my.cnf: |
+    [mysqld]
+    max_connections = 1000
+    innodb_buffer_pool_size = 2G
+    innodb_log_file_size = 256M
+    innodb_flush_log_at_trx_commit = 2
+    innodb_flush_method = O_DIRECT
+    skip-name-resolve
+    bind-address = 0.0.0.0

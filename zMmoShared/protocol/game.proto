@@ -1,0 +1,267 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// 消息基础结构
+message Message {
+  uint32 msg_id = 1;
+  int64 player_id = 2;
+  int64 session_id = 3;
+  bytes data = 4;
+}
+
+// 响应消息结构
+message Response {
+  uint32 msg_id = 1;
+  int32 result = 2;
+  string error_msg = 3;
+  bytes data = 4;
+}
+
+// 玩家信息
+message PlayerInfo {
+  int64 player_id = 1;
+  string name = 2;
+  int32 level = 3;
+  int32 sex = 4;
+  int32 age = 5;
+}
+
+// 玩家登录请求
+message PlayerLoginRequest {
+  int64 player_id = 1;
+}
+
+// 玩家登录响应
+message PlayerLoginResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+  string name = 4;
+  int32 level = 5;
+  int64 gold = 6;
+}
+
+// 玩家创建请求
+message PlayerCreateRequest {
+  string name = 1;
+  int32 sex = 2;
+  int32 age = 3;
+}
+
+// 玩家创建响应
+message PlayerCreateResponse {
+  bool success = 1;
+  string error_msg = 2;
+  PlayerInfo player = 3;
+}
+
+// 活动信息
+message ActivityInfo {
+  int64 activity_id = 1;
+  string name = 2;
+  string description = 3;
+  int32 type = 4;
+  int32 status = 5;
+  int64 start_time = 6;
+  int64 end_time = 7;
+  int32 min_level = 8;
+  int32 max_level = 9;
+}
+
+// 活动列表响应
+message ActivityListResponse {
+  bool success = 1;
+  repeated ActivityInfo activities = 2;
+}
+
+// 活动参与响应
+message ActivityJoinResponse {
+  bool success = 1;
+}
+
+// 活动进度更新响应
+message ActivityProgressResponse {
+  bool success = 1;
+}
+
+// 活动奖励领取响应
+message ActivityClaimResponse {
+  bool success = 1;
+}
+
+// 商城商品信息
+message ShopItemInfo {
+  int64 item_id = 1;
+  string name = 2;
+  string description = 3;
+  string icon = 4;
+  int32 price_type = 5;
+  int64 price = 6;
+  int64 original_price = 7;
+  int32 category = 8;
+  int32 item_type = 9;
+  int32 item_count = 10;
+  int32 level_req = 11;
+  int32 vip_req = 12;
+  int32 limit_type = 13;
+  int32 limit_count = 14;
+  bool is_hot = 15;
+  bool is_new = 16;
+  int64 start_time = 17;
+  int64 end_time = 18;
+}
+
+// 商城分类信息
+message ShopCategoryInfo {
+  int32 category_id = 1;
+  string name = 2;
+  string icon = 3;
+  int32 sort_order = 4;
+  bool is_visible = 5;
+}
+
+// 商品列表响应
+message ShopItemListResponse {
+  bool success = 1;
+  repeated ShopItemInfo items = 2;
+}
+
+// 分类列表响应
+message ShopCategoryListResponse {
+  bool success = 1;
+  repeated ShopCategoryInfo categories = 2;
+}
+
+// 购买商品响应
+message ShopBuyResponse {
+  bool success = 1;
+  int64 item_id = 2;
+  int32 count = 3;
+  int64 total_price = 4;
+}
+
+// 热销商品响应
+message ShopHotItemsResponse {
+  bool success = 1;
+  repeated ShopItemInfo items = 2;
+}
+
+// 副本信息
+message DungeonInfo {
+  int64 dungeon_id = 1;
+  string name = 2;
+  string description = 3;
+  int32 type = 4;
+  int32 difficulty = 5;
+  int32 min_level = 6;
+  int32 max_level = 7;
+  int32 min_players = 8;
+  int32 max_players = 9;
+  int32 time_limit = 10;
+  int32 daily_limit = 11;
+  int64 reward_exp = 12;
+  int64 reward_gold = 13;
+  int32 boss_count = 14;
+  bool is_open = 15;
+  int64 open_time = 16;
+  int64 close_time = 17;
+}
+
+// 副本列表响应
+message DungeonListResponse {
+  bool success = 1;
+  repeated DungeonInfo dungeons = 2;
+}
+
+// 进入副本响应
+message DungeonEnterResponse {
+  bool success = 1;
+  int64 instance_id = 2;
+}
+
+// 完成副本响应
+message DungeonCompleteResponse {
+  bool success = 1;
+}
+
+// 副本失败响应
+message DungeonFailResponse {
+  bool success = 1;
+}
+
+// Buff信息
+message BuffInfo {
+  int64 buff_id = 1;
+  int64 instance_id = 2;
+  string name = 3;
+  string description = 4;
+  string icon = 5;
+  int32 type = 6;
+  int32 effect_type = 7;
+  float value = 8;
+  float percent = 9;
+  int32 stack_count = 10;
+  int64 end_time = 11;
+}
+
+// Buff列表响应
+message BuffListResponse {
+  bool success = 1;
+  repeated BuffInfo buffs = 2;
+}
+
+// 施加Buff响应
+message BuffApplyResponse {
+  bool success = 1;
+  int64 instance_id = 2;
+}
+
+// 移除Buff响应
+message BuffRemoveResponse {
+  bool success = 1;
+}
+
+// 驱散Buff响应
+message BuffDispelResponse {
+  bool success = 1;
+  int32 dispelled = 2;
+}
+
+// 掉落物品信息
+message DropItemInfo {
+  int64 item_id = 1;
+  int32 count = 2;
+  bool is_rare = 3;
+  int32 bind_type = 4;
+}
+
+// 掉落实体信息
+message DropEntityInfo {
+  int64 entity_id = 1;
+  repeated DropItemInfo items = 2;
+  int64 gold = 3;
+  int64 exp = 4;
+  int64 owner_id = 5;
+  bool is_protected = 6;
+  int32 protect_time = 7;
+  float position_x = 8;
+  float position_y = 9;
+  float position_z = 10;
+}
+
+// 拾取掉落响应
+message DropPickupResponse {
+  bool success = 1;
+  repeated DropItemInfo items = 2;
+  int64 gold = 3;
+  int64 exp = 4;
+}
+
+// 掉落列表响应
+message DropListResponse {
+  bool success = 1;
+  repeated DropEntityInfo drops = 2;
+}

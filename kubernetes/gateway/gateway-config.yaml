@@ -1,0 +1,88 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: game
+data:
+  config.ini: |
+    ; ============================================
+    ; GatewayServer 配置文件
+    ; 网关服务器 - 客户端接入和游戏服务器转发
+    ; ============================================
+
+    [Server]
+    ; -------------------------------------------
+    ; 服务器基本配置
+    ; -------------------------------------------
+    ServerName = GatewayServer
+    ServerID = ${SERVER_ID}
+    ListenAddr = 0.0.0.0:8081
+    MaxConnections = 10000
+    ConnectionTimeout = 300
+    HeartbeatInterval = 30
+
+    [Security]
+    ; -------------------------------------------
+    ; 安全配置
+    ; -------------------------------------------
+    TokenSecret = ${TOKEN_SECRET}
+    TokenExpiry = 86400
+    MaxLoginAttempts = 5
+    BanDuration = 3600
+
+    [GameServer]
+    ; -------------------------------------------
+    ; 关联的GameServer配置
+    ; -------------------------------------------
+    GameServerID = 1
+    GameServerAddr = game-service.game:9001
+    GameServerConnectTimeout = 10
+
+    [Logging]
+    ; -------------------------------------------
+    ; 日志配置
+    ; -------------------------------------------
+    LogLevel = 0
+    console = true
+    LogFile = logs/server.log
+    LogMaxSize = 100
+    LogMaxBackups = 10
+    LogMaxAge = 15
+    compress = true
+    show-caller = true
+    stacktrace = 3
+    sampling = true
+    sampling-initial = 100
+    sampling-thereafter = 10
+    async = true
+    async-buffer-size = 2048
+    async-flush-interval = 50
+
+    [Metrics]
+    ; -------------------------------------------
+    ; 监控指标配置
+    ; -------------------------------------------
+    Enabled = true
+    MetricsAddr = 0.0.0.0:9091
+
+    [ddos]
+    ; -------------------------------------------
+    ; DDoS防护配置
+    ; -------------------------------------------
+    max_conn_per_ip = 10
+    conn_time_window = 60
+    max_packets_per_ip = 100
+    packet_time_window = 1
+    max_bytes_per_ip = 10485760
+    traffic_time_window = 3600
+    ban_duration = 86400
+
+    [net_compression]
+    ; -------------------------------------------
+    ; 网络压缩配置
+    ; -------------------------------------------
+    enabled = true
+    threshold = 1024
+    level = 1
+    min_quality = 0
+    max_quality = 100

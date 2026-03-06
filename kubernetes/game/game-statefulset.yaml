@@ -1,0 +1,107 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: game-server
+  namespace: game
+  labels:
+    app: game-server
+spec:
+  serviceName: game-headless
+  replicas: 3
+  selector:
+    matchLabels:
+      app: game-server
+  template:
+    metadata:
+      labels:
+        app: game-server
+    spec:
+      containers:
+      - name: game-server
+        image: zmmo/game-server:latest
+        ports:
+        - containerPort: 9001
+          name: game
+        - containerPort: 9092
+          name: metrics
+        env:
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: SERVER_ID
+          value: "$(POD_NAME)"
+        - name: ETCD_ENDPOINTS
+          value: "etcd-0.etcd:2379,etcd-1.etcd:2379,etcd-2.etcd:2379"
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        livenessProbe:
+          tcpSocket:
+            port: 9001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 9001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.ini
+          subPath: config.ini
+        - name: data-volume
+          mountPath: /app/data
+  volumeClaimTemplates:
+  - metadata:
+      name: data-volume
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-service
+  namespace: game
+spec:
+  selector:
+    app: game-server
+  ports:
+  - name: game
+    port: 9001
+    targetPort: 9001
+  - name: metrics
+    port: 9092
+    targetPort: 9092
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-headless
+  namespace: game
+spec:
+  clusterIP: None
+  selector:
+    app: game-server
+  ports:
+  - name: game
+    port: 9001
+    targetPort: 9001

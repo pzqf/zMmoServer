@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: map-config
+  namespace: game
+data:
+  config.ini: |
+    ; ============================================
+    ; MapServer 配置文件
+    ; 地图服务器 - 处理玩家移动和AOI
+    ; ============================================
+
+    [Server]
+    ; -------------------------------------------
+    ; 服务器基本配置
+    ; -------------------------------------------
+    ServerID = ${SERVER_ID}
+    ServerName = MapServer
+    ListenAddr = 0.0.0.0:9002
+    MaxConnections = 10000
+    HeartbeatInterval = 30
+
+    [Database]
+    ; -------------------------------------------
+    ; 数据库配置
+    ; -------------------------------------------
+    DBType = mysql
+    DBHost = mysql.game:3306
+    DBPort = 3306
+    DBName = MapDB
+    DBUser = root
+    DBPassword = ${DB_PASSWORD}
+    MaxOpenConns = 100
+    MaxIdleConns = 10
+    ConnMaxLifetime = 3600
+
+    [GameServer]
+    ; -------------------------------------------
+    ; GameServer连接配置
+    ; -------------------------------------------
+    GameServerAddr = game-service.game:9001
+    GameServerConnectTimeout = 10
+
+    [Log]
+    ; -------------------------------------------
+    ; 日志配置
+    ; -------------------------------------------
+    Level = 0
+    Console = true
+    Filename = ./logs/server.log
+    MaxSize = 100
+    MaxDays = 15
+    MaxBackups = 10
+    Compress = true
+    show-caller = true
+    stacktrace = 3
+    sampling = true
+    sampling-initial = 100
+    sampling-thereafter = 10
+    async = true
+    async-buffer-size = 2048
+    async-flush-interval = 50

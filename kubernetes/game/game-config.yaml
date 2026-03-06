@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: game-config
+  namespace: game
+data:
+  config.ini: |
+    ; ============================================
+    ; GameServer 配置文件
+    ; 游戏服务器 - 处理游戏逻辑和玩家数据
+    ; ============================================
+
+    [Server]
+    ; -------------------------------------------
+    ; 服务器基本配置
+    ; -------------------------------------------
+    ServerName = GameServer
+    ServerID = ${SERVER_ID}
+    GroupID = 1
+    ListenAddr = 0.0.0.0:9001
+    MaxConnections = 10000
+    ConnectionTimeout = 300
+    HeartbeatInterval = 30
+
+    [Database]
+    ; -------------------------------------------
+    ; 数据库配置
+    ; -------------------------------------------
+    DBType = mysql
+    DBHost = mysql.game:3306
+    DBPort = 3306
+    DBName = GameDB_000101
+    DBUser = root
+    DBPassword = ${DB_PASSWORD}
+    MaxOpenConns = 100
+    MaxIdleConns = 10
+    ConnMaxLifetime = 3600
+
+    [Gateway]
+    ; -------------------------------------------
+    ; Gateway服务器配置
+    ; -------------------------------------------
+    GatewayAddr = gateway-service.game:8081
+    GatewayConnectTimeout = 10
+
+    [GlobalServer]
+    ; -------------------------------------------
+    ; GlobalServer服务器配置
+    ; -------------------------------------------
+    GlobalServerAddr = global-service.game:8082
+    RegisterInterval = 30
+
+    [Logging]
+    ; -------------------------------------------
+    ; 日志配置
+    ; -------------------------------------------
+    LogLevel = 0
+    console = true
+    LogFile = logs/server.log
+    LogMaxSize = 100
+    LogMaxBackups = 10
+    LogMaxAge = 15
+    compress = true
+    show-caller = true
+    stacktrace = 3
+    sampling = true
+    sampling-initial = 100
+    sampling-thereafter = 10
+    async = true
+    async-buffer-size = 2048
+    async-flush-interval = 50
+
+    [Metrics]
+    ; -------------------------------------------
+    ; 监控指标配置
+    ; -------------------------------------------
+    Enabled = true
+    MetricsAddr = 0.0.0.0:9092
