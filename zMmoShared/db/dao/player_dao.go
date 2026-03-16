@@ -57,7 +57,7 @@ func (dao *PlayerDAO) GetPlayerByID(playerID int64, callback func(*models.Player
 			callback(&player, nil)
 		}
 	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("SELECT * FROM %s WHERE id = ?", models.Player{}.TableName())
 
 		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
 			if err != nil {
@@ -72,13 +72,13 @@ func (dao *PlayerDAO) GetPlayerByID(playerID int64, callback func(*models.Player
 			if rows.Next() {
 				if err := rows.Scan(
 					&player.PlayerID,
-					&player.PlayerName,
 					&player.AccountID,
+					&player.PlayerName,
 					&player.Sex,
 					&player.Age,
 					&player.Level,
+					&player.Experience,
 					&player.CreatedAt,
-					&player.UpdatedAt,
 				); err != nil {
 					if callback != nil {
 						callback(nil, err)
@@ -119,17 +119,18 @@ func (dao *PlayerDAO) CreatePlayer(player *models.Player, callback func(int64, e
 			callback(player.PlayerID, nil)
 		}
 	} else {
-		query := fmt.Sprintf("INSERT INTO %s (player_id, account_id, player_name, sex, age, level, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", models.Player{}.TableName())
+		// 使用与数据库表结构匹配的字段名
+		query := fmt.Sprintf("INSERT INTO %s (id, account_id, name, gender, age, level, exp, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", models.Player{}.TableName())
 
 		args := []interface{}{
-			player.PlayerID,
+			player.PlayerID, // 使用player_id作为id
 			player.AccountID,
-			player.PlayerName,
-			player.Sex,
+			player.PlayerName, // 使用player_name作为name
+			player.Sex,        // 使用sex作为gender
 			player.Age,
 			player.Level,
+			player.Experience, // 使用experience作为exp
 			player.CreatedAt,
-			player.UpdatedAt,
 		}
 
 		dao.connector.Execute(query, args, func(result sql.Result, err error) {
@@ -179,13 +180,14 @@ func (dao *PlayerDAO) UpdatePlayer(player *models.Player, callback func(bool, er
 			callback(result.ModifiedCount > 0, nil)
 		}
 	} else {
-		query := fmt.Sprintf("UPDATE %s SET player_name = ?, sex = ?, age = ?, level = ?, updated_at = ? WHERE player_id = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("UPDATE %s SET name = ?, gender = ?, age = ?, level = ?, exp = ?, updated_at = ? WHERE id = ?", models.Player{}.TableName())
 
 		args := []interface{}{
 			player.PlayerName,
 			player.Sex,
 			player.Age,
 			player.Level,
+			player.Experience,
 			player.UpdatedAt,
 			player.PlayerID,
 		}
@@ -227,7 +229,7 @@ func (dao *PlayerDAO) DeletePlayer(playerID int64, callback func(bool, error)) {
 			callback(result.DeletedCount > 0, nil)
 		}
 	} else {
-		query := fmt.Sprintf("DELETE FROM %s WHERE player_id = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("DELETE FROM %s WHERE id = ?", models.Player{}.TableName())
 
 		dao.connector.Execute(query, []interface{}{playerID}, func(result sql.Result, err error) {
 			if err != nil {
@@ -294,13 +296,13 @@ func (dao *PlayerDAO) GetAllPlayers(callback func([]*models.Player, error)) {
 				var player models.Player
 				if err := rows.Scan(
 					&player.PlayerID,
-					&player.PlayerName,
 					&player.AccountID,
+					&player.PlayerName,
 					&player.Sex,
 					&player.Age,
 					&player.Level,
+					&player.Experience,
 					&player.CreatedAt,
-					&player.UpdatedAt,
 				); err != nil {
 					if callback != nil {
 						callback(nil, err)
@@ -367,13 +369,13 @@ func (dao *PlayerDAO) GetPlayersByAccountID(accountID int64, callback func([]*mo
 				var player models.Player
 				if err := rows.Scan(
 					&player.PlayerID,
-					&player.PlayerName,
 					&player.AccountID,
+					&player.PlayerName,
 					&player.Sex,
 					&player.Age,
 					&player.Level,
+					&player.Experience,
 					&player.CreatedAt,
-					&player.UpdatedAt,
 				); err != nil {
 					if callback != nil {
 						callback(nil, err)
@@ -422,7 +424,7 @@ func (dao *PlayerDAO) GetPlayerByName(name string, callback func(*models.Player,
 			callback(&player, nil)
 		}
 	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE player_name = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("SELECT * FROM %s WHERE name = ?", models.Player{}.TableName())
 
 		dao.connector.Query(query, []interface{}{name}, func(rows *sql.Rows, err error) {
 			if err != nil {
@@ -437,13 +439,13 @@ func (dao *PlayerDAO) GetPlayerByName(name string, callback func(*models.Player,
 			if rows.Next() {
 				if err := rows.Scan(
 					&player.PlayerID,
-					&player.PlayerName,
 					&player.AccountID,
+					&player.PlayerName,
 					&player.Sex,
 					&player.Age,
 					&player.Level,
+					&player.Experience,
 					&player.CreatedAt,
-					&player.UpdatedAt,
 				); err != nil {
 					if callback != nil {
 						callback(nil, err)
@@ -478,7 +480,7 @@ func (dao *PlayerDAO) UpdatePlayerLastLogin(playerID int64, lastLoginAt time.Tim
 		}
 		collection.UpdateOne(nil, bson.M{"player_id": playerID}, update)
 	} else {
-		query := fmt.Sprintf("UPDATE %s SET last_login_at = ?, updated_at = ? WHERE player_id = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("UPDATE %s SET last_login_at = ?, updated_at = ? WHERE id = ?", models.Player{}.TableName())
 		dao.connector.Execute(query, []interface{}{lastLoginAt, lastLoginAt, playerID}, nil)
 	}
 }
@@ -498,7 +500,7 @@ func (dao *PlayerDAO) UpdatePlayerLastLogout(playerID int64, lastLogoutAt time.T
 		}
 		collection.UpdateOne(nil, bson.M{"player_id": playerID}, update)
 	} else {
-		query := fmt.Sprintf("UPDATE %s SET last_logout_at = ?, updated_at = ? WHERE player_id = ?", models.Player{}.TableName())
+		query := fmt.Sprintf("UPDATE %s SET last_logout_at = ?, updated_at = ? WHERE id = ?", models.Player{}.TableName())
 		dao.connector.Execute(query, []interface{}{lastLogoutAt, lastLogoutAt, playerID}, nil)
 	}
 }

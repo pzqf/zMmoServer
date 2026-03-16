@@ -15,79 +15,45 @@ import (
 )
 
 type Connection struct {
-	conn         net.Conn
-	connID       string
-	playerID     int64
-	accountID    int64
-	isConnected  bool
-	lastActive   time.Time
-	sendChan     chan []byte
-	closeChan    chan struct{}
-	closeOnce    sync.Once
+	conn        net.Conn
+	connID      string
+	playerID    int64
+	accountID   int64
+	isConnected bool
+	lastActive  time.Time
+	sendChan    chan []byte
+	closeChan   chan struct{}
+	closeOnce   sync.Once
 }
 
 type ConnectionManager struct {
-	config        *config.Config
-	connections   map[string]*Connection
-	connectionsMu sync.RWMutex
-	gatewayConn   net.Conn
-	gatewayMu     sync.Mutex
-	isConnected   bool
-	mapConnections map[int]*MapConnection // 地图ID -> MapServer连接
-	mapConnMu     sync.RWMutex
+	config               *config.Config
+	connections          map[string]*Connection
+	connectionsMu        sync.RWMutex
+	gatewayConn          net.Conn
+	gatewayMu            sync.Mutex
+	isConnected          bool
+	gatewayConnectedChan chan struct{}
+	mapConnections       map[int]*MapConnection // 地图ID -> MapServer连接
+	mapConnMu            sync.RWMutex
 }
 
 type MapConnection struct {
-	conn         net.Conn
-	mapIDs       []int
-	isConnected  bool
-	sendChan     chan []byte
-	closeChan    chan struct{}
-	closeOnce    sync.Once
+	conn        net.Conn
+	mapIDs      []int
+	isConnected bool
+	sendChan    chan []byte
+	closeChan   chan struct{}
+	closeOnce   sync.Once
 }
 
 func NewConnectionManager(cfg *config.Config) *ConnectionManager {
 	return &ConnectionManager{
-		config:         cfg,
-		connections:    make(map[string]*Connection),
-		isConnected:    false,
-		mapConnections: make(map[int]*MapConnection),
-	}
-}
-
-func (cm *ConnectionManager) ConnectToGateway() error {
-	cm.gatewayMu.Lock()
-	defer cm.gatewayMu.Unlock()
-
-	if cm.isConnected {
-		return nil
-	}
-
-	zLog.Info("Connecting to Gateway...", zap.String("addr", cm.config.Gateway.GatewayAddr))
-
-	conn, err := net.DialTimeout("tcp", cm.config.Gateway.GatewayAddr, time.Duration(cm.config.Gateway.GatewayConnectTimeout)*time.Second)
-	if err != nil {
-		zLog.Error("Failed to connect to Gateway", zap.Error(err))
-		return err
-	}
-
-	cm.gatewayConn = conn
-	cm.isConnected = true
-	zLog.Info("Connected to Gateway successfully")
-
-	go cm.receiveFromGateway()
-
-	return nil
-}
-
-func (cm *ConnectionManager) DisconnectFromGateway() {
-	cm.gatewayMu.Lock()
-	defer cm.gatewayMu.Unlock()
-
-	if cm.isConnected && cm.gatewayConn != nil {
-		cm.gatewayConn.Close()
-		cm.isConnected = false
-		zLog.Info("Disconnected from Gateway")
+		config:               cfg,
+		connections:          make(map[string]*Connection),
+		isConnected:          false,
+		gatewayConnectedChan: make(chan struct{}),
+		mapConnections:       make(map[int]*MapConnection),
 	}
 }
 
@@ -213,7 +179,7 @@ func (cm *ConnectionManager) handleMapServerMessage(mapConn *MapConnection, data
 	msgID := binary.BigEndian.Uint32(data[4:8])
 
 	// 解析消息内容
-	var msg protocol.Message
+	var msg protocol.ClientMessage
 	if err := proto.Unmarshal(data[8:length], &msg); err != nil {
 		zLog.Error("Failed to unmarshal message", zap.Error(err))
 		return
@@ -221,7 +187,7 @@ func (cm *ConnectionManager) handleMapServerMessage(mapConn *MapConnection, data
 
 	// 根据消息类型处理
 	switch msgID {
-	case protocol.MsgIdPlayerMove:
+	case uint32(protocol.MapMsgId_MSG_MAP_MOVE):
 		// 处理玩家移动
 		cm.handlePlayerMoveFromMap(msg)
 	default:
@@ -229,7 +195,7 @@ func (cm *ConnectionManager) handleMapServerMessage(mapConn *MapConnection, data
 	}
 }
 
-func (cm *ConnectionManager) handlePlayerMoveFromMap(msg protocol.Message) {
+func (cm *ConnectionManager) handlePlayerMoveFromMap(msg protocol.ClientMessage) {
 	zLog.Info("Handling player move from MapServer", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家移动逻辑
 }
@@ -256,10 +222,7 @@ func (cm *ConnectionManager) SendToGateway(data []byte) error {
 	defer cm.gatewayMu.Unlock()
 
 	if !cm.isConnected || cm.gatewayConn == nil {
-		err := cm.ConnectToGateway()
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("gateway not connected")
 	}
 
 	_, err := cm.gatewayConn.Write(data)
@@ -322,7 +285,7 @@ func (cm *ConnectionManager) handleGatewayMessage(data []byte) {
 	msgID := binary.BigEndian.Uint32(data[4:8])
 
 	// 解析消息内容
-	var msg protocol.Message
+	var msg protocol.ClientMessage
 	if err := proto.Unmarshal(data[8:length], &msg); err != nil {
 		zLog.Error("Failed to unmarshal message", zap.Error(err))
 		return
@@ -330,13 +293,13 @@ func (cm *ConnectionManager) handleGatewayMessage(data []byte) {
 
 	// 根据消息类型处理
 	switch msgID {
-	case protocol.MsgIdPlayerLogin:
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME):
 		// 处理玩家登录
 		cm.handlePlayerLogin(msg)
-	case protocol.MsgIdPlayerLogout:
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME):
 		// 处理玩家登出
 		cm.handlePlayerLogout(msg)
-	case protocol.MsgIdPlayerMove:
+	case uint32(protocol.MapMsgId_MSG_MAP_MOVE):
 		// 处理玩家移动
 		cm.handlePlayerMove(msg)
 	default:
@@ -344,17 +307,17 @@ func (cm *ConnectionManager) handleGatewayMessage(data []byte) {
 	}
 }
 
-func (cm *ConnectionManager) handlePlayerLogin(msg protocol.Message) {
+func (cm *ConnectionManager) handlePlayerLogin(msg protocol.ClientMessage) {
 	zLog.Info("Handling player login", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登录逻辑
 }
 
-func (cm *ConnectionManager) handlePlayerLogout(msg protocol.Message) {
+func (cm *ConnectionManager) handlePlayerLogout(msg protocol.ClientMessage) {
 	zLog.Info("Handling player logout", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登出逻辑
 }
 
-func (cm *ConnectionManager) handlePlayerMove(msg protocol.Message) {
+func (cm *ConnectionManager) handlePlayerMove(msg protocol.ClientMessage) {
 	zLog.Info("Handling player move", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家移动逻辑
 }
@@ -491,4 +454,51 @@ func (c *Connection) GetLastActive() time.Time {
 
 func (c *Connection) IsConnected() bool {
 	return c.isConnected
+}
+
+// SetGatewayConnection 设置Gateway连接
+func (cm *ConnectionManager) SetGatewayConnection(conn net.Conn) {
+	cm.gatewayMu.Lock()
+	oldConn := cm.gatewayConn
+	oldStatus := cm.isConnected
+	cm.gatewayConn = conn
+	cm.isConnected = (conn != nil)
+	cm.gatewayMu.Unlock()
+
+	if conn != nil {
+		// 发送连接成功信号
+		select {
+		case cm.gatewayConnectedChan <- struct{}{}:
+		default:
+			// 通道已满，忽略
+		}
+		zLog.Info("Gateway connection set successfully")
+	} else if oldStatus {
+		// 连接断开
+		if oldConn != nil {
+			oldConn.Close()
+		}
+		zLog.Info("Gateway connection reset")
+	}
+}
+
+// IsGatewayConnected 检查Gateway是否连接
+func (cm *ConnectionManager) IsGatewayConnected() bool {
+	cm.gatewayMu.Lock()
+	defer cm.gatewayMu.Unlock()
+
+	return cm.isConnected
+}
+
+// GatewayConnectedChan 获取Gateway连接成功的通道
+func (cm *ConnectionManager) GatewayConnectedChan() <-chan struct{} {
+	return cm.gatewayConnectedChan
+}
+
+// GetGatewayConn 获取Gateway连接
+func (cm *ConnectionManager) GetGatewayConn() net.Conn {
+	cm.gatewayMu.Lock()
+	defer cm.gatewayMu.Unlock()
+
+	return cm.gatewayConn
 }

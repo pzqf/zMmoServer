@@ -125,23 +125,33 @@ func (c *MySQLConnector) Init(dbConfig DBConfig) error {
 		charset = "utf8mb4"
 	}
 
-	// 构建DSN字符串
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
+	// 设置默认超时
+	timeout := dbConfig.ConnectTimeout
+	if timeout <= 0 {
+		timeout = 30
+	}
+
+	// 构建DSN字符串（添加超时参数）
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=%ds&readTimeout=%ds&writeTimeout=%ds",
 		dbConfig.User,
 		dbConfig.Password,
 		dbConfig.Host,
 		dbConfig.Port,
 		dbConfig.DBName,
 		charset,
+		timeout,
+		timeout,
+		timeout,
 	)
 
 	// 打印DSN字符串（不包含密码）
-	maskedDSN := fmt.Sprintf("%s:******@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local",
+	maskedDSN := fmt.Sprintf("%s:******@tcp(%s:%d)/%s?charset=%s&parseTime=True&loc=Local&timeout=%ds",
 		dbConfig.User,
 		dbConfig.Host,
 		dbConfig.Port,
 		dbConfig.DBName,
 		charset,
+		timeout,
 	)
 	zLog.Info("Connecting to MySQL database", zap.String("dsn", maskedDSN))
 
@@ -217,6 +227,9 @@ func (c *MySQLConnector) cacheCleaner() {
 		select {
 		case <-ticker.C:
 			c.cacheManager.Clear()
+		default:
+			// 非阻塞检查，避免被阻塞
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -225,7 +238,7 @@ func (c *MySQLConnector) cacheCleaner() {
 func (c *MySQLConnector) metricsPrinter() {
 	defer c.wg.Done()
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
 	for c.isRunning {
@@ -240,10 +253,13 @@ func (c *MySQLConnector) metricsPrinter() {
 			for k, v := range timers {
 				stats[k] = v.Milliseconds()
 			}
-			zLog.Info("Database metrics",
+			zLog.Debug("Database metrics",
 				zap.String("database", c.name),
 				zap.Any("stats", stats),
 			)
+		default:
+			// 非阻塞检查，避免被阻塞
+			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }

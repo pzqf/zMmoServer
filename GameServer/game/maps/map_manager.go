@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoShared/common/id"
 	"go.uber.org/zap"
 )

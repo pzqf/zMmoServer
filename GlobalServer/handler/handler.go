@@ -8,11 +8,29 @@ import (
 	"github.com/golang-jwt/jwt"
 	"github.com/labstack/echo/v4"
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
+	"github.com/pzqf/zMmoServer/GlobalServer/serverstatus"
+	"github.com/pzqf/zMmoShared/common/id"
 	"github.com/pzqf/zMmoShared/db"
 	"github.com/pzqf/zMmoShared/db/models"
 	"github.com/pzqf/zMmoShared/protocol"
 	"go.uber.org/zap"
 )
+
+var jwtSecret string
+
+// InitJWTSecret 初始化JWT密钥
+func InitJWTSecret(secret string) {
+	jwtSecret = secret
+}
+
+// getMetricsFromContext 从 Echo 上下文中获取 metrics 实例
+func getMetricsFromContext(c echo.Context) *metrics.Metrics {
+	if m, ok := c.Get("metrics").(*metrics.Metrics); ok {
+		return m
+	}
+	return nil
+}
 
 // 生成JWT token
 func generateToken(accountID int64, accountName string) (string, error) {
@@ -25,7 +43,7 @@ func generateToken(accountID int64, accountName string) (string, error) {
 	})
 
 	// 签名token
-	tokenString, err := token.SignedString([]byte("zMmoServerSecretKey"))
+	tokenString, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
 		return "", err
 	}
@@ -38,17 +56,15 @@ func HandleAccountCreate(c echo.Context) error {
 	var req protocol.AccountCreateRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "Invalid request format",
 		})
 	}
 
-	zLog.Info("Received account create request", zap.String("account", req.Account))
-
 	// Validate request
 	if req.Account == "" || req.Password == "" {
 		return c.JSON(http.StatusBadRequest, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "账号或密码不能为空",
 		})
 	}
@@ -58,7 +74,7 @@ func HandleAccountCreate(c echo.Context) error {
 	if dbMgr == nil {
 		zLog.Error("Failed to get DB manager")
 		return c.JSON(http.StatusInternalServerError, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
@@ -68,24 +84,32 @@ func HandleAccountCreate(c echo.Context) error {
 	if err != nil {
 		zLog.Error("Failed to check account existence", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
 	if account != nil {
 		return c.JSON(http.StatusConflict, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_ALREADY_EXISTS),
 			ErrorMsg: "账号已存在",
 		})
 	}
 
-	// Generate account ID and create account
-	accountID := time.Now().UnixNano() / 1000000
+	// Generate account ID using Snowflake
+	accountID, err := id.GenerateAccountID()
+	if err != nil {
+		zLog.Error("Failed to generate account ID", zap.Error(err))
+		return c.JSON(http.StatusInternalServerError, protocol.AccountCreateResponse{
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
+			ErrorMsg: "服务器错误",
+		})
+	}
+
 	now := time.Now()
 
 	newAccount := &models.Account{
-		AccountID:   accountID,
+		AccountID:   int64(accountID),
 		AccountName: req.Account,
 		Password:    req.Password,
 		Status:      1,
@@ -94,17 +118,23 @@ func HandleAccountCreate(c echo.Context) error {
 	}
 
 	// Save to database
-	id, err := db.GetMgr().AccountRepository.Create(newAccount)
-	if err != nil || id <= 0 {
+	createdID, err := db.GetMgr().AccountRepository.Create(newAccount)
+	if err != nil || createdID <= 0 {
 		zLog.Error("Failed to create account", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, protocol.AccountCreateResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
+	// 记录账号注册指标
+	if m := getMetricsFromContext(c); m != nil {
+		m.IncrementAccountRegistrations()
+	}
+
 	return c.JSON(http.StatusOK, protocol.AccountCreateResponse{
-		Success: true,
+		Result:    int32(protocol.ErrorCode_ERR_SUCCESS),
+		AccountId: int64(accountID),
 	})
 }
 
@@ -113,17 +143,15 @@ func HandleAccountLogin(c echo.Context) error {
 	var req protocol.AccountLoginRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "Invalid request format",
 		})
 	}
 
-	zLog.Info("Received account login request", zap.String("account", req.Account))
-
 	// Validate request
 	if req.Account == "" || req.Password == "" {
 		return c.JSON(http.StatusBadRequest, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "账号或密码不能为空",
 		})
 	}
@@ -133,7 +161,7 @@ func HandleAccountLogin(c echo.Context) error {
 	if dbMgr == nil {
 		zLog.Error("Failed to get DB manager")
 		return c.JSON(http.StatusInternalServerError, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
@@ -143,7 +171,7 @@ func HandleAccountLogin(c echo.Context) error {
 	if err != nil {
 		zLog.Error("Failed to get account", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
@@ -151,58 +179,35 @@ func HandleAccountLogin(c echo.Context) error {
 	if account == nil {
 		zLog.Info("Account not found", zap.String("account", req.Account))
 		return c.JSON(http.StatusUnauthorized, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_NOT_FOUND),
 			ErrorMsg: "账号不存在",
 		})
 	}
 
-	zLog.Info("Account found", zap.Int64("account_id", account.AccountID), zap.String("account_name", account.AccountName), zap.String("password", account.Password))
-	zLog.Info("Login request password", zap.String("password", req.Password))
-
 	if account.Password != req.Password {
 		zLog.Info("Password mismatch", zap.String("account", req.Account))
+		// 记录登录失败指标
+		if m := getMetricsFromContext(c); m != nil {
+			m.IncrementAccountLoginFailures()
+		}
 		return c.JSON(http.StatusUnauthorized, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_PASSWORD_WRONG),
 			ErrorMsg: "账号或密码错误",
 		})
 	}
 
-	zLog.Info("Password matched", zap.String("account", req.Account))
-
 	// Update last login time
-	zLog.Info("Updating last login time...")
 	account.LastLoginAt = time.Now()
 	_, err = dbMgr.AccountRepository.Update(account)
 	if err != nil {
 		zLog.Error("Failed to update last login time", zap.Error(err))
-	} else {
-		zLog.Info("Last login time updated successfully")
 	}
 
-	// Get server list
-	zLog.Info("Getting server list...")
-	servers, err := dbMgr.GameServerRepository.GetAll()
+	// Get server list from cache (合并MySQL静态数据+Redis动态数据)
+	manager := serverstatus.GetManager()
 	var serverInfos []*protocol.ServerInfo
-	if err != nil {
-		zLog.Error("Failed to get server list", zap.Error(err))
-		// 使用默认服务器
-		serverInfos = []*protocol.ServerInfo{
-			{
-				ServerId:       1,
-				ServerName:     "测试服务器",
-				ServerType:     "game",
-				GroupId:        1,
-				Address:        "127.0.0.1",
-				Port:           8081,
-				Status:         1,
-				OnlineCount:    0,
-				MaxOnlineCount: 1000,
-				Region:         "cn",
-				Version:        "1.0.0",
-			},
-		}
-	} else {
-		// Prepare server info
+	if manager != nil {
+		servers := manager.GetOnlineServers()
 		for _, s := range servers {
 			serverInfos = append(serverInfos, &protocol.ServerInfo{
 				ServerId:       s.ServerID,
@@ -218,103 +223,48 @@ func HandleAccountLogin(c echo.Context) error {
 				Version:        s.Version,
 			})
 		}
-		// 如果没有服务器，使用默认服务器
-		if len(serverInfos) == 0 {
-			serverInfos = []*protocol.ServerInfo{
-				{
-					ServerId:       1,
-					ServerName:     "测试服务器",
-					ServerType:     "game",
-					GroupId:        1,
-					Address:        "127.0.0.1",
-					Port:           8081,
-					Status:         1,
-					OnlineCount:    0,
-					MaxOnlineCount: 1000,
-					Region:         "cn",
-					Version:        "1.0.0",
-				},
-			}
-		}
 	}
-	zLog.Info("Server list retrieved successfully", zap.Int("server_count", len(serverInfos)))
 
 	// Generate token
-	zLog.Info("Generating token...", zap.Int64("account_id", account.AccountID), zap.String("account_name", account.AccountName))
 	token, err := generateToken(account.AccountID, account.AccountName)
 	if err != nil {
 		zLog.Error("Failed to generate token", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, protocol.AccountLoginResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
-	zLog.Info("Token generated successfully", zap.String("token", token))
 
-	zLog.Info("Returning login response", zap.Bool("success", true), zap.Int("server_count", len(serverInfos)), zap.String("token", token))
+	// 记录登录成功指标
+	if m := getMetricsFromContext(c); m != nil {
+		m.IncrementAccountLogins()
+	}
+
 	return c.JSON(http.StatusOK, protocol.AccountLoginResponse{
-		Success: true,
-		Servers: serverInfos,
-		Token:   token,
+		Result:    int32(protocol.ErrorCode_ERR_SUCCESS),
+		Servers:   serverInfos,
+		Token:     token,
+		AccountId: account.AccountID,
 	})
 }
 
 // HandleGetServerList handles server list requests
 func HandleGetServerList(c echo.Context) error {
-	zLog.Info("Received get server list request")
-
-	// Get DB manager
-	dbMgr := db.GetMgr()
-	if dbMgr == nil {
-		zLog.Error("Failed to get DB manager")
-		// 返回默认服务器
+	// Get server list from cache
+	manager := serverstatus.GetManager()
+	if manager == nil {
+		zLog.Error("Failed to get server status manager")
 		return c.JSON(http.StatusOK, protocol.ServerListResponse{
-			Success: true,
-			Servers: []*protocol.ServerInfo{
-				{
-					ServerId:       1,
-					ServerName:     "测试服务器",
-					ServerType:     "game",
-					GroupId:        1,
-					Address:        "127.0.0.1",
-					Port:           8081,
-					Status:         1,
-					OnlineCount:    0,
-					MaxOnlineCount: 1000,
-					Region:         "cn",
-					Version:        "1.0.0",
-				},
-			},
+			Result:  int32(protocol.ErrorCode_ERR_SUCCESS),
+			Servers: []*protocol.ServerInfo{},
 		})
 	}
 
-	// Get all game servers
-	servers, err := dbMgr.GameServerRepository.GetAll()
-	if err != nil {
-		zLog.Error("Failed to get game server list", zap.Error(err))
-		// 返回默认服务器
-		return c.JSON(http.StatusOK, protocol.ServerListResponse{
-			Success: true,
-			Servers: []*protocol.ServerInfo{
-				{
-					ServerId:       1,
-					ServerName:     "测试服务器",
-					ServerType:     "game",
-					GroupId:        1,
-					Address:        "127.0.0.1",
-					Port:           8081,
-					Status:         1,
-					OnlineCount:    0,
-					MaxOnlineCount: 1000,
-					Region:         "cn",
-					Version:        "1.0.0",
-				},
-			},
-		})
-	}
+	// Get all server infos (合并静态+动态数据)
+	servers := manager.GetAllServerInfos()
 
 	// Prepare server info
-	var serverInfos []*protocol.ServerInfo
+	serverInfos := make([]*protocol.ServerInfo, 0)
 	for _, s := range servers {
 		serverInfos = append(serverInfos, &protocol.ServerInfo{
 			ServerId:       s.ServerID,
@@ -331,30 +281,14 @@ func HandleGetServerList(c echo.Context) error {
 		})
 	}
 
-	// 如果没有服务器，返回默认服务器
-	if len(serverInfos) == 0 {
-		return c.JSON(http.StatusOK, protocol.ServerListResponse{
-			Success: true,
-			Servers: []*protocol.ServerInfo{
-				{
-					ServerId:       1,
-					ServerName:     "测试服务器",
-					ServerType:     "game",
-					GroupId:        1,
-					Address:        "127.0.0.1",
-					Port:           8081,
-					Status:         1,
-					OnlineCount:    0,
-					MaxOnlineCount: 1000,
-					Region:         "cn",
-					Version:        "1.0.0",
-				},
-			},
-		})
+	// 记录服务器列表请求指标
+	if m := getMetricsFromContext(c); m != nil {
+		m.IncrementServerListRequests()
+		m.SetGameServersCount(len(serverInfos))
 	}
 
 	return c.JSON(http.StatusOK, protocol.ServerListResponse{
-		Success: true,
+		Result:  int32(protocol.ErrorCode_ERR_SUCCESS),
 		Servers: serverInfos,
 	})
 }
@@ -362,33 +296,26 @@ func HandleGetServerList(c echo.Context) error {
 // HandleGetServerListByGroup handles server list by group requests
 func HandleGetServerListByGroup(c echo.Context) error {
 	groupIDStr := c.Param("groupId")
-	zLog.Info("Received get server list by group request", zap.String("groupId", groupIDStr))
 
 	var groupID int32
 	if _, err := fmt.Sscanf(groupIDStr, "%d", &groupID); err != nil {
 		return c.JSON(http.StatusBadRequest, protocol.ServerListResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "Invalid group ID",
 		})
 	}
 
-	dbMgr := db.GetMgr()
-	if dbMgr == nil {
-		zLog.Error("Failed to get DB manager")
+	// Get server list from cache by group
+	manager := serverstatus.GetManager()
+	if manager == nil {
+		zLog.Error("Failed to get server status manager")
 		return c.JSON(http.StatusInternalServerError, protocol.ServerListResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
-	servers, err := dbMgr.GameServerRepository.GetByGroupID(groupID)
-	if err != nil {
-		zLog.Error("Failed to get game server list by group", zap.Error(err), zap.Int32("groupId", groupID))
-		return c.JSON(http.StatusInternalServerError, protocol.ServerListResponse{
-			Success:  false,
-			ErrorMsg: "服务器错误",
-		})
-	}
+	servers := manager.GetServerInfosByGroup(groupID)
 
 	var serverInfos []*protocol.ServerInfo
 	for _, s := range servers {
@@ -408,118 +335,131 @@ func HandleGetServerListByGroup(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, protocol.ServerListResponse{
-		Success: true,
+		Result:  int32(protocol.ErrorCode_ERR_SUCCESS),
 		Servers: serverInfos,
 	})
 }
 
 // HandleServerRegister handles server register requests
+// 注意：现在服务器注册只更新Redis动态数据，不写入MySQL
 func HandleServerRegister(c echo.Context) error {
 	var req protocol.ServerRegisterRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, protocol.ServerRegisterResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "Invalid request format",
 		})
 	}
 
-	zLog.Info("Received server register request", zap.String("serverName", req.ServerName))
-
-	// Get DB manager
-	dbMgr := db.GetMgr()
-	if dbMgr == nil {
-		zLog.Error("Failed to get DB manager")
+	// Get server cache manager
+	manager := serverstatus.GetManager()
+	if manager == nil {
+		zLog.Error("Failed to get server status manager")
 		return c.JSON(http.StatusInternalServerError, protocol.ServerRegisterResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
-	// Create game server
-	gameServer := &models.GameServer{
-		ServerID:       req.ServerId,
-		ServerName:     req.ServerName,
-		ServerType:     req.ServerType,
-		GroupID:        req.GroupId,
-		Address:        req.Address,
-		Port:           req.Port,
-		Status:         1, // Online
-		OnlineCount:    0,
-		MaxOnlineCount: req.MaxOnlineCount,
-		Region:         req.Region,
-		Version:        req.Version,
-		LastHeartbeat:  time.Now(),
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+	// 检查静态配置中是否存在该服务器
+	staticServer := manager.GetServerInfo(req.ServerId)
+	if staticServer == nil {
+		zLog.Error("Server not found in static config", zap.Int32("serverId", req.ServerId))
+		return c.JSON(http.StatusNotFound, protocol.ServerRegisterResponse{
+			Result:   int32(protocol.ErrorCode_ERR_NOT_FOUND),
+			ErrorMsg: "服务器未在配置中注册，请联系运维",
+		})
 	}
 
-	// Save to database
-	id, err := dbMgr.GameServerRepository.Create(gameServer)
-	if err != nil || id <= 0 {
-		zLog.Error("Failed to register game server", zap.Error(err))
+	// 更新服务器状态到Redis
+	status := &serverstatus.ServerStatus{
+		ServerID:      req.ServerId,
+		Address:       req.Address,
+		Port:          req.Port,
+		Status:        1, // Online
+		OnlineCount:   0,
+		Version:       req.Version,
+		LastHeartbeat: time.Now(),
+	}
+
+	if err := manager.UpdateServerStatus(status); err != nil {
+		zLog.Error("Failed to update server status", zap.Error(err))
 		return c.JSON(http.StatusInternalServerError, protocol.ServerRegisterResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
+
+	zLog.Info("Game server registered",
+		zap.Int32("serverId", req.ServerId),
+		zap.String("serverName", req.ServerName),
+		zap.String("address", req.Address),
+		zap.Int32("port", req.Port),
+	)
 
 	return c.JSON(http.StatusOK, protocol.ServerRegisterResponse{
-		Success:  true,
-		ServerId: id,
+		Result: int32(protocol.ErrorCode_ERR_SUCCESS),
 	})
 }
 
 // HandleServerHeartbeat handles server heartbeat requests
+// 注意：现在心跳只更新Redis动态数据
 func HandleServerHeartbeat(c echo.Context) error {
 	var req protocol.ServerHeartbeatRequest
 	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, protocol.ServerHeartbeatResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_INVALID_PARAM),
 			ErrorMsg: "Invalid request format",
 		})
 	}
 
-	zLog.Info("Received server heartbeat request", zap.Int32("serverId", req.ServerId))
-
-	// Get DB manager
-	dbMgr := db.GetMgr()
-	if dbMgr == nil {
-		zLog.Error("Failed to get DB manager")
+	// Get server cache manager
+	manager := serverstatus.GetManager()
+	if manager == nil {
+		zLog.Error("Failed to get server status manager")
 		return c.JSON(http.StatusInternalServerError, protocol.ServerHeartbeatResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
-	// Get game server
-	server, err := dbMgr.GameServerRepository.GetByID(req.ServerId)
-	if err != nil || server == nil {
-		zLog.Error("Failed to get game server", zap.Error(err), zap.Int32("serverId", req.ServerId))
-		return c.JSON(http.StatusNotFound, protocol.ServerHeartbeatResponse{
-			Success:  false,
-			ErrorMsg: "服务器不存在",
+	// 获取当前服务器状态
+	currentStatus, err := manager.GetServerStatus(req.ServerId)
+	if err != nil {
+		zLog.Error("Failed to get server status", zap.Error(err), zap.Int32("serverId", req.ServerId))
+		return c.JSON(http.StatusInternalServerError, protocol.ServerHeartbeatResponse{
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
+			ErrorMsg: "服务器错误",
 		})
 	}
 
-	// Update server info
-	server.OnlineCount = req.OnlineCount
-	if req.Status > 0 {
-		server.Status = req.Status
+	if currentStatus == nil {
+		zLog.Error("Server not registered", zap.Int32("serverId", req.ServerId))
+		return c.JSON(http.StatusNotFound, protocol.ServerHeartbeatResponse{
+			Result:   int32(protocol.ErrorCode_ERR_NOT_FOUND),
+			ErrorMsg: "服务器未注册",
+		})
 	}
-	server.LastHeartbeat = time.Now()
-	server.UpdatedAt = time.Now()
 
-	// Save to database
-	_, err = dbMgr.GameServerRepository.Update(server)
-	if err != nil {
-		zLog.Error("Failed to update game server", zap.Error(err), zap.Int32("serverId", req.ServerId))
+	// 更新服务器状态
+	currentStatus.OnlineCount = req.OnlineCount
+	if req.Status > 0 {
+		currentStatus.Status = req.Status
+	}
+	if req.Version != "" {
+		currentStatus.Version = req.Version
+	}
+	currentStatus.LastHeartbeat = time.Now()
+
+	if err := manager.UpdateServerStatus(currentStatus); err != nil {
+		zLog.Error("Failed to update server status", zap.Error(err), zap.Int32("serverId", req.ServerId))
 		return c.JSON(http.StatusInternalServerError, protocol.ServerHeartbeatResponse{
-			Success:  false,
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
 			ErrorMsg: "服务器错误",
 		})
 	}
 
 	return c.JSON(http.StatusOK, protocol.ServerHeartbeatResponse{
-		Success: true,
+		Result: int32(protocol.ErrorCode_ERR_SUCCESS),
 	})
 }

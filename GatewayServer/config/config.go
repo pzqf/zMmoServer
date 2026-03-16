@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
@@ -17,7 +18,7 @@ type Config struct {
 	DDoS           zNet.DDoSConfig      `ini:"ddos"`
 	NetCompression NetCompressionConfig `ini:"net_compression"`
 	GameServer     GameServerConfig     `ini:"GameServer"`
-	Logging        LoggingConfig        `ini:"Logging"`
+	Log            zLog.Config          `ini:"log"`
 	Metrics        MetricsConfig        `ini:"Metrics"`
 }
 
@@ -26,17 +27,23 @@ type ServerConfig struct {
 	ServerName        string `ini:"ServerName"`
 	ServerID          int    `ini:"ServerID"`
 	ListenAddr        string `ini:"ListenAddr"`
+	ExternalAddr      string `ini:"ExternalAddr"`
 	MaxConnections    int    `ini:"MaxConnections"`
 	ConnectionTimeout int    `ini:"ConnectionTimeout"`
 	HeartbeatInterval int    `ini:"HeartbeatInterval"`
+	JWTSecret         string `ini:"jwt_secret"`
+	UseWorkerPool     bool   `ini:"UseWorkerPool"`
+	WorkerPoolSize    int    `ini:"WorkerPoolSize"`
+	WorkerQueueSize   int    `ini:"WorkerQueueSize"`
+	ChanSize          int    `ini:"ChanSize"`
+	MaxPacketDataSize int    `ini:"MaxPacketDataSize"`
 }
 
 // SecurityConfig 安全配置
 type SecurityConfig struct {
-	TokenSecret      string `ini:"TokenSecret"`
-	TokenExpiry      int    `ini:"TokenExpiry"`
-	MaxLoginAttempts int    `ini:"MaxLoginAttempts"`
-	BanDuration      int    `ini:"BanDuration"`
+	TokenExpiry      int `ini:"TokenExpiry"`
+	MaxLoginAttempts int `ini:"MaxLoginAttempts"`
+	BanDuration      int `ini:"BanDuration"`
 }
 
 // NetCompressionConfig 网络压缩配置
@@ -55,25 +62,6 @@ type GameServerConfig struct {
 	GameServerConnectTimeout int    `ini:"GameServerConnectTimeout"`
 }
 
-// LoggingConfig 日志配置
-type LoggingConfig struct {
-	LogLevel           int    `ini:"LogLevel"`
-	Console            bool   `ini:"console"`
-	LogFile            string `ini:"LogFile"`
-	LogMaxSize         int    `ini:"LogMaxSize"`
-	LogMaxBackups      int    `ini:"LogMaxBackups"`
-	LogMaxAge          int    `ini:"LogMaxAge"`
-	Compress           bool   `ini:"compress"`
-	ShowCaller         bool   `ini:"show-caller"`
-	Stacktrace         int    `ini:"stacktrace"`
-	Sampling           bool   `ini:"sampling"`
-	SamplingInitial    int    `ini:"sampling-initial"`
-	SamplingThereafter int    `ini:"sampling-thereafter"`
-	Async              bool   `ini:"async"`
-	AsyncBufferSize    int    `ini:"async-buffer-size"`
-	AsyncFlushInterval int    `ini:"async-flush-interval"`
-}
-
 // MetricsConfig 监控配置
 type MetricsConfig struct {
 	Enabled     bool   `ini:"Enabled"`
@@ -88,22 +76,38 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
+	// 先获取 server_id，用于构建日志文件名
+	serverID := getConfigInt(zcfg, "Server.ServerID", 1)
+
 	// 创建配置实例
 	config := &Config{}
 
 	// 解析服务器配置
+	listenAddr := getConfigString(zcfg, "Server.ListenAddr", GetEnv("LISTEN_ADDR", "0.0.0.0:10001"))
+	externalAddr := getConfigString(zcfg, "Server.ExternalAddr", GetEnv("EXTERNAL_ADDR", ""))
+	// 如果没有配置外网地址，默认使用监听地址
+	if externalAddr == "" {
+		externalAddr = listenAddr
+	}
+
 	config.Server = ServerConfig{
-		ServerName:        getConfigString(zcfg, "Server.ServerName", getEnv("SERVER_NAME", "GatewayServer")),
-		ServerID:          getConfigInt(zcfg, "Server.ServerID", getEnvAsInt("SERVER_ID", 1)),
-		ListenAddr:        getConfigString(zcfg, "Server.ListenAddr", getEnv("LISTEN_ADDR", "0.0.0.0:8081")),
+		ServerName:        getConfigString(zcfg, "Server.ServerName", GetEnv("SERVER_NAME", "GatewayServer")),
+		ServerID:          serverID,
+		ListenAddr:        listenAddr,
+		ExternalAddr:      externalAddr,
 		MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
 		ConnectionTimeout: getConfigInt(zcfg, "Server.ConnectionTimeout", 300),
 		HeartbeatInterval: getConfigInt(zcfg, "Server.HeartbeatInterval", 30),
+		JWTSecret:         getConfigString(zcfg, "Server.jwt_secret", GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
+		UseWorkerPool:     getConfigBool(zcfg, "Server.UseWorkerPool", true),
+		WorkerPoolSize:    getConfigInt(zcfg, "Server.WorkerPoolSize", 100),
+		WorkerQueueSize:   getConfigInt(zcfg, "Server.WorkerQueueSize", 10000),
+		ChanSize:          getConfigInt(zcfg, "Server.ChanSize", 1024),
+		MaxPacketDataSize: getConfigInt(zcfg, "Server.MaxPacketDataSize", 1024*1024),
 	}
 
 	// 解析安全配置
 	config.Security = SecurityConfig{
-		TokenSecret:      getConfigString(zcfg, "Security.TokenSecret", getEnv("TOKEN_SECRET", "your_secret_key_here")),
 		TokenExpiry:      getConfigInt(zcfg, "Security.TokenExpiry", 86400),
 		MaxLoginAttempts: getConfigInt(zcfg, "Security.MaxLoginAttempts", 5),
 		BanDuration:      getConfigInt(zcfg, "Security.BanDuration", 3600),
@@ -132,33 +136,34 @@ func LoadConfig(configPath string) (*Config, error) {
 	// 解析游戏服配置
 	config.GameServer = GameServerConfig{
 		GameServerID:             getConfigInt(zcfg, "GameServer.GameServerID", 1),
-		GameServerAddr:           getConfigString(zcfg, "GameServer.GameServerAddr", getEnv("GAME_SERVER_ADDR", "game-service.game:9001")),
+		GameServerAddr:           getConfigString(zcfg, "GameServer.GameServerAddr", GetEnv("GAME_SERVER_ADDR", "game-service.game:9001")),
 		GameServerConnectTimeout: getConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
 	}
 
 	// 解析日志配置
-	config.Logging = LoggingConfig{
-		LogLevel:           getConfigInt(zcfg, "Logging.LogLevel", getEnvAsInt("LOG_LEVEL", 0)),
-		Console:            getConfigBool(zcfg, "Logging.console", true),
-		LogFile:            getConfigString(zcfg, "Logging.LogFile", "logs/server.log"),
-		LogMaxSize:         getConfigInt(zcfg, "Logging.LogMaxSize", 100),
-		LogMaxBackups:      getConfigInt(zcfg, "Logging.LogMaxBackups", 10),
-		LogMaxAge:          getConfigInt(zcfg, "Logging.LogMaxAge", 15),
-		Compress:           getConfigBool(zcfg, "Logging.compress", true),
-		ShowCaller:         getConfigBool(zcfg, "Logging.show-caller", true),
-		Stacktrace:         getConfigInt(zcfg, "Logging.stacktrace", 3),
-		Sampling:           getConfigBool(zcfg, "Logging.sampling", true),
-		SamplingInitial:    getConfigInt(zcfg, "Logging.sampling-initial", 100),
-		SamplingThereafter: getConfigInt(zcfg, "Logging.sampling-thereafter", 10),
-		Async:              getConfigBool(zcfg, "Logging.async", true),
-		AsyncBufferSize:    getConfigInt(zcfg, "Logging.async-buffer-size", 2048),
-		AsyncFlushInterval: getConfigInt(zcfg, "Logging.async-flush-interval", 50),
+	config.Log = zLog.Config{
+		Level:              getConfigInt(zcfg, "log.level", GetEnvAsInt("LOG_LEVEL", 0)),
+		Console:            getConfigBool(zcfg, "log.console", true),
+		ConsoleLevel:       getConfigInt(zcfg, "log.console_level", 0),
+		Filename:           replacePlaceholder(getConfigString(zcfg, "log.filename", "./logs/gateway_server_{server_id}.log"), "{server_id}", serverID),
+		MaxSize:            getConfigInt(zcfg, "log.max_size", 100),
+		MaxDays:            getConfigInt(zcfg, "log.max_days", 15),
+		MaxBackups:         getConfigInt(zcfg, "log.max_backups", 10),
+		Compress:           getConfigBool(zcfg, "log.compress", true),
+		ShowCaller:         getConfigBool(zcfg, "log.show_caller", true),
+		Stacktrace:         getConfigInt(zcfg, "log.stacktrace", 3),
+		Sampling:           getConfigBool(zcfg, "log.sampling", true),
+		SamplingInitial:    getConfigInt(zcfg, "log.sampling_initial", 100),
+		SamplingThereafter: getConfigInt(zcfg, "log.sampling_thereafter", 10),
+		Async:              getConfigBool(zcfg, "log.async", true),
+		AsyncBufferSize:    getConfigInt(zcfg, "log.async_buffer_size", 2048),
+		AsyncFlushInterval: getConfigInt(zcfg, "log.async_flush_interval", 50),
 	}
 
 	// 解析监控配置
 	config.Metrics = MetricsConfig{
 		Enabled:     getConfigBool(zcfg, "Metrics.Enabled", true),
-		MetricsAddr: getConfigString(zcfg, "Metrics.MetricsAddr", getEnv("METRICS_ADDR", "0.0.0.0:9091")),
+		MetricsAddr: getConfigString(zcfg, "Metrics.MetricsAddr", GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
 	}
 
 	// 验证配置
@@ -248,37 +253,21 @@ func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
 	return defaultValue
 }
 
-// GetLogConfig 获取日志配置（实现LogConfigurable接口）
-func (c *Config) GetLogConfig() *zLog.Config {
-	return &zLog.Config{
-		Level:              c.Logging.LogLevel,
-		Console:            c.Logging.Console,
-		Filename:           c.Logging.LogFile,
-		MaxSize:            c.Logging.LogMaxSize,
-		MaxDays:            c.Logging.LogMaxAge,
-		MaxBackups:         c.Logging.LogMaxBackups,
-		Compress:           c.Logging.Compress,
-		ShowCaller:         c.Logging.ShowCaller,
-		Stacktrace:         c.Logging.Stacktrace,
-		Sampling:           c.Logging.Sampling,
-		SamplingInitial:    c.Logging.SamplingInitial,
-		SamplingThereafter: c.Logging.SamplingThereafter,
-		Async:              c.Logging.Async,
-		AsyncBufferSize:    c.Logging.AsyncBufferSize,
-		AsyncFlushInterval: c.Logging.AsyncFlushInterval,
-	}
+// replacePlaceholder 替换占位符
+func replacePlaceholder(s, placeholder string, value int) string {
+	return strings.Replace(s, placeholder, fmt.Sprintf("%d", value), -1)
 }
 
-// 辅助函数：获取环境变量
-func getEnv(key, defaultValue string) string {
+// GetEnv 获取环境变量
+func GetEnv(key, defaultValue string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
 	}
 	return defaultValue
 }
 
-// 辅助函数：获取整数类型的环境变量
-func getEnvAsInt(key string, defaultValue int) int {
+// GetEnvAsInt 获取整数类型的环境变量
+func GetEnvAsInt(key string, defaultValue int) int {
 	if value, exists := os.LookupEnv(key); exists {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
@@ -287,8 +276,8 @@ func getEnvAsInt(key string, defaultValue int) int {
 	return defaultValue
 }
 
-// 辅助函数：获取布尔类型的环境变量
-func getEnvAsBool(key string, defaultValue bool) bool {
+// GetEnvAsBool 获取布尔类型的环境变量
+func GetEnvAsBool(key string, defaultValue bool) bool {
 	if value, exists := os.LookupEnv(key); exists {
 		if boolValue, err := strconv.ParseBool(value); err == nil {
 			return boolValue

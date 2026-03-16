@@ -322,8 +322,7 @@ func (m *Map) RemovePlayer(playerID id.PlayerIdType) {
 
 	for _, obj := range m.objects {
 		if obj.GetType() == common.GameObjectTypePlayer {
-			player := obj.(*common.IGameObject)
-			if (*player).GetID() == id.ObjectIdType(playerID) {
+			if obj.GetID() == id.ObjectIdType(playerID) {
 				regionID := m.getRegionID(obj.GetPosition())
 				if region, ok := m.regions[regionID]; ok {
 					region.RemoveObject(obj.GetID())

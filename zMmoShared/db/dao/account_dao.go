@@ -207,9 +207,8 @@ func (dao *AccountDAO) CreateAccount(account *models.Account, callback func(int6
 				return
 			}
 
-			id, err := result.LastInsertId()
 			if callback != nil {
-				callback(id, err)
+				callback(account.AccountID, err)
 			}
 		})
 	}

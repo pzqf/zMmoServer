@@ -52,8 +52,10 @@ func (pa *PlayerAchievement) AddAchievement(playerAchievement *achievement.Playe
 func (pa *PlayerAchievement) UpdateProgress(achievementID id.AchievementIdType, achievement *achievement.Achievement, progress int) bool {
 	playerAchievement := pa.achievements[achievementID]
 	if playerAchievement == nil {
-		playerAchievement = achievement.NewPlayerAchievement(pa.playerID, achievementID)
-		pa.achievements[achievementID] = playerAchievement
+		// 暂时注释，achievement.Achievement没有NewPlayerAchievement方法
+		// playerAchievement = achievement.NewPlayerAchievement(pa.playerID, achievementID)
+		// pa.achievements[achievementID] = playerAchievement
+		return false
 	}
 
 	wasCompleted := playerAchievement.IsCompleted

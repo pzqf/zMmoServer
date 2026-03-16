@@ -409,6 +409,86 @@ var pool = sync.Pool{
    - **禁止事项**：禁止在其他目录创建配置文件，禁止使用本地 JSON 配置文件
    - **配置验证**：启动时必须验证所有必需配置表是否存在且格式正确
 
+## 协议规范
+
+### 协议文件组织
+
+- **协议源文件位置**：所有 `.proto` 文件必须放在 `resources/protocol/` 目录
+- **协议生成文件位置**：所有生成的 `.pb.go` 文件必须放在 `zMmoShared/protocol/` 目录
+- **禁止子目录**：协议生成文件必须直接放在 `protocol` 目录下，禁止创建子目录（如 `interop`、`net` 等）
+
+### 协议文件分类
+
+```
+resources/protocol/
+├── common.proto       # 通用定义（错误码、常量等）
+├── auth.proto         # 认证协议（登录、注册、心跳等）
+├── player.proto       # 玩家协议（角色、背包、技能等）
+├── game.proto         # 游戏协议（战斗、地图、任务等）
+└── internal.proto     # 服务间协议（服务注册、路由、心跳等）
+
+zMmoShared/protocol/
+├── common.pb.go       # 从 common.proto 生成
+├── auth.pb.go         # 从 auth.proto 生成
+├── player.pb.go       # 从 player.proto 生成
+├── game.pb.go         # 从 game.proto 生成
+└── internal.pb.go     # 从 internal.proto 生成
+```
+
+### 协议生成规则
+
+- **go_package 选项**：所有 `.proto` 文件必须设置 `go_package` 选项
+  ```protobuf
+  option go_package = "./;protocol";
+  ```
+  或
+  ```protobuf
+  option go_package = "./;interop";
+  ```
+
+- **生成命令**：使用 `protoc` 生成协议文件
+  ```bash
+  protoc --go_out="..\..\zMmoShared\protocol" --go_opt=paths=source_relative xxx.proto
+  ```
+
+- **构建脚本**：使用 `resources/protocol/build_proto.bat` 批量生成所有协议文件
+
+### 协议使用规范
+
+- **客户端协议**：使用 `auth.proto`、`player.proto`、`game.proto` 中定义的消息
+- **服务间协议**：使用 `internal.proto` 中定义的消息
+- **心跳协议**：使用 `auth.proto` 中定义的 `ServerHeartbeatRequest` 和 `ServerHeartbeatResponse`
+- **禁止混用**：客户端协议和服务间协议不能混用
+
+### 协议更新流程
+
+1. 修改 `.proto` 文件
+2. 运行 `build_proto.bat` 生成新的 `.pb.go` 文件
+3. 更新相关的业务代码
+4. 运行测试确保协议变更正确
+5. 提交代码时包含 `.proto` 和 `.pb.go` 文件
+
+### 协议命名规范
+
+- **消息类型**：使用 PascalCase 命名，如 `ServerHeartbeatRequest`
+- **字段名称**：使用 snake_case 命名，如 `server_id`、`online_count`
+- **枚举类型**：使用 PascalCase 命名，如 `ServiceType`
+- **枚举值**：使用 UPPER_SNAKE_CASE 命名，如 `SERVICE_TYPE_GLOBAL`
+
+### 协议版本管理
+
+- **向后兼容**：协议变更必须保持向后兼容
+- **字段编号**：已使用的字段编号不能修改或删除
+- **可选字段**：新增字段必须使用 `optional` 关键字
+- **废弃字段**：废弃的字段保留编号，添加 `deprecated` 注释
+
+### 协议验证
+
+- **编译检查**：每次修改 `.proto` 文件后必须重新生成 `.pb.go` 文件
+- **导入检查**：确保所有导入的协议包路径正确
+- **类型检查**：使用 Go 编译器检查协议类型是否匹配
+- **运行时检查**：在运行时验证协议数据的完整性和正确性
+
 ### 开发前检查清单
 
 - [ ] 是否查看了 zGameServer 的对应模块实现？

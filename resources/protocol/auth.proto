@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+import "common.proto";
+
+// ============================================
+// 认证相关协议 (HTTP协议，用于GlobalServer)
+// 消息ID范围: 1000-1099
+// ============================================
+
+// 账号创建
+message AccountCreateRequest {
+  string account = 1;
+  string password = 2;
+  string email = 3;
+}
+
+message AccountCreateResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  int64 account_id = 3;
+}
+
+// 账号登录
+message AccountLoginRequest {
+  string account = 1;
+  string password = 2;
+}
+
+message AccountLoginResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  string token = 3;
+  int64 account_id = 4;
+  repeated ServerInfo servers = 5;
+}
+
+// 服务器信息
+message ServerInfo {
+  int32 server_id = 1;
+  string server_name = 2;
+  string server_type = 3;
+  int32 group_id = 4;
+  string address = 5;
+  int32 port = 6;
+  int32 status = 7;
+  int32 online_count = 8;
+  int32 max_online_count = 9;
+  string region = 10;
+  string version = 11;
+}
+
+// 服务器列表
+message ServerListRequest {
+  int32 group_id = 1;
+}
+
+message ServerListResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  repeated ServerInfo servers = 3;
+}
+
+// 服务器注册 (内部服务使用)
+message ServerRegisterRequest {
+  int32 server_id = 1;
+  string server_name = 2;
+  string server_type = 3;
+  int32 group_id = 4;
+  string address = 5;
+  int32 port = 6;
+  int32 max_online_count = 7;
+  string region = 8;
+  string version = 9;
+}
+
+message ServerRegisterResponse {
+  int32 result = 1;
+  string error_msg = 2;
+}
+
+// 服务器心跳 (内部服务使用)
+message ServerHeartbeatRequest {
+  int32 server_id = 1;
+  int32 online_count = 2;
+  int32 status = 3;
+  string version = 4;
+  float load = 5;
+}
+
+message ServerHeartbeatResponse {
+  int32 result = 1;
+  string error_msg = 2;
+}

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
@@ -14,6 +15,7 @@ type Config struct {
 	Server       ServerConfig       `ini:"Server"`
 	Database     DatabaseConfig     `ini:"Database"`
 	Gateway      GatewayConfig      `ini:"Gateway"`
+	MapServer    MapServerConfig    `ini:"MapServer"`
 	GlobalServer GlobalServerConfig `ini:"GlobalServer"`
 	Logging      LoggingConfig      `ini:"Logging"`
 	Metrics      MetricsConfig      `ini:"Metrics"`
@@ -25,9 +27,13 @@ type ServerConfig struct {
 	ServerID          int    `ini:"ServerID"`
 	GroupID           int    `ini:"GroupID"`
 	ListenAddr        string `ini:"ListenAddr"`
+	ExternalAddr      string `ini:"ExternalAddr"`
 	MaxConnections    int    `ini:"MaxConnections"`
 	ConnectionTimeout int    `ini:"ConnectionTimeout"`
 	HeartbeatInterval int    `ini:"HeartbeatInterval"`
+	UseWorkerPool     bool   `ini:"UseWorkerPool"`
+	WorkerPoolSize    int    `ini:"WorkerPoolSize"`
+	WorkerQueueSize   int    `ini:"WorkerQueueSize"`
 }
 
 // DatabaseConfig 数据库配置
@@ -47,6 +53,11 @@ type DatabaseConfig struct {
 type GatewayConfig struct {
 	GatewayAddr           string `ini:"GatewayAddr"`
 	GatewayConnectTimeout int    `ini:"GatewayConnectTimeout"`
+}
+
+// MapServerConfig MapServer配置
+type MapServerConfig struct {
+	MapServerAddr string `ini:"MapServerAddr"`
 }
 
 // GlobalServerConfig GlobalServer配置
@@ -96,9 +107,13 @@ func LoadConfig(configPath string) (*Config, error) {
 		ServerID:          getConfigInt(zcfg, "Server.ServerID", getEnvAsInt("SERVER_ID", 1)),
 		GroupID:           getConfigInt(zcfg, "Server.GroupID", 1),
 		ListenAddr:        getConfigString(zcfg, "Server.ListenAddr", getEnv("LISTEN_ADDR", "0.0.0.0:9001")),
+		ExternalAddr:      getConfigString(zcfg, "Server.ExternalAddr", getEnv("GAME_EXTERNAL_ADDR", "")),
 		MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
 		ConnectionTimeout: getConfigInt(zcfg, "Server.ConnectionTimeout", 300),
 		HeartbeatInterval: getConfigInt(zcfg, "Server.HeartbeatInterval", 30),
+		UseWorkerPool:     getConfigBool(zcfg, "Server.UseWorkerPool", true),
+		WorkerPoolSize:    getConfigInt(zcfg, "Server.WorkerPoolSize", 10),
+		WorkerQueueSize:   getConfigInt(zcfg, "Server.WorkerQueueSize", 1000),
 	}
 
 	config.Database = DatabaseConfig{
@@ -121,6 +136,10 @@ func LoadConfig(configPath string) (*Config, error) {
 	config.GlobalServer = GlobalServerConfig{
 		GlobalServerAddr: getConfigString(zcfg, "GlobalServer.GlobalServerAddr", getEnv("GLOBAL_SERVER_ADDR", "global-service.game:8082")),
 		RegisterInterval: getConfigInt(zcfg, "GlobalServer.RegisterInterval", 30),
+	}
+
+	config.MapServer = MapServerConfig{
+		MapServerAddr: getConfigString(zcfg, "MapServer.MapServerAddr", getEnv("MAP_SERVER_ADDR", "127.0.0.1:9002")),
 	}
 
 	config.Logging = LoggingConfig{
@@ -178,10 +197,16 @@ func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
 
 // GetLogConfig 获取日志配置（实现LogConfigurable接口）
 func (c *Config) GetLogConfig() *zLog.Config {
+	// 处理日志文件名中的{server_id}占位符
+	logFile := c.Logging.LogFile
+	if strings.Contains(logFile, "{server_id}") {
+		logFile = strings.ReplaceAll(logFile, "{server_id}", fmt.Sprintf("%06d", c.Server.ServerID))
+	}
+
 	return &zLog.Config{
 		Level:              c.Logging.LogLevel,
 		Console:            c.Logging.Console,
-		Filename:           c.Logging.LogFile,
+		Filename:           logFile,
 		MaxSize:            c.Logging.LogMaxSize,
 		MaxDays:            c.Logging.LogMaxAge,
 		MaxBackups:         c.Logging.LogMaxBackups,

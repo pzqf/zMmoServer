@@ -19,14 +19,14 @@ type TokenClaims struct {
 
 // TokenManager Token管理器
 type TokenManager struct {
-	secretKey  string
+	secretKey   string
 	tokenExpiry time.Duration
 }
 
 // NewTokenManager 创建Token管理器
 func NewTokenManager(cfg *config.Config) *TokenManager {
 	return &TokenManager{
-		secretKey:  cfg.Security.TokenSecret,
+		secretKey:   cfg.Server.JWTSecret,
 		tokenExpiry: time.Duration(cfg.Security.TokenExpiry) * time.Second,
 	}
 }

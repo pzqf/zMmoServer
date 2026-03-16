@@ -12,11 +12,11 @@ import (
 
 // FriendManager 好友管理器
 type FriendManager struct {
-	mu          sync.RWMutex
-	playerID    id.PlayerIdType
-	playerName  string
-	friends     map[id.PlayerIdType]*Friend
-	maxFriends  int32
+	mu         sync.RWMutex
+	playerID   id.PlayerIdType
+	playerName string
+	friends    map[id.PlayerIdType]*Friend
+	maxFriends int32
 }
 
 // NewFriendManager 创建好友管理器
@@ -96,7 +96,7 @@ func (fm *FriendManager) RemoveFriend(friendID id.PlayerIdType) error {
 	fm.mu.Lock()
 	defer fm.mu.Unlock()
 
-	friend, exists := fm.friends[friendID]
+	_, exists := fm.friends[friendID]
 	if !exists {
 		return errors.New("friend not found")
 	}

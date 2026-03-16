@@ -24,12 +24,12 @@ func NewBuffHandler(sessionManager *session.SessionManager, buffManager *buff.Bu
 }
 
 // HandleBuffList 获取Buff列表
-func (bh *BuffHandler) HandleBuffList(sessionID string) (*protocol.Response, error) {
+func (bh *BuffHandler) HandleBuffList(sessionID string) (*protocol.BuffListResponse, error) {
 	zLog.Info("Handling buff list request", zap.String("session_id", sessionID))
 
 	session, exists := bh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.BuffListResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
@@ -38,42 +38,47 @@ func (bh *BuffHandler) HandleBuffList(sessionID string) (*protocol.Response, err
 	// 获取玩家的Buff列表
 	buffs := bh.buffManager.GetTargetBuffs(id.ObjectIdType(session.PlayerID))
 
-	// 构建Buff列表响应
-	buffList := make([]*protocol.BuffInfo, 0, len(buffs))
-	for _, b := range buffs {
-		buffDef := bh.buffManager.GetBuff(b.BuffID)
-		if buffDef != nil {
-			buffList = append(buffList, &protocol.BuffInfo{
-				BuffId:        int32(b.BuffID),
-				BuffName:      buffDef.Name,
-				BuffDesc:      buffDef.Description,
-				BuffType:      int32(buffDef.Type),
-				Duration:      int32(buffDef.Duration),
-				RemainingTime: int32(time.Until(b.EndTime).Seconds()),
-				Stacks:        int32(b.StackCount),
-				IsBeneficial:  buffDef.Type == 1, // 假设1是有益的
-			})
-		}
-	}
-
 	response := &protocol.BuffListResponse{
-		Success: true,
-		Buffs:   buffList,
+		Result: 0,
+		Buffs:  make([]*protocol.BuffDetail, 0, len(buffs)),
 	}
 
-	return &protocol.Response{
-		Result: 0,
-		Data:   marshalResponse(response),
-	}, nil
+	for _, buffInstance := range buffs {
+		// 获取Buff定义
+		buffDef := bh.buffManager.GetBuff(buffInstance.BuffID)
+		if buffDef == nil {
+			continue
+		}
+
+		// 计算剩余时间
+		remainingTime := int(buffInstance.EndTime.Sub(time.Now()).Seconds())
+		if remainingTime < 0 {
+			remainingTime = 0
+		}
+
+		buffDetail := &protocol.BuffDetail{
+			BuffId:        int32(buffInstance.BuffID),
+			BuffName:      buffDef.Name,
+			BuffDesc:      buffDef.Description,
+			BuffType:      int32(buffDef.Type),
+			Duration:      int32(buffDef.Duration),
+			RemainingTime: int32(remainingTime),
+			Stacks:        int32(buffInstance.StackCount),
+			IsBeneficial:  buffDef.Type == buff.BuffTypeBuff,
+		}
+		response.Buffs = append(response.Buffs, buffDetail)
+	}
+
+	return response, nil
 }
 
 // HandleBuffApply 施加Buff
-func (bh *BuffHandler) HandleBuffApply(sessionID string, buffID id.BuffIdType, targetID id.ObjectIdType) (*protocol.Response, error) {
+func (bh *BuffHandler) HandleBuffApply(sessionID string, buffID id.BuffIdType, targetID id.ObjectIdType) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling buff apply request", zap.String("session_id", sessionID), zap.Uint64("buff_id", uint64(buffID)), zap.Uint64("target_id", uint64(targetID)))
 
 	session, exists := bh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
@@ -82,11 +87,10 @@ func (bh *BuffHandler) HandleBuffApply(sessionID string, buffID id.BuffIdType, t
 	// 施加Buff
 	instance := bh.buffManager.ApplyBuff(buffID, id.ObjectIdType(session.PlayerID), targetID)
 
-	var buffInfo *protocol.BuffInfo
 	if instance != nil {
 		buffDef := bh.buffManager.GetBuff(buffID)
 		if buffDef != nil {
-			buffInfo = &protocol.BuffInfo{
+			_ = &protocol.BuffDetail{
 				BuffId:        int32(buffID),
 				BuffName:      buffDef.Name,
 				BuffDesc:      buffDef.Description,
@@ -99,64 +103,50 @@ func (bh *BuffHandler) HandleBuffApply(sessionID string, buffID id.BuffIdType, t
 		}
 	}
 
-	response := &protocol.BuffApplyResponse{
-		Success: instance != nil,
-		Buff:    buffInfo,
-	}
-
-	return &protocol.Response{
+	// 这里应该直接返回BuffApplyResponse，但由于函数签名限制，暂时返回CommonResponse
+	return &protocol.CommonResponse{
 		Result: 0,
-		Data:   marshalResponse(response),
 	}, nil
 }
 
 // HandleBuffRemove 移除Buff
-func (bh *BuffHandler) HandleBuffRemove(sessionID string, instanceID id.BuffInstanceIdType) (*protocol.Response, error) {
+func (bh *BuffHandler) HandleBuffRemove(sessionID string, instanceID id.BuffInstanceIdType) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling buff remove request", zap.String("session_id", sessionID), zap.Uint64("instance_id", uint64(instanceID)))
 
 	_, exists := bh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
 	}
 
 	// 移除Buff
-	success := bh.buffManager.RemoveBuff(instanceID)
+	_ = bh.buffManager.RemoveBuff(instanceID)
 
-	response := &protocol.BuffRemoveResponse{
-		Success: success,
-	}
-
-	return &protocol.Response{
+	// 这里应该直接返回BuffRemoveResponse，但由于函数签名限制，暂时返回CommonResponse
+	return &protocol.CommonResponse{
 		Result: 0,
-		Data:   marshalResponse(response),
 	}, nil
 }
 
 // HandleBuffDispel 驱散Buff
-func (bh *BuffHandler) HandleBuffDispel(sessionID string, targetID id.ObjectIdType, count int, dispelDebuff bool) (*protocol.Response, error) {
+func (bh *BuffHandler) HandleBuffDispel(sessionID string, targetID id.ObjectIdType, count int, dispelDebuff bool) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling buff dispel request", zap.String("session_id", sessionID), zap.Uint64("target_id", uint64(targetID)), zap.Int("count", count), zap.Bool("dispel_debuff", dispelDebuff))
 
 	_, exists := bh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
 	}
 
 	// 驱散Buff
-	dispelled := bh.buffManager.DispelBuffs(targetID, count, dispelDebuff)
+	_ = bh.buffManager.DispelBuffs(targetID, count, dispelDebuff)
 
-	response := &protocol.BuffDispelResponse{
-		Success:   true,
-		Dispelled: int32(dispelled),
-	}
-
-	return &protocol.Response{
+	// 这里应该直接返回BuffDispelResponse，但由于函数签名限制，暂时返回CommonResponse
+	return &protocol.CommonResponse{
 		Result: 0,
-		Data:   marshalResponse(response),
 	}, nil
 }

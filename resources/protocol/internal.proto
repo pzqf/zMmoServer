@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package interop;
+package protocol;
 
-option go_package = "./interop;interop";
+option go_package = "./;protocol";
 
 // 服务间消息ID
 enum InternalMsgId {
@@ -95,6 +95,9 @@ message ServiceHeartbeatRequest {
   int32 online_count = 3;
   int32 status = 4;
   float load = 5;
+  string external_ip = 6; // 对外服务IP
+  int32 external_port = 7; // 对外服务端口
+  string version = 8; // 服务版本
 }
 
 // 服务发现请求
@@ -232,6 +235,64 @@ message MapMoveSync {
   int64 timestamp = 9;
 }
 
+// 地图移动请求（GameServer -> MapServer）
+message MapMoveRequest {
+  int64 player_id = 1;
+  int64 object_id = 2;
+  int64 map_id = 3;
+  float x = 4;
+  float y = 5;
+  float z = 6;
+  float orientation = 7;
+  int32 move_type = 8;
+}
+
+// 地图移动响应（MapServer -> GameServer）
+message MapMoveResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+  float x = 4;
+  float y = 5;
+  float z = 6;
+}
+
+// 地图攻击请求（GameServer -> MapServer）
+message MapAttackRequest {
+  int64 player_id = 1;
+  int64 object_id = 2;
+  int64 map_id = 3;
+  int64 target_id = 4;
+  int32 attack_type = 5;
+  int32 skill_id = 6;
+}
+
+// MapServer认证请求（MapServer -> GameServer）
+message MapServerAuthRequest {
+  string map_server_id = 1;
+  string version = 2;
+}
+
+// MapServer认证响应（GameServer -> MapServer）
+message MapServerAuthResponse {
+  bool success = 1;
+  string error_msg = 2;
+  string game_server_id = 3;
+}
+
+// 地图攻击响应（MapServer -> GameServer）
+message MapAttackResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+  int64 target_id = 4;
+  int64 damage = 5;
+  int64 target_hp = 6;
+  int64 target_max_hp = 7;
+  int32 exp = 8;
+  repeated InternalItemInfo items = 9;
+}
+
 // AOI进入通知（MapServer -> GameServer）
 message AoiEnterNotify {
   int64 player_id = 1;
@@ -316,11 +377,11 @@ message CombatReward {
   int64 unit_id = 1;
   int64 exp = 2;
   int64 gold = 3;
-  repeated ItemInfo items = 4;
+  repeated InternalItemInfo items = 4;
 }
 
-// 物品信息
-message ItemInfo {
+// 内部物品信息（服务间通信使用）
+message InternalItemInfo {
   int64 item_id = 1;
   int32 config_id = 2;
   int32 count = 3;

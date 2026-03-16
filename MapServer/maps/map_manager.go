@@ -1,6 +1,7 @@
 package maps
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,6 +23,43 @@ func NewMapManager() *MapManager {
 	return &MapManager{
 		maps: make(map[id.MapIdType]*Map),
 	}
+}
+
+// Start 启动地图管理器
+func (mm *MapManager) Start() error {
+	// 启动所有地图
+	mm.mu.RLock()
+	maps := make([]*Map, 0, len(mm.maps))
+	for _, m := range mm.maps {
+		maps = append(maps, m)
+	}
+	mm.mu.RUnlock()
+
+	for _, m := range maps {
+		// 启动地图的各种系统
+		m.InitSpawnSystem()
+	}
+
+	zLog.Info("MapManager started")
+	return nil
+}
+
+// Stop 停止地图管理器
+func (mm *MapManager) Stop() {
+	// 停止所有地图
+	mm.mu.RLock()
+	maps := make([]*Map, 0, len(mm.maps))
+	for _, m := range mm.maps {
+		maps = append(maps, m)
+	}
+	mm.mu.RUnlock()
+
+	for _, m := range maps {
+		// 清理地图资源
+		m.Cleanup()
+	}
+
+	zLog.Info("MapManager stopped")
 }
 
 // CreateMap 创建新地图
@@ -65,8 +103,39 @@ func (mm *MapManager) UpdateAllMapsEvents() {
 	mm.mu.RUnlock()
 
 	for _, m := range maps {
+		// 处理地图事件
 		m.UpdateEvents()
 	}
+}
+
+// HandlePlayerEnterMap 处理玩家进入地图
+func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z float32) error {
+	m := mm.GetMap(id.MapIdType(mapID))
+	if m == nil {
+		return fmt.Errorf("map not found: %d", mapID)
+	}
+
+	return m.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z)
+}
+
+// HandlePlayerMove 处理玩家移动
+func (mm *MapManager) HandlePlayerMove(playerID, objectID, mapID int64, x, y, z float32) error {
+	m := mm.GetMap(id.MapIdType(mapID))
+	if m == nil {
+		return fmt.Errorf("map not found: %d", mapID)
+	}
+
+	return m.MovePlayer(id.PlayerIdType(playerID), id.ObjectIdType(objectID), x, y, z)
+}
+
+// HandlePlayerAttack 处理玩家攻击
+func (mm *MapManager) HandlePlayerAttack(playerID, objectID, mapID, targetID int64) (int64, int64, error) {
+	m := mm.GetMap(id.MapIdType(mapID))
+	if m == nil {
+		return 0, 0, fmt.Errorf("map not found: %d", mapID)
+	}
+
+	return m.AttackTarget(id.PlayerIdType(playerID), id.ObjectIdType(objectID), id.ObjectIdType(targetID))
 }
 
 // UpdateAllMapsSkills 更新所有地图的技能

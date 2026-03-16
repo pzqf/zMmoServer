@@ -1,59 +1,57 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
+	"strings"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zUtil/zCrypto"
 )
 
 // HTTP API 相关结构体
 type LoginRequest struct {
-	Username string `json:"username"`
+	Account  string `json:"account"`
 	Password string `json:"password"`
 }
 
 type RegisterRequest struct {
-	Username string `json:"username"`
+	Account  string `json:"account"`
 	Password string `json:"password"`
 	Email    string `json:"email"`
 }
 
 type AuthResponse struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Token   string `json:"token"`
-	UserID  int64  `json:"user_id"`
+	Result    int32                  `json:"result"`
+	ErrorMsg  string                 `json:"error_msg"`
+	Token     string                 `json:"token"`
+	AccountId int64                  `json:"account_id,omitempty"`
+	Servers   []*protocol.ServerInfo `json:"servers,omitempty"`
 }
 
-type ServerInfo struct {
-	ID        int32  `json:"server_id"`
-	Name      string `json:"server_name"`
-	Address   string `json:"address"`
-	Port      int32  `json:"port"`
-	Status    int32  `json:"status"`
-	Online    int32  `json:"online_count"`
-	MaxOnline int32  `json:"max_online_count"`
-}
-
-// GetAddr 返回完整的地址（地址:端口）
-func (s *ServerInfo) GetAddr() string {
-	return fmt.Sprintf("%s:%d", s.Address, s.Port)
+// getServerAddr 返回完整的地址（地址:端口）
+func getServerAddr(server *protocol.ServerInfo) string {
+	return fmt.Sprintf("%s:%d", server.Address, server.Port)
 }
 
 type ServerListResponse struct {
-	Code    int          `json:"code"`
-	Message string       `json:"message"`
-	Servers []ServerInfo `json:"servers"`
+	Result   int32                  `json:"result"`
+	ErrorMsg string                 `json:"error_msg"`
+	Servers  []*protocol.ServerInfo `json:"servers"`
 }
 
 type Client struct {
@@ -62,8 +60,9 @@ type Client struct {
 	gatewayAddr      string
 	token            string
 	userID           int64
-	selectedServer   *ServerInfo
+	selectedServer   *protocol.ServerInfo
 	stopChan         chan struct{}
+	aesKey           []byte
 }
 
 func NewClient(globalServerAddr string) *Client {
@@ -79,7 +78,64 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("failed to connect to gateway: %v", err)
 	}
 	c.conn = conn
+
+	// 执行DH密钥交换
+	if err := c.performKeyExchange(); err != nil {
+		conn.Close()
+		return fmt.Errorf("failed to perform key exchange: %v", err)
+	}
+
 	go c.readLoop()
+	return nil
+}
+
+// performKeyExchange 执行DH密钥交换
+func (c *Client) performKeyExchange() error {
+	// 步骤1：创建DH密钥交换实例
+	curve := elliptic.P256()
+	privateKey, publicKeyX, publicKeyY, err := elliptic.GenerateKey(curve, rand.Reader)
+	if err != nil {
+		return fmt.Errorf("failed to generate DH key pair: %v", err)
+	}
+
+	// 步骤2：发送自己的公钥（64字节）
+	xBytes := publicKeyX.Bytes()
+	yBytes := publicKeyY.Bytes()
+
+	xBytes32 := make([]byte, 32)
+	yBytes32 := make([]byte, 32)
+
+	copy(xBytes32[32-len(xBytes):], xBytes)
+	copy(yBytes32[32-len(yBytes):], yBytes)
+
+	publicKey := append(xBytes32, yBytes32...)
+	if _, err := c.conn.Write(publicKey); err != nil {
+		return fmt.Errorf("failed to send public key: %v", err)
+	}
+
+	// 步骤3：接收对方的公钥（64字节）
+	peerPublicKey := make([]byte, 64)
+	if _, err := io.ReadFull(c.conn, peerPublicKey); err != nil {
+		return fmt.Errorf("failed to receive peer public key: %v", err)
+	}
+
+	// 步骤4：计算共享密钥
+	peerX := new(big.Int).SetBytes(peerPublicKey[:32])
+	peerY := new(big.Int).SetBytes(peerPublicKey[32:])
+
+	if !curve.IsOnCurve(peerX, peerY) {
+		return fmt.Errorf("invalid peer public key: not on curve")
+	}
+
+	x, _ := curve.ScalarMult(peerX, peerY, privateKey)
+	if x == nil {
+		return fmt.Errorf("failed to compute shared secret")
+	}
+
+	hash := sha256.Sum256(x.Bytes())
+	c.aesKey = hash[:16]
+
+	fmt.Printf("DH key exchange completed successfully, AES key length: %d\n", len(c.aesKey))
 	return nil
 }
 
@@ -91,119 +147,162 @@ func (c *Client) Disconnect() {
 }
 
 func (c *Client) readLoop() {
-	buffer := make([]byte, 4096)
+	// 先读取16字节的NetPacket头部
+	headerBuffer := make([]byte, 16)
 	for {
 		select {
 		case <-c.stopChan:
 			return
 		default:
 			c.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-			n, err := c.conn.Read(buffer)
+
+			// 读取NetPacket头部
+			_, err := io.ReadFull(c.conn, headerBuffer)
 			if err != nil {
 				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 					continue
 				}
 				if err != io.EOF {
-					fmt.Printf("Read error: %v\n", err)
+					fmt.Printf("Read header error: %v\n", err)
 				}
 				return
 			}
-			if n > 0 {
-				c.handleMessage(buffer[:n])
+
+			// 解析NetPacket头部
+			protoId := binary.LittleEndian.Uint32(headerBuffer[0:4])
+			_ = binary.LittleEndian.Uint32(headerBuffer[4:8]) // version
+			dataSize := binary.LittleEndian.Uint32(headerBuffer[8:12])
+			_ = binary.LittleEndian.Uint32(headerBuffer[12:16]) // isCompressed
+
+			// 读取数据体
+			if dataSize > 0 {
+				dataBuffer := make([]byte, dataSize)
+				_, err := io.ReadFull(c.conn, dataBuffer)
+				if err != nil {
+					fmt.Printf("Read data error: %v\n", err)
+					return
+				}
+
+				// 解密数据
+				var decryptedData []byte
+				if c.aesKey != nil {
+					decryptedData, err = zCrypto.AESDecrypt(dataBuffer, c.aesKey, nil, zCrypto.AESModeGCM)
+					if err != nil {
+						fmt.Printf("AES-GCM decrypt error: %v\n", err)
+						return
+					}
+				} else {
+					decryptedData = dataBuffer
+				}
+
+				// 处理消息
+				c.handleMessage(protoId, decryptedData)
+			} else {
+				// 处理没有数据的消息（如心跳）
+				c.handleMessage(protoId, nil)
 			}
 		}
 	}
 }
 
-func (c *Client) handleMessage(data []byte) {
-	if len(data) < 8 {
-		fmt.Println("Invalid message format")
-		return
-	}
-
-	// 解析长度
-	length := binary.BigEndian.Uint32(data[:4])
-	if length > 1024*1024 {
-		fmt.Println("Message too long")
-		return
-	}
-
-	if len(data) < int(length) {
-		fmt.Println("Insufficient data")
-		return
-	}
-
-	// 解析消息ID
-	msgID := binary.BigEndian.Uint32(data[4:8])
-
+func (c *Client) handleMessage(protoId uint32, data []byte) {
 	// 解析消息内容
-	switch msgID {
-	case protocol.MsgIdPlayerLogin:
+	switch protoId {
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE):
 		var resp protocol.PlayerLoginResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal PlayerLoginResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("PlayerLoginResponse: Success=%v, PlayerID=%d, Name=%s, Level=%d, Gold=%d\n",
-			resp.Success, resp.PlayerId, resp.Name, resp.Level, resp.Gold)
-	case protocol.MsgIdPlayerCreate:
+		fmt.Printf("PlayerLoginResponse: Result=%d, ErrorMsg=%s\n", resp.Result, resp.ErrorMsg)
+		if resp.Result == 0 && resp.PlayerInfo != nil {
+			fmt.Printf("Player: ID=%d, Name=%s, Level=%d, Gold=%d\n",
+				resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level, resp.PlayerInfo.Gold)
+		}
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE):
 		var resp protocol.PlayerCreateResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal PlayerCreateResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("PlayerCreateResponse: Success=%v\n", resp.Success)
-		if resp.Success && resp.Player != nil {
+		fmt.Printf("PlayerCreateResponse: Result=%d, ErrorMsg=%s\n", resp.Result, resp.ErrorMsg)
+		if resp.Result == 0 && resp.PlayerInfo != nil {
 			fmt.Printf("Player: ID=%d, Name=%s, Level=%d, Sex=%d, Age=%d\n",
-				resp.Player.PlayerId, resp.Player.Name, resp.Player.Level, resp.Player.Sex, resp.Player.Age)
+				resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level, 0, 0)
 		}
-	case protocol.MsgIdActivityList:
+	case uint32(protocol.ActivityMsgId_MSG_ACTIVITY_GET_LIST_RESPONSE):
 		var resp protocol.ActivityListResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal ActivityListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("ActivityListResponse: Success=%v, Activities=%d\n", resp.Success, len(resp.Activities))
-	case protocol.MsgIdShopItemList:
+		fmt.Printf("ActivityListResponse: Result=%d, ErrorMsg=%s, Activities=%d\n", resp.Result, resp.ErrorMsg, len(resp.Activities))
+	case uint32(protocol.ShopMsgId_MSG_SHOP_GET_ITEMS_RESPONSE):
 		var resp protocol.ShopItemListResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal ShopItemListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("ShopItemListResponse: Success=%v, Items=%d\n", resp.Success, len(resp.Items))
-	case protocol.MsgIdDungeonList:
+		fmt.Printf("ShopItemListResponse: Result=%d, ErrorMsg=%s, Items=%d\n", resp.Result, resp.ErrorMsg, len(resp.Items))
+	case uint32(protocol.DungeonMsgId_MSG_DUNGEON_GET_LIST_RESPONSE):
 		var resp protocol.DungeonListResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal DungeonListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("DungeonListResponse: Success=%v, Dungeons=%d\n", resp.Success, len(resp.Dungeons))
-	case protocol.MsgIdBuffList:
+		fmt.Printf("DungeonListResponse: Result=%d, ErrorMsg=%s, Dungeons=%d\n", resp.Result, resp.ErrorMsg, len(resp.Dungeons))
+	case uint32(protocol.BagMsgId_MSG_BAG_GET_ITEMS_RESPONSE):
 		var resp protocol.BuffListResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal BuffListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("BuffListResponse: Success=%v, Buffs=%d\n", resp.Success, len(resp.Buffs))
-	case protocol.MsgIdDropList:
+		fmt.Printf("BuffListResponse: Result=%d, ErrorMsg=%s, Buffs=%d\n", resp.Result, resp.ErrorMsg, len(resp.Buffs))
+	case uint32(protocol.TradeMsgId_MSG_TRADE_REQUEST):
 		var resp protocol.DropListResponse
-		if err := resp.Unmarshal(data[8:length]); err != nil {
+		if err := proto.Unmarshal(data, &resp); err != nil {
 			fmt.Printf("Failed to unmarshal DropListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("DropListResponse: Success=%v, Drops=%d\n", resp.Success, len(resp.Drops))
+		fmt.Printf("DropListResponse: Result=%d, ErrorMsg=%s, Drops=%d\n", resp.Result, resp.ErrorMsg, len(resp.Drops))
 	default:
-		fmt.Printf("Received message: ID=%d, Length=%d\n", msgID, length)
+		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}
 }
 
 func (c *Client) Send(msgID uint32, data []byte) error {
-	// 构建消息：长度 + 消息ID + 数据
-	length := uint32(8 + len(data))
-	buffer := make([]byte, length)
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
+	// 构建NetPacket：ProtoId(4) + Version(4) + DataSize(4) + IsCompressed(4) + Data
+	version := int32(1)
+	isCompressed := int32(0)
+
+	// 加密数据
+	var encryptedData []byte
+	if c.aesKey != nil && len(data) > 0 {
+		var err error
+		encryptedData, err = zCrypto.AESEncrypt(data, c.aesKey, nil, zCrypto.AESModeGCM)
+		if err != nil {
+			return fmt.Errorf("failed to encrypt data: %v", err)
+		}
+	} else {
+		encryptedData = data
+	}
+
+	dataSize := int32(len(encryptedData))
+
+	// 计算总长度：16字节头部 + 数据
+	totalSize := 16 + dataSize
+	buffer := make([]byte, totalSize)
+
+	// 使用大端序写入头部（与zNet库一致）
+	binary.BigEndian.PutUint32(buffer[0:4], uint32(msgID))
+	binary.BigEndian.PutUint32(buffer[4:8], uint32(version))
+	binary.BigEndian.PutUint32(buffer[8:12], uint32(dataSize))
+	binary.BigEndian.PutUint32(buffer[12:16], uint32(isCompressed))
+
+	// 写入数据
+	if dataSize > 0 {
+		copy(buffer[16:], encryptedData)
+	}
 
 	_, err := c.conn.Write(buffer)
 	return err
@@ -221,88 +320,124 @@ func (c *Client) SendTokenVerify(token string) error {
 }
 
 func (c *Client) SendEnterGame(serverID int32) error {
-	// 进入游戏消息
-	data := make([]byte, 4)
-	binary.BigEndian.PutUint32(data, uint32(serverID))
-	return c.Send(6, data)
+	// 进入游戏消息 - 这里暂时不发送，因为需要先创建角色
+	// 后续会在创建角色后调用SendPlayerLogin
+	return nil
 }
 
 func (c *Client) SendPlayerLogin(playerID int64) error {
 	// 玩家登录请求
 	req := &protocol.PlayerLoginRequest{
 		PlayerId: playerID,
+		Token:    c.token,
 	}
-	data, err := req.Marshal()
+	data, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
-	return c.Send(protocol.MsgIdPlayerLogin, data)
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), data)
 }
 
 func (c *Client) SendPlayerCreate(name string, sex, age int32) error {
 	// 角色创建请求
 	req := &protocol.PlayerCreateRequest{
-		Name: name,
-		Sex:  sex,
-		Age:  age,
+		Name:       name,
+		Sex:        sex,
+		Age:        age,
+		Profession: 1, // 默认职业
 	}
-	data, err := req.Marshal()
+	data, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
-	return c.Send(protocol.MsgIdPlayerCreate, data)
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_CREATE), data)
 }
 
 func (c *Client) SendPlayerLogout() error {
 	// 玩家登出请求
-	return c.Send(protocol.MsgIdPlayerLogout, nil)
+	req := &protocol.PlayerLogoutRequest{
+		PlayerId: 0, // 暂时设为0
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME), data)
 }
 
 func (c *Client) SendActivityList() error {
 	// 活动列表请求
-	return c.Send(protocol.MsgIdActivityList, nil)
+	return c.Send(uint32(protocol.ActivityMsgId_MSG_ACTIVITY_GET_LIST), nil)
 }
 
 func (c *Client) SendShopItemList(categoryID int32) error {
 	// 商品列表请求
-	req := &protocol.ShopItemListRequest{
-		CategoryId: categoryID,
+	return c.Send(uint32(protocol.ShopMsgId_MSG_SHOP_GET_ITEMS), nil)
+}
+
+func (c *Client) SendMapEnter(playerID int64, mapID int32) error {
+	// 进入地图请求
+	req := &protocol.ClientMapEnterRequest{
+		PlayerId: playerID,
+		MapId:    mapID,
 	}
-	data, err := req.Marshal()
+	data, err := proto.Marshal(req)
 	if err != nil {
 		return err
 	}
-	return c.Send(protocol.MsgIdShopItemList, data)
+	return c.Send(uint32(protocol.MapMsgId_MSG_MAP_ENTER), data)
+}
+
+func (c *Client) SendMapMove(playerID int64, mapID int32, x, y, z float32) error {
+	// 移动请求
+	req := &protocol.ClientMapMoveRequest{
+		PlayerId: playerID,
+		MapId:    mapID,
+		Pos: &protocol.Position{
+			X: x,
+			Y: y,
+			Z: z,
+		},
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return c.Send(uint32(protocol.MapMsgId_MSG_MAP_MOVE), data)
+}
+
+func (c *Client) SendMapAttack(playerID int64, mapID int32, targetID int64) error {
+	// 攻击请求
+	req := &protocol.ClientMapAttackRequest{
+		PlayerId: playerID,
+		MapId:    mapID,
+		TargetId: targetID,
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return c.Send(uint32(protocol.MapMsgId_MSG_MAP_ATTACK), data)
 }
 
 func (c *Client) SendDungeonList() error {
 	// 副本列表请求
-	return c.Send(protocol.MsgIdDungeonList, nil)
+	return c.Send(uint32(protocol.DungeonMsgId_MSG_DUNGEON_GET_LIST), nil)
 }
 
 func (c *Client) SendBuffList() error {
 	// Buff列表请求
-	return c.Send(protocol.MsgIdBuffList, nil)
+	return c.Send(uint32(protocol.BagMsgId_MSG_BAG_GET_ITEMS), nil)
 }
 
 func (c *Client) SendDropList(x, y, z, radius float32) error {
 	// 掉落列表请求
-	req := &protocol.DropListRequest{
-		X:      x,
-		Y:      y,
-		Z:      z,
-		Radius: radius,
-	}
-	data, err := req.Marshal()
-	if err != nil {
-		return err
-	}
-	return c.Send(protocol.MsgIdDropList, data)
+	return c.Send(uint32(protocol.TradeMsgId_MSG_TRADE_REQUEST), nil)
 }
 
 // HTTP 方法
-func (c *Client) Login(username, password string) (*AuthResponse, error) {
-	req := LoginRequest{Username: username, Password: password}
+func (c *Client) Login(account, password string) (*AuthResponse, error) {
+	req := LoginRequest{Account: account, Password: password}
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -324,16 +459,20 @@ func (c *Client) Login(username, password string) (*AuthResponse, error) {
 		return nil, err
 	}
 
-	if authResp.Code == 0 {
+	if authResp.Result == 0 {
 		c.token = authResp.Token
-		c.userID = authResp.UserID
+		// 从服务器列表中获取第一个服务器的地址作为默认网关地址
+		if len(authResp.Servers) > 0 {
+			c.selectedServer = authResp.Servers[0]
+			c.gatewayAddr = getServerAddr(c.selectedServer)
+		}
 	}
 
 	return &authResp, nil
 }
 
-func (c *Client) Register(username, password, email string) (*AuthResponse, error) {
-	req := RegisterRequest{Username: username, Password: password, Email: email}
+func (c *Client) Register(account, password, email string) (*AuthResponse, error) {
+	req := RegisterRequest{Account: account, Password: password, Email: email}
 	data, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -353,11 +492,6 @@ func (c *Client) Register(username, password, email string) (*AuthResponse, erro
 	var authResp AuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
 		return nil, err
-	}
-
-	if authResp.Code == 0 {
-		c.token = authResp.Token
-		c.userID = authResp.UserID
 	}
 
 	return &authResp, nil
@@ -383,11 +517,11 @@ func (c *Client) GetServerList() (*ServerListResponse, error) {
 	return &serverListResp, nil
 }
 
-func (c *Client) SelectServer(serverID int32, serverList []ServerInfo) bool {
+func (c *Client) SelectServer(serverID int32, serverList []*protocol.ServerInfo) bool {
 	for _, server := range serverList {
-		if server.ID == serverID {
-			c.selectedServer = &server
-			c.gatewayAddr = server.GetAddr()
+		if server.ServerId == serverID {
+			c.selectedServer = server
+			c.gatewayAddr = getServerAddr(server)
 			return true
 		}
 	}
@@ -395,118 +529,14 @@ func (c *Client) SelectServer(serverID int32, serverList []ServerInfo) bool {
 }
 
 func main() {
-	globalServer := flag.String("global", "127.0.0.1:8082", "Global server address")
-	flag.Parse()
+	fmt.Println("=== 简化测试流程 ===")
 
-	client := NewClient(*globalServer)
+	// 直接创建客户端并连接到GatewayServer
+	client := NewClient("")
+	client.gatewayAddr = "127.0.0.1:10001" // GatewayServer地址
 
-	// 1. 账号登录/注册
-	fmt.Println("=== 账号登录/注册 ===")
-	fmt.Println("1. 登录")
-	fmt.Println("2. 注册")
-	fmt.Print("请选择操作: ")
-
-	scanner := bufio.NewScanner(os.Stdin)
-	var choice string
-	if scanner.Scan() {
-		choice = scanner.Text()
-	}
-
-	switch choice {
-	case "1":
-		fmt.Print("用户名: ")
-		var username string
-		if scanner.Scan() {
-			username = scanner.Text()
-		}
-		fmt.Print("密码: ")
-		var password string
-		if scanner.Scan() {
-			password = scanner.Text()
-		}
-
-		resp, err := client.Login(username, password)
-		if err != nil {
-			fmt.Printf("登录失败: %v\n", err)
-			os.Exit(1)
-		}
-		if resp.Code != 0 {
-			fmt.Printf("登录失败: %s\n", resp.Message)
-			os.Exit(1)
-		}
-		fmt.Printf("登录成功! 用户ID: %d\n", resp.UserID)
-
-	case "2":
-		fmt.Print("用户名: ")
-		var username string
-		if scanner.Scan() {
-			username = scanner.Text()
-		}
-		fmt.Print("密码: ")
-		var password string
-		if scanner.Scan() {
-			password = scanner.Text()
-		}
-		fmt.Print("邮箱: ")
-		var email string
-		if scanner.Scan() {
-			email = scanner.Text()
-		}
-
-		resp, err := client.Register(username, password, email)
-		if err != nil {
-			fmt.Printf("注册失败: %v\n", err)
-			os.Exit(1)
-		}
-		if resp.Code != 0 {
-			fmt.Printf("注册失败: %s\n", resp.Message)
-			os.Exit(1)
-		}
-		fmt.Printf("注册成功! 用户ID: %d\n", resp.UserID)
-
-	default:
-		fmt.Println("无效选择")
-		os.Exit(1)
-	}
-
-	// 2. 获取服务器列表
-	fmt.Println("\n=== 服务器列表 ===")
-	serverListResp, err := client.GetServerList()
-	if err != nil {
-		fmt.Printf("获取服务器列表失败: %v\n", err)
-		os.Exit(1)
-	}
-	if serverListResp.Code != 0 {
-		fmt.Printf("获取服务器列表失败: %s\n", serverListResp.Message)
-		os.Exit(1)
-	}
-
-	for i, server := range serverListResp.Servers {
-		fmt.Printf("%d. %s (状态: %d, 在线: %d/%d)\n", i+1, server.Name, server.Status, server.Online, server.MaxOnline)
-	}
-
-	// 3. 选择服务器
-	fmt.Print("\n请选择服务器: ")
-	var serverIndex int
-	if scanner.Scan() {
-		fmt.Sscanf(scanner.Text(), "%d", &serverIndex)
-	}
-
-	if serverIndex < 1 || serverIndex > len(serverListResp.Servers) {
-		fmt.Println("无效服务器选择")
-		os.Exit(1)
-	}
-
-	targetServer := serverListResp.Servers[serverIndex-1]
-	if !client.SelectServer(targetServer.ID, serverListResp.Servers) {
-		fmt.Println("服务器选择失败")
-		os.Exit(1)
-	}
-
-	fmt.Printf("已选择服务器: %s (%s)\n", targetServer.Name, targetServer.GetAddr())
-
-	// 4. 连接到 Gateway 服务器
-	fmt.Println("\n=== 连接 Gateway 服务器 ===")
+	// 1. 连接到 Gateway 服务器
+	fmt.Println("1. 连接 Gateway 服务器...")
 	if err := client.Connect(); err != nil {
 		fmt.Printf("连接失败: %v\n", err)
 		os.Exit(1)
@@ -515,127 +545,114 @@ func main() {
 
 	fmt.Println("连接成功!")
 
-	// 5. 发送令牌验证
-	if err := client.SendTokenVerify(client.token); err != nil {
-		fmt.Printf("发送令牌失败: %v\n", err)
+	// 2. 生成并发送token验证
+	fmt.Println("\n2. 发送token验证...")
+	secretKey := "zMmoServerSecretKey" // 与GatewayServer配置中的JWTSecret一致
+	token, err := GenerateToken(1, "test_account", secretKey)
+	if err != nil {
+		fmt.Printf("生成token失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("令牌验证成功!")
-
-	// 6. 进入游戏
-	fmt.Println("\n=== 进入游戏 ===")
-	if err := client.SendEnterGame(targetServer.ID); err != nil {
-		fmt.Printf("进入游戏失败: %v\n", err)
+	fmt.Printf("生成的token: %s\n", token)
+	if err := client.SendTokenVerify(token); err != nil {
+		fmt.Printf("token验证失败: %v\n", err)
 		os.Exit(1)
 	}
+	fmt.Println("token验证请求已发送")
 
-	fmt.Println("进入游戏成功! 开始游戏...")
+	// 等待1秒，让服务器处理token验证
+	time.Sleep(1 * time.Second)
 
-	// 7. 角色创建/登录
-	fmt.Println("\n=== 角色管理 ===")
-	fmt.Println("1. 创建角色")
-	fmt.Println("2. 登录角色")
-	fmt.Print("请选择操作: ")
-	var roleChoice string
-	if scanner.Scan() {
-		roleChoice = scanner.Text()
+	// 3. 模拟玩家ID
+	playerID := int64(1) // 固定玩家ID
+
+	// 4. 测试进入地图
+	fmt.Println("\n3. 测试进入地图...")
+	if err := client.SendMapEnter(playerID, 1001); err != nil { // 1001是新手村地图ID
+		fmt.Printf("进入地图失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("进入地图请求已发送: 角色ID=%d, 地图ID=1001\n", playerID)
+
+	// 等待2秒，让服务器处理进入地图
+	fmt.Println("\n等待服务器处理进入地图...")
+	time.Sleep(2 * time.Second)
+
+	// 5. 测试移动
+	fmt.Println("\n4. 测试移动...")
+	if err := client.SendMapMove(playerID, 1001, 255, 255, 0); err != nil { // 移动到坐标(255, 255, 0)
+		fmt.Printf("移动失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("移动请求已发送: 角色ID=%d, 地图ID=1001, 坐标=(255, 255, 0)\n", playerID)
+
+	// 等待1秒，让服务器处理移动
+	fmt.Println("\n等待服务器处理移动...")
+	time.Sleep(1 * time.Second)
+
+	// 6. 测试攻击
+	fmt.Println("\n5. 测试攻击...")
+	if err := client.SendMapAttack(playerID, 1001, 10001); err != nil { // 攻击目标ID为10001的怪物
+		fmt.Printf("攻击失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("攻击请求已发送: 角色ID=%d, 地图ID=1001, 目标ID=10001\n", playerID)
+
+	// 等待1秒，让服务器处理攻击
+	fmt.Println("\n等待服务器处理攻击...")
+	time.Sleep(1 * time.Second)
+
+	fmt.Println("\n测试完成!")
+}
+
+// checkPlayerInDatabase 检查数据库中是否有角色数据
+// TokenClaims JWT声明
+type TokenClaims struct {
+	AccountID   int64  `json:"account_id"`
+	AccountName string `json:"account_name"`
+	jwt.RegisteredClaims
+}
+
+// GenerateToken 生成JWT token
+func GenerateToken(accountID int64, accountName, secretKey string) (string, error) {
+	claims := &TokenClaims{
+		AccountID:   accountID,
+		AccountName: accountName,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
 	}
 
-	switch roleChoice {
-	case "1":
-		fmt.Print("角色名称: ")
-		var name string
-		if scanner.Scan() {
-			name = scanner.Text()
-		}
-		fmt.Print("性别 (1-男, 2-女): ")
-		var sex int32
-		if scanner.Scan() {
-			fmt.Sscanf(scanner.Text(), "%d", &sex)
-		}
-		fmt.Print("年龄: ")
-		var age int32
-		if scanner.Scan() {
-			fmt.Sscanf(scanner.Text(), "%d", &age)
-		}
-
-		if err := client.SendPlayerCreate(name, sex, age); err != nil {
-			fmt.Printf("创建角色失败: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("角色创建请求已发送，等待响应...")
-
-	case "2":
-		fmt.Print("角色ID: ")
-		var playerID int64
-		if scanner.Scan() {
-			fmt.Sscanf(scanner.Text(), "%d", &playerID)
-		}
-
-		if err := client.SendPlayerLogin(playerID); err != nil {
-			fmt.Printf("登录角色失败: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("角色登录请求已发送，等待响应...")
-
-	default:
-		fmt.Println("无效选择")
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(secretKey))
+	if err != nil {
+		return "", err
 	}
 
-	// 进入游戏后，保持连接并提供命令交互
-	fmt.Println("\n游戏中... 输入命令:")
-	fmt.Println("- 'quit' 退出")
-	fmt.Println("- 'logout' 登出角色")
-	fmt.Println("- 'activity' 查看活动列表")
-	fmt.Println("- 'shop' 查看商城商品")
-	fmt.Println("- 'dungeon' 查看副本列表")
-	fmt.Println("- 'buff' 查看Buff列表")
-	fmt.Println("- 'drop' 查看掉落列表")
+	return tokenString, nil
+}
 
-	for scanner.Scan() {
-		line := scanner.Text()
-		if line == "quit" || line == "exit" {
-			break
-		} else if line == "logout" {
-			if err := client.SendPlayerLogout(); err != nil {
-				fmt.Printf("登出失败: %v\n", err)
-			} else {
-				fmt.Println("登出请求已发送")
-			}
-		} else if line == "activity" {
-			if err := client.SendActivityList(); err != nil {
-				fmt.Printf("获取活动列表失败: %v\n", err)
-			} else {
-				fmt.Println("活动列表请求已发送")
-			}
-		} else if line == "shop" {
-			if err := client.SendShopItemList(1); err != nil {
-				fmt.Printf("获取商品列表失败: %v\n", err)
-			} else {
-				fmt.Println("商品列表请求已发送")
-			}
-		} else if line == "dungeon" {
-			if err := client.SendDungeonList(); err != nil {
-				fmt.Printf("获取副本列表失败: %v\n", err)
-			} else {
-				fmt.Println("副本列表请求已发送")
-			}
-		} else if line == "buff" {
-			if err := client.SendBuffList(); err != nil {
-				fmt.Printf("获取Buff列表失败: %v\n", err)
-			} else {
-				fmt.Println("Buff列表请求已发送")
-			}
-		} else if line == "drop" {
-			if err := client.SendDropList(0, 0, 0, 100); err != nil {
-				fmt.Printf("获取掉落列表失败: %v\n", err)
-			} else {
-				fmt.Println("掉落列表请求已发送")
-			}
-		} else {
-			fmt.Println("未知命令")
-		}
+func checkPlayerInDatabase() {
+	// 执行MySQL查询检查角色数据
+	cmd := `mysql -h 192.168.91.128 -u root -ppotato -e "USE GameDB_000101; SELECT * FROM players;"`
+	fmt.Printf("执行查询: %s\n", cmd)
+
+	// 使用PowerShell执行命令
+	output, err := exec.Command("powershell", "-Command", cmd).Output()
+	if err != nil {
+		fmt.Printf("查询数据库失败: %v\n", err)
+		return
 	}
 
-	fmt.Println("游戏结束!")
+	fmt.Println("数据库查询结果:")
+	fmt.Println(string(output))
+
+	// 检查是否有角色数据
+	if strings.Contains(string(output), "testrole") {
+		fmt.Println("\n✓ 角色数据已成功写入数据库!")
+	} else {
+		fmt.Println("\n✗ 角色数据未写入数据库!")
+	}
 }

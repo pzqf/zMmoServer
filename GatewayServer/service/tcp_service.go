@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"net"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
@@ -14,21 +15,21 @@ import (
 )
 
 type TCPService struct {
-	config         *config.Config
-	netServer      *zNet.TcpServer
-	connManager    *connection.ConnectionManager
-	protocolParser *protocol.ProtocolHandler
-	compressionCfg *protolayer.CompressionConfig
+	config          *config.Config
+	netServer       *zNet.TcpServer
+	connManager     *connection.ConnectionManager
+	protocolParser  *protocol.ProtocolHandler
+	compressionCfg  *protolayer.CompressionConfig
 	securityManager *auth.SecurityManager
 }
 
 func NewTCPService(cfg *config.Config, netServer *zNet.TcpServer, connManager *connection.ConnectionManager, protocolParser *protocol.ProtocolHandler, compressionCfg *protolayer.CompressionConfig, securityManager *auth.SecurityManager) *TCPService {
 	return &TCPService{
-		config:         cfg,
-		netServer:      netServer,
-		connManager:    connManager,
-		protocolParser: protocolParser,
-		compressionCfg: compressionCfg,
+		config:          cfg,
+		netServer:       netServer,
+		connManager:     connManager,
+		protocolParser:  protocolParser,
+		compressionCfg:  compressionCfg,
 		securityManager: securityManager,
 	}
 }
@@ -36,6 +37,14 @@ func NewTCPService(cfg *config.Config, netServer *zNet.TcpServer, connManager *c
 func (ts *TCPService) Start() error {
 	zLog.Info("Starting TCP service...")
 
+	// 尝试监听端口，检查是否可用
+	ln, err := net.Listen("tcp", ts.config.Server.ListenAddr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", ts.config.Server.ListenAddr, err)
+	}
+	ln.Close()
+
+	zLog.Info("TCP service started successfully", zap.String("listen_addr", ts.config.Server.ListenAddr))
 	return ts.netServer.Start()
 }
 

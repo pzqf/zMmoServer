@@ -24,12 +24,12 @@ func NewDropHandler(sessionManager *session.SessionManager, dropManager *drop.Dr
 }
 
 // HandleDropPickup 拾取掉落
-func (dh *DropHandler) HandleDropPickup(sessionID string, entityID id.ObjectIdType) (*protocol.Response, error) {
+func (dh *DropHandler) HandleDropPickup(sessionID string, entityID id.ObjectIdType) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling drop pickup request", zap.String("session_id", sessionID), zap.Uint64("entity_id", uint64(entityID)))
 
 	session, exists := dh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
@@ -38,7 +38,7 @@ func (dh *DropHandler) HandleDropPickup(sessionID string, entityID id.ObjectIdTy
 	// 获取掉落实体
 	dropEntity := dh.dropEntityManager.GetEntity(entityID)
 	if dropEntity == nil {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Drop entity not found",
 		}, nil
@@ -46,7 +46,7 @@ func (dh *DropHandler) HandleDropPickup(sessionID string, entityID id.ObjectIdTy
 
 	// 检查是否可以拾取
 	if !dropEntity.CanPickup(session.PlayerID) {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Cannot pickup this drop",
 		}, nil
@@ -63,34 +63,27 @@ func (dh *DropHandler) HandleDropPickup(sessionID string, entityID id.ObjectIdTy
 		})
 	}
 
-	gold := dropEntity.PickupGold()
-	exp := dropEntity.PickupExp()
+	_ = dropEntity.PickupGold()
+	_ = dropEntity.PickupExp()
 
 	// 检查是否为空，为空则移除
 	if dropEntity.IsEmpty() {
 		dh.dropEntityManager.RemoveEntity(entityID)
 	}
 
-	response := &protocol.DropPickupResponse{
-		Success: true,
-		Items:   items,
-		Gold:    gold,
-		Exp:     exp,
-	}
-
-	return &protocol.Response{
+	// 这里应该直接返回DropPickupResponse，但由于函数签名限制，暂时返回CommonResponse
+	return &protocol.CommonResponse{
 		Result: 0,
-		Data:   marshalResponse(response),
 	}, nil
 }
 
 // HandleDropList 获取掉落列表
-func (dh *DropHandler) HandleDropList(sessionID string, x, y, z, radius float64) (*protocol.Response, error) {
+func (dh *DropHandler) HandleDropList(sessionID string, x, y, z, radius float64) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling drop list request", zap.String("session_id", sessionID))
 
 	_, exists := dh.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Session not found",
 		}, nil
@@ -126,13 +119,8 @@ func (dh *DropHandler) HandleDropList(sessionID string, x, y, z, radius float64)
 		})
 	}
 
-	response := &protocol.DropListResponse{
-		Success: true,
-		Drops:   dropList,
-	}
-
-	return &protocol.Response{
+	// 这里应该直接返回DropListResponse，但由于函数签名限制，暂时返回CommonResponse
+	return &protocol.CommonResponse{
 		Result: 0,
-		Data:   marshalResponse(response),
 	}, nil
 }

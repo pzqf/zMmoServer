@@ -1,53 +1,48 @@
 package admin
 
 import (
+	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/AdminServer/config"
 	"github.com/pzqf/zMmoServer/AdminServer/monitor"
-	"github.com/pzqf/zMmoShared/server"
 )
+
+// ServerType 管理服类型
+const ServerTypeAdmin zServer.ServerType = "admin"
 
 // BaseServer 管理服基础服务器
 type BaseServer struct {
-	*server.BaseServer
+	*zServer.BaseServer
 	Config         *config.Config
 	MonitorService *monitor.MonitorService
 }
 
 // NewBaseServer 创建管理服基础服务器
 func NewBaseServer() *BaseServer {
-	baseServer := server.NewBaseServer(
-		server.ServerTypeAdmin,
+	// 先创建子类实例
+	as := &BaseServer{}
+
+	// 创建基础服务器，传入子类作为 hooks
+	baseServer := zServer.NewBaseServer(
+		ServerTypeAdmin,
 		"admin-1",
 		"Admin Server",
 		"1.0.0",
+		as, // 传入自身作为 LifecycleHooks 实现
 	)
 
-	server := &BaseServer{
-		BaseServer: baseServer,
-	}
-
-	// 设置生命周期钩子
-	server.onBeforeStartFunc = server.onBeforeStart
-	server.onAfterStartFunc = server.onAfterStart
-	server.onBeforeStopFunc = server.onBeforeStop
-
-	return server
+	as.BaseServer = baseServer
+	return as
 }
 
-// onBeforeStart 启动前的准备工作
-func (s *BaseServer) onBeforeStart() error {
-	// 加载配置
-	cfg, err := config.LoadConfig("config.ini")
-	if err != nil {
-		return err
+// OnBeforeStart 启动前的准备工作 - 实现 LifecycleHooks 接口
+func (s *BaseServer) OnBeforeStart() error {
+	cfg := s.Config
+	if cfg == nil {
+		return nil
 	}
-	s.Config = cfg
 
 	// 初始化监控服务
-	monitorService, err := monitor.NewMonitorService(cfg)
-	if err != nil {
-		return err
-	}
+	monitorService := monitor.NewMonitorService(cfg)
 	s.MonitorService = monitorService
 
 	// 注册组件
@@ -57,8 +52,8 @@ func (s *BaseServer) onBeforeStart() error {
 	return nil
 }
 
-// onAfterStart 启动后的工作
-func (s *BaseServer) onAfterStart() error {
+// OnAfterStart 启动后的工作 - 实现 LifecycleHooks 接口
+func (s *BaseServer) OnAfterStart() error {
 	// 启动监控服务
 	if err := s.MonitorService.Start(); err != nil {
 		return err
@@ -67,8 +62,8 @@ func (s *BaseServer) onAfterStart() error {
 	return nil
 }
 
-// onBeforeStop 停止前的工作
-func (s *BaseServer) onBeforeStop() {
+// OnBeforeStop 停止前的工作 - 实现 LifecycleHooks 接口
+func (s *BaseServer) OnBeforeStop() {
 	// 停止监控服务
 	if s.MonitorService != nil {
 		s.MonitorService.Stop()

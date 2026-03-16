@@ -34,8 +34,8 @@ func (ah *AuthHandler) HandleTokenVerify(session zNet.Session, tokenString strin
 	claims, err := ah.tokenManager.ValidateToken(tokenString)
 	if err != nil {
 		zLog.Warn("Token validation failed", zap.Error(err))
-		response := &protocol.Response{
-			Result:   1,
+		response := &protocol.ServerMessage{
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_TOKEN_INVALID),
 			ErrorMsg: "Invalid token",
 		}
 		return ah.sendResponse(session, response)
@@ -47,8 +47,8 @@ func (ah *AuthHandler) HandleTokenVerify(session zNet.Session, tokenString strin
 
 	ah.connManager.SetAccountInfo(sessionID, id.AccountIdType(claims.AccountID), claims.AccountName)
 
-	response := &protocol.Response{
-		Result: 0,
+	response := &protocol.ServerMessage{
+		Result: int32(protocol.ErrorCode_ERR_SUCCESS),
 	}
 	return ah.sendResponse(session, response)
 }

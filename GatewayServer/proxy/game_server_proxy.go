@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"sync"
-	"time"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
@@ -21,22 +20,19 @@ import (
 type GameServerProxy interface {
 	Start(ctx context.Context) error
 	Stop(ctx context.Context) error
-	SendToClient(sessionID zNet.SessionIdType, data []byte) error
+	SendToClient(sessionID zNet.SessionIdType, protoId int32, data []byte) error
 	RegisterClient(connID zNet.SessionIdType, accountID int64)
 	UnregisterClient(connID zNet.SessionIdType)
 }
 
 type gameServerProxy struct {
-	config         *config.Config
-	tcpService     *service.TCPService
-	connManager    *connection.ConnectionManager
-	connMap        map[zNet.SessionIdType]int64 // connID -> accountID
-	accountMap     map[int64]zNet.SessionIdType // accountID -> connID
-	mutex          sync.RWMutex
-	gameConn       net.Conn
-	isConnected    bool
-	connecting     bool
-	reconnectTimer *time.Timer
+	config      *config.Config
+	tcpService  *service.TCPService
+	connManager *connection.ConnectionManager
+	connMap     map[zNet.SessionIdType]int64 // connID -> accountID
+	accountMap  map[int64]zNet.SessionIdType // accountID -> connID
+	mutex       sync.RWMutex
+	tcpClient   *zNet.TcpClient
 }
 
 func NewGameServerProxy(cfg *config.Config, tcpService *service.TCPService, connManager *connection.ConnectionManager) GameServerProxy {
@@ -60,87 +56,61 @@ func (gsp *gameServerProxy) Start(ctx context.Context) error {
 func (gsp *gameServerProxy) Stop(ctx context.Context) error {
 	zLog.Info("Stopping GameServer proxy...")
 
-	if gsp.gameConn != nil {
-		gsp.gameConn.Close()
-	}
-
-	if gsp.reconnectTimer != nil {
-		gsp.reconnectTimer.Stop()
+	if gsp.tcpClient != nil {
+		gsp.tcpClient.Close()
 	}
 
 	return nil
 }
 
 func (gsp *gameServerProxy) connectToGameServer(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			if gsp.isConnected || gsp.connecting {
-				time.Sleep(1 * time.Second)
-				continue
+	// 解析GameServer地址
+	tcpAddr, err := net.ResolveTCPAddr("tcp", gsp.config.GameServer.GameServerAddr)
+	if err != nil {
+		zLog.Error("Failed to resolve GameServer address", zap.Error(err))
+		return
+	}
+
+	// 创建TcpClient配置
+	clientConfig := &zNet.TcpClientConfig{
+		ServerAddr:        tcpAddr.IP.String(),
+		ServerPort:        tcpAddr.Port,
+		HeartbeatDuration: 30,
+		MaxPacketDataSize: 1024 * 1024,
+		AutoReconnect:     true,
+		ReconnectDelay:    5,
+	}
+
+	// 创建TcpClient
+	gsp.tcpClient = zNet.NewTcpClient(clientConfig,
+		zNet.WithClientLogger(zLog.GetStandardLogger()),
+		zNet.WithClientStateCallback(func(state zNet.ClientState) {
+			switch state {
+			case zNet.ClientStateConnected:
+				zLog.Info("Connected to GameServer", zap.String("addr", gsp.config.GameServer.GameServerAddr))
+			case zNet.ClientStateDisconnected:
+				zLog.Warn("Disconnected from GameServer")
+			case zNet.ClientStateReconnecting:
+				zLog.Info("Reconnecting to GameServer...")
 			}
+		}),
+	)
 
-			gsp.connecting = true
-			conn, err := net.Dial("tcp", gsp.config.GameServer.GameServerAddr)
-			if err != nil {
-				zLog.Error("Failed to connect to GameServer", zap.Error(err))
-				gsp.connecting = false
-				gsp.scheduleReconnect()
-				continue
-			}
+	// 注册消息处理器
+	gsp.tcpClient.RegisterDispatcher(gsp.handleGameServerMessage)
 
-			zLog.Info("Connected to GameServer", zap.String("addr", gsp.config.GameServer.GameServerAddr))
-			gsp.gameConn = conn
-			gsp.isConnected = true
-			gsp.connecting = false
-
-			// 启动消息处理
-			go gsp.handleGameServerMessages(ctx, conn)
-		}
+	// 连接到GameServer
+	err = gsp.tcpClient.Connect()
+	if err != nil {
+		zLog.Error("Failed to connect to GameServer", zap.Error(err))
+		return
 	}
 }
 
-func (gsp *gameServerProxy) scheduleReconnect() {
-	if gsp.reconnectTimer != nil {
-		gsp.reconnectTimer.Stop()
-	}
-
-	timeout := time.Duration(gsp.config.GameServer.GameServerConnectTimeout) * time.Second
-	gsp.reconnectTimer = time.AfterFunc(timeout, func() {
-		zLog.Info("Attempting to reconnect to GameServer...")
-	})
-}
-
-func (gsp *gameServerProxy) handleGameServerMessages(ctx context.Context, conn net.Conn) {
-	defer func() {
-		conn.Close()
-		gsp.isConnected = false
-		zLog.Info("GameServer connection closed")
-	}()
-
-	buffer := make([]byte, 4096)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		default:
-			conn.SetReadDeadline(time.Now().Add(30 * time.Second))
-			n, err := conn.Read(buffer)
-			if err != nil {
-				if gsp.isConnected {
-					zLog.Error("Failed to read from GameServer", zap.Error(err))
-				}
-				return
-			}
-
-			if n > 0 {
-				gsp.processGameServerMessage(buffer[:n])
-			}
-		}
-	}
+func (gsp *gameServerProxy) handleGameServerMessage(session zNet.Session, packet *zNet.NetPacket) error {
+	// 处理GameServer消息
+	gsp.processGameServerMessage(packet.Data)
+	return nil
 }
 
 func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
@@ -165,8 +135,20 @@ func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
 	// 解析消息ID
 	msgID := binary.BigEndian.Uint32(data[4:8])
 
+	// 处理内部消息
+	if msgID == uint32(protocol.InternalMsgId_MSG_INTERNAL_SERVICE_HEARTBEAT) {
+		// 处理心跳消息
+		var heartbeatReq protocol.ServiceHeartbeatRequest
+		if err := proto.Unmarshal(data[8:length], &heartbeatReq); err != nil {
+			zLog.Error("Failed to unmarshal heartbeat request", zap.Error(err))
+			return
+		}
+		zLog.Debug("Received heartbeat from GameServer", zap.Int32("server_id", heartbeatReq.ServerId), zap.Int32("online_count", heartbeatReq.OnlineCount))
+		return
+	}
+
 	// 解析消息内容，提取sessionID
-	var msg protocol.Message
+	var msg protocol.ClientMessage
 	if err := proto.Unmarshal(data[8:length], &msg); err != nil {
 		zLog.Error("Failed to unmarshal message", zap.Error(err))
 		return
@@ -187,20 +169,19 @@ func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
 
 const MaxMsgLen = 1024 * 1024
 
-func (gsp *gameServerProxy) SendToClient(sessionID zNet.SessionIdType, data []byte) error {
-	if !gsp.isConnected {
+func (gsp *gameServerProxy) SendToClient(sessionID zNet.SessionIdType, protoId int32, data []byte) error {
+	if gsp.tcpClient == nil || !gsp.tcpClient.IsConnected() {
 		return fmt.Errorf("not connected to GameServer")
 	}
 
-	// 直接转发客户端消息给GameServer
-	_, err := gsp.gameConn.Write(data)
+	// 使用Send方法发送消息
+	err := gsp.tcpClient.Send(protoId, data)
 	if err != nil {
-		gsp.isConnected = false
 		zLog.Error("Failed to send message to GameServer", zap.Error(err))
 		return err
 	}
 
-	zLog.Debug("Message sent to GameServer", zap.Uint64("session_id", uint64(sessionID)), zap.Int("data_len", len(data)))
+	zLog.Info("Message sent to GameServer", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", protoId), zap.Int("data_len", len(data)))
 	return nil
 }
 

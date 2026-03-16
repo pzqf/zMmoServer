@@ -30,15 +30,14 @@ func (ph *PlayerHandler) HandlePlayerLogin(sessionID string, accountID id.Accoun
 	if err != nil {
 		zLog.Error("Failed to get player list", zap.Error(err))
 		return &protocol.PlayerLoginResponse{
-			Success:  false,
+			Result:   1,
 			ErrorMsg: "Failed to get player list",
 		}, err
 	}
 
 	if len(playerList) == 0 {
 		return &protocol.PlayerLoginResponse{
-			Success:  true,
-			PlayerId: 0,
+			Result: 0,
 		}, nil
 	}
 
@@ -47,15 +46,17 @@ func (ph *PlayerHandler) HandlePlayerLogin(sessionID string, accountID id.Accoun
 	zLog.Info("Player login handled", zap.Int64("account_id", int64(accountID)), zap.Int64("player_id", int64(player.PlayerID)))
 
 	return &protocol.PlayerLoginResponse{
-		Success:  true,
-		PlayerId: int64(player.PlayerID),
-		Name:     player.Name,
-		Level:    int32(player.Level),
-		Gold:     player.Gold,
+		Result: 0,
+		PlayerInfo: &protocol.PlayerBasicInfo{
+			PlayerId: int64(player.PlayerID),
+			Name:     player.Name,
+			Level:    int32(player.Level),
+			Gold:     player.Gold,
+		},
 	}, nil
 }
 
-func (ph *PlayerHandler) HandlePlayerSelect(sessionID string, playerID id.PlayerIdType) (*protocol.Response, error) {
+func (ph *PlayerHandler) HandlePlayerSelect(sessionID string, playerID id.PlayerIdType) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling player select", zap.String("session_id", sessionID), zap.Int64("player_id", int64(playerID)))
 
 	ph.sessionManager.BindPlayer(sessionID, playerID)
@@ -63,7 +64,7 @@ func (ph *PlayerHandler) HandlePlayerSelect(sessionID string, playerID id.Player
 	err := ph.playerService.PlayerLogin(playerID)
 	if err != nil {
 		zLog.Error("Failed to login player", zap.Error(err))
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Failed to login player",
 		}, err
@@ -72,7 +73,7 @@ func (ph *PlayerHandler) HandlePlayerSelect(sessionID string, playerID id.Player
 	player, err := ph.playerService.GetPlayerByID(playerID)
 	if err != nil {
 		zLog.Error("Failed to get player info", zap.Error(err))
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result:   1,
 			ErrorMsg: "Failed to get player info",
 		}, err
@@ -86,7 +87,7 @@ func (ph *PlayerHandler) HandlePlayerSelect(sessionID string, playerID id.Player
 
 	zLog.Info("Player selected and logged in", zap.Int64("player_id", int64(playerID)))
 
-	return &protocol.Response{
+	return &protocol.CommonResponse{
 		Result: 0,
 	}, nil
 }
@@ -98,7 +99,7 @@ func (ph *PlayerHandler) HandlePlayerCreate(sessionID string, accountID id.Accou
 	if err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
 		return &protocol.PlayerCreateResponse{
-			Success:  false,
+			Result:   1,
 			ErrorMsg: "Failed to create player",
 		}, err
 	}
@@ -109,31 +110,28 @@ func (ph *PlayerHandler) HandlePlayerCreate(sessionID string, accountID id.Accou
 	if err != nil {
 		zLog.Error("Failed to get player", zap.Error(err))
 		return &protocol.PlayerCreateResponse{
-			Success: true,
-			Player:  nil,
+			Result: 0,
 		}, nil
 	}
 
 	zLog.Info("Player created successfully", zap.Int64("player_id", int64(playerID)))
 
 	return &protocol.PlayerCreateResponse{
-		Success: true,
-		Player: &protocol.PlayerInfo{
+		Result: 0,
+		PlayerInfo: &protocol.PlayerBasicInfo{
 			PlayerId: int64(player.PlayerID),
-			Name:     player.PlayerName,
+			Name:     player.Name,
 			Level:    int32(player.Level),
-			Sex:      int32(player.Sex),
-			Age:      int32(player.Age),
 		},
 	}, nil
 }
 
-func (ph *PlayerHandler) HandlePlayerLogout(sessionID string) (*protocol.Response, error) {
+func (ph *PlayerHandler) HandlePlayerLogout(sessionID string) (*protocol.CommonResponse, error) {
 	zLog.Info("Handling player logout", zap.String("session_id", sessionID))
 
 	session, exists := ph.sessionManager.GetSession(sessionID)
 	if !exists {
-		return &protocol.Response{
+		return &protocol.CommonResponse{
 			Result: 0,
 		}, nil
 	}
@@ -151,7 +149,7 @@ func (ph *PlayerHandler) HandlePlayerLogout(sessionID string) (*protocol.Respons
 
 	zLog.Info("Player logged out", zap.String("session_id", sessionID))
 
-	return &protocol.Response{
+	return &protocol.CommonResponse{
 		Result: 0,
 	}, nil
 }

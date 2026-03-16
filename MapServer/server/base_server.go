@@ -54,7 +54,7 @@ func NewBaseServer() *BaseServer {
 	bs.RegisterSingleton("mapManager", bs.mapManager)
 
 	// 初始化TCP服务
-	bs.tcpService = service.NewTCPService(cfg, bs.connManager)
+	bs.tcpService = service.NewTCPService(cfg, bs.connManager, bs.mapManager)
 	bs.RegisterSingleton("tcpService", bs.tcpService)
 
 	// 创建默认地图

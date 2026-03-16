@@ -2,15 +2,19 @@ package discovery
 
 import (
 	"context"
-	"time"
 )
 
 // ServiceInfo 服务信息
 type ServiceInfo struct {
 	Name     string
 	ID       string
+	GroupID  string
 	Address  string
 	Port     int
+	Status   string
+	Load     float64
+	Players  int
+	Version  string
 	Metadata map[string]string
 }
 
@@ -20,13 +24,13 @@ type ServiceDiscovery interface {
 	Register(ctx context.Context, service *ServiceInfo) error
 
 	// Unregister 注销服务
-	Unregister(ctx context.Context, serviceID string) error
+Unregister(ctx context.Context, serviceName, groupID, serviceID string) error
 
 	// Discover 发现服务
-	Discover(ctx context.Context, serviceName string) ([]*ServiceInfo, error)
+Discover(ctx context.Context, serviceName, groupID string) ([]*ServiceInfo, error)
 
 	// Watch 监听服务变化
-	Watch(ctx context.Context, serviceName string, callback func([]*ServiceInfo)) error
+Watch(ctx context.Context, serviceName, groupID string, callback func([]*ServiceInfo)) error
 
 	// Close 关闭服务发现
 	Close() error

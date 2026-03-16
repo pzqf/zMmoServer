@@ -1,9 +1,9 @@
 package maps
 
 import (
-	"encoding/binary"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"sync"
 	"time"
 
@@ -24,13 +24,10 @@ import (
 	"github.com/pzqf/zMmoServer/MapServer/maps/skill"
 	"github.com/pzqf/zMmoServer/MapServer/maps/social"
 	"github.com/pzqf/zMmoServer/MapServer/maps/task"
-	pb "github.com/pzqf/zMmoServer/resources/protocol/net/protocol"
 	"github.com/pzqf/zMmoShared/common/id"
 	"github.com/pzqf/zMmoShared/config/models"
 	"github.com/pzqf/zMmoShared/config/tables"
-	"github.com/pzqf/zMmoShared/protocol"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
 // Region 地图区域
@@ -49,6 +46,31 @@ func (r *Region) AddObject(object common.IGameObject) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.objects[object.GetID()] = object
+}
+
+// RemoveObject 从区域移除游戏对象
+func (r *Region) RemoveObject(objectID id.ObjectIdType) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.objects, objectID)
+}
+
+// GetObject 获取区域中的游戏对象
+func (r *Region) GetObject(objectID id.ObjectIdType) common.IGameObject {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.objects[objectID]
+}
+
+// GetObjects 获取区域中的所有游戏对象
+func (r *Region) GetObjects() []common.IGameObject {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	objects := make([]common.IGameObject, 0, len(r.objects))
+	for _, obj := range r.objects {
+		objects = append(objects, obj)
+	}
+	return objects
 }
 
 // Map 游戏地图
@@ -139,35 +161,6 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 	return m
 }
 
-// InitSpawnSystem 初始化刷怪系统
-func (m *Map) InitSpawnSystem() {
-	if m.spawnManager != nil {
-		m.spawnManager.Init(m.mapConfigID)
-	}
-}
-
-// GetSpawnManager 获取刷新管理器
-func (m *Map) GetSpawnManager() *SpawnManager {
-	return m.spawnManager
-}
-
-// SpawnDroppedItem 生成掉落物品到地图
-func (m *Map) SpawnDroppedItem(itemID int32, itemName string, pos common.Vector3, quantity int32, itemType object.ItemType, rarity object.ItemRarity) *object.Item {
-	objectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
-
-	item := object.NewItem(objectID, itemID, itemName, pos, quantity, itemType, rarity)
-
-	m.AddObject(item)
-
-	zLog.Debug("Spawned dropped item",
-		zap.Int32("item_id", itemID),
-		zap.Int64("object_id", int64(objectID)),
-		zap.Float32("x", pos.X),
-		zap.Float32("y", pos.Y))
-
-	return item
-}
-
 // GetID 获取地图ID
 func (m *Map) GetID() id.MapIdType {
 	return m.mapID
@@ -178,112 +171,72 @@ func (m *Map) GetName() string {
 	return m.name
 }
 
-// IsInMap 检查位置是否在地图范围内
-func (m *Map) IsInMap(pos common.Vector3) bool {
-	return pos.X >= 0 && pos.X < m.width && pos.Y >= 0 && pos.Y < m.height
+// GetWidth 获取地图宽度
+func (m *Map) GetWidth() float32 {
+	return m.width
 }
 
-// IsObjectInMap 检查对象是否在地图上
-func (m *Map) IsObjectInMap(obj common.IGameObject) bool {
-	if obj == nil {
-		return false
-	}
-
-	pos := obj.GetPosition()
-	return m.IsInMap(pos)
+// GetHeight 获取地图高度
+func (m *Map) GetHeight() float32 {
+	return m.height
 }
 
-// CalculateDistance 计算两点之间的距离
-func (m *Map) CalculateDistance(pos1, pos2 common.Vector3) float32 {
-	dx := pos2.X - pos1.X
-	dy := pos2.Y - pos1.Y
-	return float32(math.Sqrt(float64(dx*dx + dy*dy)))
+// GetRegionSize 获取区域大小
+func (m *Map) GetRegionSize() float32 {
+	return m.regionSize
 }
 
-// CheckCollision 检查位置是否有碰撞（是否有阻挡物体）
-func (m *Map) CheckCollision(pos common.Vector3, excludeID id.ObjectIdType) bool {
+// GetObjects 获取地图上的所有游戏对象
+func (m *Map) GetObjects() []common.IGameObject {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	collisionRadius := float32(2.0) // 碰撞半径
-
+	objects := make([]common.IGameObject, 0, len(m.objects))
 	for _, obj := range m.objects {
-		if obj.GetID() == excludeID {
-			continue
-		}
-
-		// 怪物和NPC会产生碰撞
-		objType := obj.GetType()
-		if objType == common.GameObjectTypeMonster || objType == common.GameObjectTypeNPC {
-			objPos := obj.GetPosition()
-			dx := pos.X - objPos.X
-			dy := pos.Y - objPos.Y
-			distSq := dx*dx + dy*dy
-			if distSq <= collisionRadius*collisionRadius {
-				return true
-			}
-		}
+		objects = append(objects, obj)
 	}
-
-	return false
-}
-
-// GetObjectsInRange 获取指定范围内的游戏对象
-func (m *Map) GetObjectsInRange(center common.Vector3, radius float32) []common.IGameObject {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	objects := make([]common.IGameObject, 0)
-
-	// 计算需要检查的区域范围
-	radiusSq := radius * radius
-	startRegionX := int((center.X - radius) / m.regionSize)
-	startRegionY := int((center.Y - radius) / m.regionSize)
-	endRegionX := int((center.X + radius) / m.regionSize)
-	endRegionY := int((center.Y + radius) / m.regionSize)
-
-	// 只检查周围的区域，而不是所有对象
-	for regionX := startRegionX; regionX <= endRegionX; regionX++ {
-		for regionY := startRegionY; regionY <= endRegionY; regionY++ {
-			regionID := id.RegionIdType(regionX*1000 + regionY)
-			if region, exists := m.regions[regionID]; exists {
-				region.mu.RLock()
-				for _, obj := range region.objects {
-					distanceSq := obj.GetPosition().DistanceTo(center)
-					if distanceSq <= radiusSq {
-						objects = append(objects, obj)
-					}
-				}
-				region.mu.RUnlock()
-			}
-		}
-	}
-
 	return objects
 }
 
+// GetObject 获取指定ID的游戏对象
+func (m *Map) GetObject(objectID id.ObjectIdType) common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.objects[objectID]
+}
+
 // AddObject 添加游戏对象到地图
-func (m *Map) AddObject(object common.IGameObject) {
-	if object == nil {
+func (m *Map) AddObject(obj common.IGameObject) {
+	if obj == nil {
 		return
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	objectID := object.GetID()
-	m.objects[objectID] = object
+	// 添加到对象列表
+	m.objects[obj.GetID()] = obj
 
 	// 添加到对应的区域
-	regionID := m.getRegionID(object.GetPosition())
-	if _, exists := m.regions[regionID]; !exists {
-		m.regions[regionID] = &Region{
+	regionID := m.getRegionID(obj.GetPosition())
+	region, exists := m.regions[regionID]
+	if !exists {
+		region = &Region{
 			regionID: regionID,
 			objects:  make(map[id.ObjectIdType]common.IGameObject),
 		}
+		m.regions[regionID] = region
+	}
+	region.AddObject(obj)
+
+	// 如果是玩家，添加到玩家列表
+	if obj.GetType() == common.GameObjectTypePlayer {
+		if p, ok := obj.(*object.Player); ok {
+			m.players[p.GetPlayerID()] = true
+		}
 	}
 
-	m.regions[regionID].AddObject(object)
+	// 通知周围对象
+	m.notifyObjectEnter(obj)
 }
 
 // RemoveObject 从地图移除游戏对象
@@ -291,165 +244,120 @@ func (m *Map) RemoveObject(objectID id.ObjectIdType) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	obj, exists := m.objects[objectID]
+	if !exists {
+		return
+	}
+
+	// 从对象列表移除
 	delete(m.objects, objectID)
 
-	// 从区域中移除
-	for regionID, region := range m.regions {
-		if _, exists := region.objects[objectID]; exists {
-			delete(m.regions[regionID].objects, objectID)
-			break
+	// 从区域移除
+	regionID := m.getRegionID(obj.GetPosition())
+	if region, exists := m.regions[regionID]; exists {
+		region.RemoveObject(objectID)
+	}
+
+	// 如果是玩家，从玩家列表移除
+	if obj.GetType() == common.GameObjectTypePlayer {
+		if p, ok := obj.(*object.Player); ok {
+			delete(m.players, p.GetPlayerID())
 		}
 	}
 
-	// 通知刷新管理器移除对象
-	if m.spawnManager != nil {
-		m.spawnManager.RemoveObject(objectID)
-	}
+	// 通知周围对象
+	m.notifyObjectLeave(obj)
 }
 
 // MoveObject 移动游戏对象
-func (m *Map) MoveObject(obj common.IGameObject, targetPos common.Vector3) error {
-	// 验证目标位置是否在地图范围内
-	if !m.IsInMap(targetPos) {
-		return fmt.Errorf("target position out of map bounds")
-	}
-
-	// 验证移动距离是否合理
-	oldPos := obj.GetPosition()
-	distance := m.CalculateDistance(oldPos, targetPos)
-	maxMoveDistance := float32(50.0) // 最大单次移动距离
-	if distance > maxMoveDistance {
-		return fmt.Errorf("target position too far")
-	}
-
-	// 碰撞检测
-	if m.CheckCollision(targetPos, obj.GetID()) {
-		return fmt.Errorf("target position blocked")
-	}
-
-	oldRegionID := m.getRegionID(oldPos)
-	newRegionID := m.getRegionID(targetPos)
-
-	// 计算移动前的AOI对象
-	oldAOIObjects := m.GetObjectsInRange(oldPos, 100) // 100为AOI范围
-
-	// 同一区域内移动
-	if oldRegionID == newRegionID {
-		obj.SetPosition(targetPos)
-		// 计算移动后的AOI对象
-		newAOIObjects := m.GetObjectsInRange(targetPos, 100)
-		// 处理AOI变化
-		m.handleAOIChange(obj, oldAOIObjects, newAOIObjects)
-		// 通知周围玩家移动
-		m.notifyMovement(obj, oldPos, targetPos)
-		// 触发事件（如果是玩家）
-		if p, ok := obj.(*object.Player); ok {
-			m.TriggerEvents(p)
-		}
-		return nil
-	}
-
+func (m *Map) MoveObject(objectID id.ObjectIdType, newPos common.Vector3) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// 从旧区域移除
-	if _, exists := m.regions[oldRegionID]; exists {
-		delete(m.regions[oldRegionID].objects, obj.GetID())
+	object, exists := m.objects[objectID]
+	if !exists {
+		return fmt.Errorf("object not found")
 	}
 
-	// 添加到新区域
-	if _, exists := m.regions[newRegionID]; !exists {
-		m.regions[newRegionID] = &Region{
-			regionID: newRegionID,
-			objects:  make(map[id.ObjectIdType]common.IGameObject),
+	oldPos := object.GetPosition()
+
+	// 更新对象位置
+	object.SetPosition(newPos)
+
+	// 检查是否需要跨区域
+	oldRegionID := m.getRegionID(oldPos)
+	newRegionID := m.getRegionID(newPos)
+
+	if oldRegionID != newRegionID {
+		// 从旧区域移除
+		if oldRegion, exists := m.regions[oldRegionID]; exists {
+			oldRegion.RemoveObject(objectID)
 		}
+
+		// 添加到新区域
+		newRegion, exists := m.regions[newRegionID]
+		if !exists {
+			newRegion = &Region{
+				regionID: newRegionID,
+				objects:  make(map[id.ObjectIdType]common.IGameObject),
+			}
+			m.regions[newRegionID] = newRegion
+		}
+		newRegion.AddObject(object)
+
+		// 通知区域变化
+		m.notifyRegionChange(object, oldRegionID, newRegionID)
 	}
 
-	m.regions[newRegionID].AddObject(obj)
-	obj.SetPosition(targetPos)
-
-	// 计算移动后的AOI对象
-	newAOIObjects := m.GetObjectsInRange(targetPos, 100)
-	// 处理AOI变化
-	m.handleAOIChange(obj, oldAOIObjects, newAOIObjects)
-	// 通知周围玩家移动
-	m.notifyMovement(obj, oldPos, targetPos)
-	// 触发事件（如果是玩家）
-	if p, ok := obj.(*object.Player); ok {
-		m.TriggerEvents(p)
-	}
+	// 通知周围对象移动
+	m.notifyMovement(object, oldPos, newPos)
 
 	return nil
 }
 
-// handleAOIChange 处理AOI变化
-func (m *Map) handleAOIChange(object common.IGameObject, oldObjects, newObjects []common.IGameObject) {
-	// 计算进入视野的对象
-	enteredObjects := make([]common.IGameObject, 0)
-	for _, newObj := range newObjects {
-		found := false
-		for _, oldObj := range oldObjects {
-			if newObj.GetID() == oldObj.GetID() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			enteredObjects = append(enteredObjects, newObj)
-		}
-	}
-
-	// 计算离开视野的对象
-	leftObjects := make([]common.IGameObject, 0)
-	for _, oldObj := range oldObjects {
-		found := false
-		for _, newObj := range newObjects {
-			if oldObj.GetID() == newObj.GetID() {
-				found = true
-				break
-			}
-		}
-		if !found {
-			leftObjects = append(leftObjects, oldObj)
-		}
-	}
-
-	// 通知对象进入视野
-	for _, enteredObj := range enteredObjects {
-		m.notifyObjectEntered(object, enteredObj)
-	}
-
-	// 通知对象离开视野
-	for _, leftObj := range leftObjects {
-		m.notifyObjectLeft(object, leftObj)
-	}
-}
-
-// notifyMovement 通知周围玩家移动
-func (m *Map) notifyMovement(object common.IGameObject, oldPos, newPos common.Vector3) {
-	// 获取周围的玩家
-	players := m.getPlayersInRange(newPos, 100)
-	// 通知玩家移动
-	for _, player := range players {
-		// 排除自己
-		if player.GetID() != object.GetID() {
-			m.sendMovementUpdate(player, object, newPos)
-		}
-	}
-}
-
-// getPlayersInRange 获取指定范围内的玩家
-func (m *Map) getPlayersInRange(pos common.Vector3, radius float32) []common.IGameObject {
+// GetObjectsInRange 获取指定范围内的游戏对象
+func (m *Map) GetObjectsInRange(position common.Vector3, radius float32) []common.IGameObject {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
+	radiusSquared := radius * radius
+	objects := make([]common.IGameObject, 0)
+
+	// 检查周围的区域
+	centerRegionID := m.getRegionID(position)
+	for regionID, region := range m.regions {
+		if m.isRegionInRange(regionID, centerRegionID, radius) {
+			for _, obj := range region.GetObjects() {
+				distance := obj.GetPosition().DistanceTo(position)
+				if distance <= radiusSquared {
+					objects = append(objects, obj)
+				}
+			}
+		}
+	}
+
+	return objects
+}
+
+// GetPlayersInRange 获取指定范围内的玩家
+func (m *Map) GetPlayersInRange(position common.Vector3, radius float32) []common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	radiusSquared := radius * radius
 	players := make([]common.IGameObject, 0)
 
-	for _, obj := range m.objects {
-		if obj.GetType() == common.GameObjectTypePlayer {
-			distance := obj.GetPosition().DistanceTo(pos)
-			if distance <= radius*radius {
-				players = append(players, obj)
+	// 检查周围的区域
+	centerRegionID := m.getRegionID(position)
+	for regionID, region := range m.regions {
+		if m.isRegionInRange(regionID, centerRegionID, radius) {
+			for _, obj := range region.GetObjects() {
+				if obj.GetType() == common.GameObjectTypePlayer {
+					distance := obj.GetPosition().DistanceTo(position)
+					if distance <= radiusSquared {
+						players = append(players, obj)
+					}
+				}
 			}
 		}
 	}
@@ -457,250 +365,56 @@ func (m *Map) getPlayersInRange(pos common.Vector3, radius float32) []common.IGa
 	return players
 }
 
-// notifyObjectEntered 通知对象进入视野
-func (m *Map) notifyObjectEntered(watcher, target common.IGameObject) {
-	if m.connManager == nil {
-		return
-	}
+// GetMonstersInRange 获取指定范围内的怪物
+func (m *Map) GetMonstersInRange(position common.Vector3, radius float32) []common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	// 只有玩家需要收到 AOI 通知
-	if watcher.GetType() != common.GameObjectTypePlayer {
-		return
-	}
+	radiusSquared := radius * radius
+	monsters := make([]common.IGameObject, 0)
 
-	playerID := id.PlayerIdType(0)
-	if p, ok := watcher.(*object.Player); ok {
-		playerID = p.GetPlayerID()
-	}
-
-	if playerID == 0 {
-		return
-	}
-
-	// 构建 AOI 进入通知
-	aoiObjects := make([]*pb.AoiObjectInfo, 0)
-	objInfo := &pb.AoiObjectInfo{
-		ObjectId:   int64(target.GetID()),
-		ObjectType: int32(target.GetType()),
-		X:          target.GetPosition().X,
-		Y:          target.GetPosition().Y,
-		Z:          target.GetPosition().Z,
-	}
-
-	// 根据对象类型设置额外信息
-	switch target.GetType() {
-	case common.GameObjectTypePlayer:
-		if p, ok := target.(*object.Player); ok {
-			objInfo.EntityId = int64(p.GetPlayerID())
-			objInfo.Name = p.GetName()
-		}
-	case common.GameObjectTypeMonster:
-		if m, ok := target.(*object.Monster); ok {
-			objInfo.EntityId = int64(m.GetMonsterID())
-			objInfo.Name = m.GetName()
-		}
-	case common.GameObjectTypeNPC:
-		if n, ok := target.(*object.NPC); ok {
-			objInfo.EntityId = int64(n.GetNPCID())
-			objInfo.Name = n.GetName()
+	// 检查周围的区域
+	centerRegionID := m.getRegionID(position)
+	for regionID, region := range m.regions {
+		if m.isRegionInRange(regionID, centerRegionID, radius) {
+			for _, obj := range region.GetObjects() {
+				if obj.GetType() == common.GameObjectTypeMonster {
+					distance := obj.GetPosition().DistanceTo(position)
+					if distance <= radiusSquared {
+						monsters = append(monsters, obj)
+					}
+				}
+			}
 		}
 	}
 
-	aoiObjects = append(aoiObjects, objInfo)
-
-	// 发送 AOI 进入通知
-	m.sendAOIEnterNotify(playerID, aoiObjects)
-
-	// 记录日志
-	zLog.Debug("Object entered AOI",
-		zap.Int64("watcher_id", int64(watcher.GetID())),
-		zap.Int64("target_id", int64(target.GetID())),
-		zap.Int32("target_type", int32(target.GetType())))
+	return monsters
 }
 
-// notifyObjectLeft 通知对象离开视野
-func (m *Map) notifyObjectLeft(watcher, target common.IGameObject) {
-	if m.connManager == nil {
-		return
+// GetNPCsInRange 获取指定范围内的NPC
+func (m *Map) GetNPCsInRange(position common.Vector3, radius float32) []common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	radiusSquared := radius * radius
+	npcs := make([]common.IGameObject, 0)
+
+	// 检查周围的区域
+	centerRegionID := m.getRegionID(position)
+	for regionID, region := range m.regions {
+		if m.isRegionInRange(regionID, centerRegionID, radius) {
+			for _, obj := range region.GetObjects() {
+				if obj.GetType() == common.GameObjectTypeNPC {
+					distance := obj.GetPosition().DistanceTo(position)
+					if distance <= radiusSquared {
+						npcs = append(npcs, obj)
+					}
+				}
+			}
+		}
 	}
 
-	// 只有玩家需要收到 AOI 通知
-	if watcher.GetType() != common.GameObjectTypePlayer {
-		return
-	}
-
-	playerID := id.PlayerIdType(0)
-	if p, ok := watcher.(*object.Player); ok {
-		playerID = p.GetPlayerID()
-	}
-
-	if playerID == 0 {
-		return
-	}
-
-	// 发送 AOI 离开通知
-	objectIDs := []int64{int64(target.GetID())}
-	m.sendAOILeaveNotify(playerID, objectIDs)
-
-	// 记录日志
-	zLog.Debug("Object left AOI",
-		zap.Int64("watcher_id", int64(watcher.GetID())),
-		zap.Int64("target_id", int64(target.GetID())))
-}
-
-// sendAOIEnterNotify 发送 AOI 进入通知
-func (m *Map) sendAOIEnterNotify(playerID id.PlayerIdType, objects []*pb.AoiObjectInfo) {
-	if m.connManager == nil {
-		return
-	}
-
-	notify := &pb.AoiEnterNotify{
-		PlayerId: int64(playerID),
-		MapId:    int64(m.mapID),
-		Objects:  objects,
-	}
-
-	data, err := proto.Marshal(notify)
-	if err != nil {
-		zLog.Error("Failed to marshal AOI enter notify", zap.Error(err))
-		return
-	}
-
-	// 构建消息包：长度 + 消息ID + 数据
-	msgID := uint32(protocol.MsgIdAoiEnterNotify)
-	length := uint32(4 + len(data))
-	buffer := make([]byte, 4+4+len(data))
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
-
-	// 发送到 GameServer
-	err = m.connManager.SendToGameServerByMap(int(m.mapID), buffer)
-	if err != nil {
-		zLog.Error("Failed to send AOI enter notify", zap.Error(err))
-	}
-}
-
-// sendAOILeaveNotify 发送 AOI 离开通知
-func (m *Map) sendAOILeaveNotify(playerID id.PlayerIdType, objectIDs []int64) {
-	if m.connManager == nil {
-		return
-	}
-
-	notify := &pb.AoiLeaveNotify{
-		PlayerId:  int64(playerID),
-		MapId:     int64(m.mapID),
-		ObjectIds: objectIDs,
-	}
-
-	data, err := proto.Marshal(notify)
-	if err != nil {
-		zLog.Error("Failed to marshal AOI leave notify", zap.Error(err))
-		return
-	}
-
-	// 构建消息包：长度 + 消息ID + 数据
-	msgID := uint32(protocol.MsgIdAoiLeaveNotify)
-	length := uint32(4 + len(data))
-	buffer := make([]byte, 4+4+len(data))
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
-
-	// 发送到 GameServer
-	err = m.connManager.SendToGameServerByMap(int(m.mapID), buffer)
-	if err != nil {
-		zLog.Error("Failed to send AOI leave notify", zap.Error(err))
-	}
-}
-
-// sendMovementUpdate 发送移动更新
-func (m *Map) sendMovementUpdate(player, movingObject common.IGameObject, newPos common.Vector3) {
-	if m.connManager == nil {
-		return
-	}
-
-	// 只有玩家需要收到移动更新
-	if player.GetType() != common.GameObjectTypePlayer {
-		return
-	}
-
-	targetPlayerID := id.PlayerIdType(0)
-	if p, ok := player.(*object.Player); ok {
-		targetPlayerID = p.GetPlayerID()
-	}
-
-	if targetPlayerID == 0 {
-		return
-	}
-
-	// 构建移动同步消息
-	moveSync := &pb.MapMoveSync{
-		ObjectId:  int64(movingObject.GetID()),
-		MapId:     int64(m.mapID),
-		X:         newPos.X,
-		Y:         newPos.Y,
-		Z:         newPos.Z,
-		Timestamp: time.Now().UnixMilli(),
-	}
-
-	data, err := proto.Marshal(moveSync)
-	if err != nil {
-		zLog.Error("Failed to marshal map move sync", zap.Error(err))
-		return
-	}
-
-	// 构建消息包：长度 + 消息ID + 数据
-	msgID := uint32(protocol.MsgIdMapMoveSync)
-	length := uint32(4 + len(data))
-	buffer := make([]byte, 4+4+len(data))
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
-
-	// 发送到 GameServer
-	err = m.connManager.SendToGameServerByMap(int(m.mapID), buffer)
-	if err != nil {
-		zLog.Error("Failed to send map move sync", zap.Error(err))
-	}
-
-	// 记录日志
-	zLog.Debug("Sent movement update",
-		zap.Int64("moving_object_id", int64(movingObject.GetID())),
-		zap.Int64("target_player_id", int64(targetPlayerID)),
-		zap.Float32("x", newPos.X),
-		zap.Float32("y", newPos.Y))
-}
-
-// TeleportObject 传送游戏对象
-func (m *Map) TeleportObject(object common.IGameObject, targetPos common.Vector3) error {
-	object.SetPosition(targetPos)
-	return nil
-}
-
-// getRegionID 根据坐标计算区域ID
-func (m *Map) getRegionID(pos common.Vector3) id.RegionIdType {
-	if m.regionSize <= 0 {
-		return 0
-	}
-
-	xRegion := uint64(pos.X / m.regionSize)
-	yRegion := uint64(pos.Y / m.regionSize)
-
-	return id.RegionIdType(xRegion*1000000 + yRegion)
-}
-
-// GetSize 获取地图尺寸
-func (m *Map) GetSize() (float32, float32) {
-	return m.width, m.height
-}
-
-// SetRegionSize 设置区域大小
-func (m *Map) SetRegionSize(regionSize float32) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.regionSize = regionSize
+	return npcs
 }
 
 // GetObjectsByType 获取指定类型的游戏对象
@@ -709,28 +423,50 @@ func (m *Map) GetObjectsByType(objectType common.GameObjectType) []common.IGameO
 	defer m.mu.RUnlock()
 
 	objects := make([]common.IGameObject, 0)
-
 	for _, obj := range m.objects {
 		if obj.GetType() == objectType {
 			objects = append(objects, obj)
 		}
 	}
-
 	return objects
 }
 
-// GetObjectByID 根据ID获取游戏对象
-func (m *Map) GetObjectByID(objectID int64) common.IGameObject {
+// GetPlayers 获取地图上的所有玩家
+func (m *Map) GetPlayers() []*object.Player {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	for id, obj := range m.objects {
-		if int64(id) == objectID {
-			return obj
+	players := make([]*object.Player, 0)
+	for _, obj := range m.objects {
+		if p, ok := obj.(*object.Player); ok {
+			players = append(players, p)
 		}
 	}
+	return players
+}
 
-	return nil
+// GetPlayerCount 获取地图上的玩家数量
+func (m *Map) GetPlayerCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.players)
+}
+
+// IsObjectInMap 检查游戏对象是否在地图上
+func (m *Map) IsObjectInMap(object common.IGameObject) bool {
+	if object == nil {
+		return false
+	}
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.objects[object.GetID()]
+	return exists
+}
+
+// GetSpawnManager 获取刷怪管理器
+func (m *Map) GetSpawnManager() *SpawnManager {
+	return m.spawnManager
 }
 
 // GetEventManager 获取事件管理器
@@ -738,87 +474,157 @@ func (m *Map) GetEventManager() *event.EventManager {
 	return m.eventManager
 }
 
-// TriggerEvents 触发地图事件
-func (m *Map) TriggerEvents(player *object.Player) {
-	if m.eventManager != nil {
-		m.eventManager.TriggerEvents(player)
-	}
+// GetAIManager 获取AI管理器
+func (m *Map) GetAIManager() *ai.AIManager {
+	return m.aiManager
 }
 
-// UpdateEvents 更新地图事件
-func (m *Map) UpdateEvents() {
-	if m.eventManager != nil {
-		m.eventManager.UpdateEvents()
-	}
+// GetBuffManager 获取buff管理器
+func (m *Map) GetBuffManager() *buff.BuffManager {
+	return m.buffManager
 }
 
-// CreateDefaultEvents 创建默认事件
-func (m *Map) CreateDefaultEvents() {
-	if m.eventManager != nil {
-		m.eventManager.CreateDefaultEvents()
-	}
+// GetSkillManager 获取技能管理器
+func (m *Map) GetSkillManager() *skill.SkillManager {
+	return m.skillManager
+}
+
+// GetTaskManager 获取任务管理器
+func (m *Map) GetTaskManager() *task.TaskManager {
+	return m.taskManager
+}
+
+// GetInventoryManager 获取背包管理器
+func (m *Map) GetInventoryManager() *item.InventoryManager {
+	return m.inventoryManager
+}
+
+// GetTeamManager 获取队伍管理器
+func (m *Map) GetTeamManager() *social.TeamManager {
+	return m.teamManager
+}
+
+// GetGuildManager 获取公会管理器
+func (m *Map) GetGuildManager() *social.GuildManager {
+	return m.guildManager
+}
+
+// GetCurrencyManager 获取货币管理器
+func (m *Map) GetCurrencyManager() *economy.CurrencyManager {
+	return m.currencyManager
+}
+
+// GetTradeManager 获取交易管理器
+func (m *Map) GetTradeManager() *economy.TradeManager {
+	return m.tradeManager
+}
+
+// GetAuctionManager 获取拍卖行管理器
+func (m *Map) GetAuctionManager() *economy.AuctionManager {
+	return m.auctionManager
+}
+
+// GetShopManager 获取商店管理器
+func (m *Map) GetShopManager() *economy.ShopManager {
+	return m.shopManager
+}
+
+// GetAchievementManager 获取成就管理器
+func (m *Map) GetAchievementManager() *achievement.AchievementManager {
+	return m.achievementManager
+}
+
+// GetPetManager 获取宠物管理器
+func (m *Map) GetPetManager() *pet.PetManager {
+	return m.petManager
+}
+
+// GetMountManager 获取坐骑管理器
+func (m *Map) GetMountManager() *mount.MountManager {
+	return m.mountManager
+}
+
+// AddSpawnPoint 添加刷新点
+func (m *Map) AddSpawnPoint(spawnPoint *models.MapSpawnPoint) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.spawnPoints = append(m.spawnPoints, spawnPoint)
+}
+
+// GetSpawnPoints 获取刷新点列表
+func (m *Map) GetSpawnPoints() []*models.MapSpawnPoint {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.spawnPoints
 }
 
 // AddTeleportPoint 添加传送点
 func (m *Map) AddTeleportPoint(teleportPoint *models.MapTeleportPoint) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.teleportPoints = append(m.teleportPoints, teleportPoint)
 }
 
-// GetTeleportPoints 获取所有传送点
+// GetTeleportPoints 获取传送点列表
 func (m *Map) GetTeleportPoints() []*models.MapTeleportPoint {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	return m.teleportPoints
-}
-
-// GetTeleportPointByID 根据ID获取传送点
-func (m *Map) GetTeleportPointByID(teleportID int32) *models.MapTeleportPoint {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	for _, tp := range m.teleportPoints {
-		if tp.ID == teleportID {
-			return tp
-		}
-	}
-
-	return nil
-}
-
-// GetTeleportPointsInRange 获取指定范围内的传送点
-func (m *Map) GetTeleportPointsInRange(pos common.Vector3, radius float32) []*models.MapTeleportPoint {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
-	var result []*models.MapTeleportPoint
-	for _, tp := range m.teleportPoints {
-		tpPos := common.Vector3{X: float32(tp.X), Y: float32(tp.Y), Z: float32(tp.Z)}
-		if tpPos.DistanceTo(pos) <= radius*radius {
-			result = append(result, tp)
-		}
-	}
-
-	return result
 }
 
 // AddBuilding 添加建筑
 func (m *Map) AddBuilding(building *models.MapBuilding) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-
 	m.buildings = append(m.buildings, building)
 }
 
-// GetBuildings 获取所有建筑
+// GetBuildings 获取建筑列表
 func (m *Map) GetBuildings() []*models.MapBuilding {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
 	return m.buildings
+}
+
+// AddEvent 添加事件
+func (m *Map) AddEvent(event *models.MapEvent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.events = append(m.events, event)
+}
+
+// GetEvents 获取事件列表
+func (m *Map) GetEvents() []*models.MapEvent {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.events
+}
+
+// AddResource 添加资源点
+func (m *Map) AddResource(resource *models.MapResource) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resources = append(m.resources, resource)
+}
+
+// GetResources 获取资源点列表
+func (m *Map) GetResources() []*models.MapResource {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.resources
+}
+
+// GetTeleportPointByID 根据ID获取传送点
+func (m *Map) GetTeleportPointByID(teleportPointID int32) *models.MapTeleportPoint {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, tp := range m.teleportPoints {
+		if tp.ID == teleportPointID {
+			return tp
+		}
+	}
+	return nil
 }
 
 // GetBuildingByID 根据ID获取建筑
@@ -831,91 +637,133 @@ func (m *Map) GetBuildingByID(buildingID int32) *models.MapBuilding {
 			return building
 		}
 	}
+	return nil
+}
+
+// GetEventByID 根据ID获取事件
+func (m *Map) GetEventByID(eventID int32) *models.MapEvent {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, event := range m.events {
+		if event.EventID == eventID {
+			return event
+		}
+	}
+	return nil
+}
+
+// GetResourceByID 根据ID获取资源点
+func (m *Map) GetResourceByID(resourceID int32) *models.MapResource {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	for _, resource := range m.resources {
+		if resource.ResourceID == resourceID {
+			return resource
+		}
+	}
+	return nil
+}
+
+// HandleObjectInteraction 处理对象交互
+func (m *Map) HandleObjectInteraction(player *object.Player, targetObject common.IGameObject) error {
+	if targetObject == nil {
+		return fmt.Errorf("target object not found")
+	}
+
+	switch targetObject.GetType() {
+	case common.GameObjectTypeNPC:
+		return m.handleNPCInteraction(player, targetObject)
+	case common.GameObjectTypeMonster:
+		return m.handleMonsterInteraction(player, targetObject)
+	case common.GameObjectTypeItem:
+		return m.handleItemInteraction(player, targetObject)
+	default:
+		return fmt.Errorf("unsupported object type")
+	}
+}
+
+// handleNPCInteraction 处理与NPC的交互
+func (m *Map) handleNPCInteraction(player *object.Player, npc common.IGameObject) error {
+	// 这里可以根据NPC的类型和对话内容进行处理
+	zLog.Info("Player interacted with NPC",
+		zap.Int64("player_id", int64(player.GetPlayerID())),
+		zap.Int64("npc_id", int64(npc.GetID())))
 
 	return nil
 }
 
-// GetBuildingsInRange 获取指定范围内的建筑
-func (m *Map) GetBuildingsInRange(pos common.Vector3, radius float32) []*models.MapBuilding {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+// handleMonsterInteraction 处理与怪物的交互
+func (m *Map) handleMonsterInteraction(player *object.Player, monster common.IGameObject) error {
+	// 这里可以处理攻击怪物的逻辑
+	zLog.Info("Player attacked monster",
+		zap.Int64("player_id", int64(player.GetPlayerID())),
+		zap.Int64("monster_id", int64(monster.GetID())))
 
-	var result []*models.MapBuilding
-	for _, building := range m.buildings {
-		buildingPos := common.Vector3{X: float32(building.X), Y: float32(building.Y), Z: float32(building.Z)}
-		if buildingPos.DistanceTo(pos) <= radius*radius {
-			result = append(result, building)
-		}
-	}
-
-	return result
+	return nil
 }
 
-// UseSkill 释放技能
-func (m *Map) UseSkill(caster *object.Player, skillID int32, targetID id.ObjectIdType, targetPos common.Vector3) error {
-	// 检查施法者是否存在
-	if caster == nil {
-		return fmt.Errorf("caster not found")
+// handleItemInteraction 处理与物品的交互
+func (m *Map) handleItemInteraction(player *object.Player, item common.IGameObject) error {
+	// 这里可以处理拾取物品的逻辑
+	zLog.Info("Player picked up item",
+		zap.Int64("player_id", int64(player.GetPlayerID())),
+		zap.Int64("item_id", int64(item.GetID())))
+
+	// 从地图上移除物品
+	m.RemoveObject(item.GetID())
+
+	// 添加到玩家背包
+	if inventoryItem, ok := item.(*object.Item); ok {
+		return m.AddItem(player, inventoryItem.GetItemID(), 1)
 	}
 
+	return nil
+}
+
+// HandleSkillUse 处理技能释放
+func (m *Map) HandleSkillUse(caster *object.Player, skillID int32, targetID id.ObjectIdType, targetPos common.Vector3) error {
 	// 检查技能是否存在
-	if !caster.HasSkill(skillID) {
+	skillConfig := m.skillManager.GetSkillConfig(skillID)
+	if skillConfig == nil {
 		return fmt.Errorf("skill not found")
 	}
 
-	// 检查技能是否在冷却中
+	// 检查技能冷却
 	if caster.IsSkillInCooldown(skillID) {
-		return fmt.Errorf("skill is in cooldown")
+		return fmt.Errorf("skill is on cooldown")
 	}
 
-	// 从技能配置中获取技能信息
-	skillConfig := m.skillManager.GetSkillConfig(skillID)
-	if skillConfig == nil {
-		return fmt.Errorf("skill config not found")
-	}
-
-	// 检查目标位置是否在地图范围内
-	if !m.IsInMap(targetPos) {
-		return fmt.Errorf("target position out of map bounds")
-	}
-
-	// 处理目标选择
-	var targetObj common.IGameObject
-	if targetID > 0 {
-		// 有指定目标ID，尝试找到目标
-		targetObj = m.GetObjectByID(int64(targetID))
-		if targetObj != nil {
-			// 验证目标是否有效
-			if !m.ValidateTarget(caster, targetObj, skillConfig.Range) {
-				targetObj = nil
-			}
-		}
-	}
-
-	// 如果没有指定目标或目标无效，自动选择最近的目标
-	if targetObj == nil {
-		targetTypes := []common.GameObjectType{common.GameObjectTypeMonster, common.GameObjectTypePlayer}
-		targetObj = m.GetNearestTarget(targetPos, skillConfig.Range, caster.GetID(), targetTypes)
-		if targetObj != nil {
-			targetID = targetObj.GetID()
-			targetPos = targetObj.GetPosition()
-		}
-	}
-
-	// 检查施法者与目标的距离
-	casterPos := caster.GetPosition()
-	distance := m.CalculateDistance(casterPos, targetPos)
-	if distance > skillConfig.Range {
-		return fmt.Errorf("target too far")
-	}
-
-	// 检查施法者的 mana 是否足够
+	// 检查技能消耗
 	if caster.GetMana() < skillConfig.ManaCost {
 		return fmt.Errorf("not enough mana")
 	}
 
-	// 消耗 mana
+	// 检查目标
+	var target common.IGameObject
+	if targetID != 0 {
+		target = m.GetObject(targetID)
+		if target == nil {
+			return fmt.Errorf("target not found")
+		}
+
+		// 检查目标是否在技能范围内
+		if !m.ValidateTarget(caster, target, skillConfig.Range) {
+			return fmt.Errorf("target out of range")
+		}
+	} else {
+		// 检查技能释放位置是否在地图范围内
+		if !m.IsPositionInMap(targetPos) {
+			return fmt.Errorf("invalid skill position")
+		}
+	}
+
+	// 扣除技能消耗
 	caster.SetMana(caster.GetMana() - skillConfig.ManaCost)
+
+	// 设置技能冷却
+	caster.SetSkillCooldown(skillID, time.Duration(skillConfig.Cooldown)*time.Millisecond)
 
 	// 创建技能对象
 	skillObjectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
@@ -925,38 +773,32 @@ func (m *Map) UseSkill(caster *object.Player, skillID int32, targetID id.ObjectI
 		caster.GetID(),
 		targetID,
 		targetPos,
-		skillConfig.Damage, // 从配置中获取伤害
-		skillConfig.Range,  // 从配置中获取范围
-		skillConfig.Type,   // 从配置中获取效果类型
-		time.Duration(skillConfig.Duration)*time.Millisecond, // 从配置中获取持续时间
-		time.Duration(skillConfig.Cooldown)*time.Millisecond, // 从配置中获取冷却时间
+		skillConfig.Damage,
+		skillConfig.Range,
+		skillConfig.Type,
+		time.Duration(skillConfig.Duration)*time.Millisecond,
+		time.Duration(skillConfig.Cooldown)*time.Millisecond,
 	)
 
 	// 设置技能等级和施法者攻击力
-	newSkill.SetLevel(skillConfig.Level) // 从配置中获取等级
+	newSkill.SetLevel(1) // 暂时使用等级1
 	newSkill.SetCasterAttack(caster.GetAttack())
-	newSkill.SetEffectID(skillConfig.EffectID) // 从配置中获取特效ID
 
 	// 添加技能到技能管理器
 	m.skillManager.AddSkill(newSkill)
-
-	// 设置技能冷却时间
-	caster.SetSkillCooldown(skillID, time.Duration(skillConfig.Cooldown)*time.Millisecond)
-
-	// 添加技能到历史记录
-	caster.AddSkillToHistory(skillID)
-
-	// 检查技能组合
-	m.checkSkillCombo(caster)
 
 	// 处理技能效果
 	m.handleSkillEffect(newSkill)
 
 	// 通知周围玩家技能释放
-	m.notifySkillUse(caster, newSkill)
+	// 由于我们现在使用统一的协议，这里暂时注释掉技能通知
+	// 后续需要根据新的协议结构重新实现
+	// m.notifySkillUse(caster, newSkill)
 
 	// 发送技能释放响应给施法者
-	m.sendSkillUseResponse(caster, newSkill, nil)
+	// 由于我们现在使用统一的协议，这里暂时注释掉技能响应
+	// 后续需要根据新的协议结构重新实现
+	// m.sendSkillUseResponse(caster, newSkill, nil)
 
 	zLog.Debug("Skill used",
 		zap.Int64("caster_id", int64(caster.GetID())),
@@ -966,46 +808,6 @@ func (m *Map) UseSkill(caster *object.Player, skillID int32, targetID id.ObjectI
 		zap.Float32("y", targetPos.Y))
 
 	return nil
-}
-
-// sendSkillUseResponse 发送技能释放响应给施法者
-func (m *Map) sendSkillUseResponse(caster *object.Player, skill *skill.Skill, err error) {
-	if m.connManager == nil {
-		return
-	}
-
-	// 构建技能释放响应
-	skillResponse := &pb.SkillUseResponse{
-		Success:  err == nil,
-		SkillId:  int64(skill.GetSkillConfigID()),
-		TargetId: int64(skill.GetTargetID()),
-		Cooldown: int64(skill.GetRemainingCooldown().Milliseconds()),
-		Damage:   int64(skill.GetDamage()),
-	}
-
-	if err != nil {
-		skillResponse.ErrorMsg = err.Error()
-	}
-
-	data, err := proto.Marshal(skillResponse)
-	if err != nil {
-		zLog.Error("Failed to marshal skill use response", zap.Error(err))
-		return
-	}
-
-	// 构建消息包：长度 + 消息ID + 数据
-	msgID := uint32(protocol.MsgIdSkillUseResult)
-	length := uint32(4 + len(data))
-	buffer := make([]byte, 4+4+len(data))
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
-
-	// 发送到 GameServer
-	err = m.connManager.SendToGameServerByMap(int(m.mapID), buffer)
-	if err != nil {
-		zLog.Error("Failed to send skill use response", zap.Error(err))
-	}
 }
 
 // handleSkillEffect 处理技能效果
@@ -1019,119 +821,109 @@ func (m *Map) handleSkillEffect(skill *skill.Skill) {
 			continue
 		}
 
-		// 只对怪物和玩家造成伤害
-		objType := obj.GetType()
-		if objType == common.GameObjectTypeMonster || objType == common.GameObjectTypePlayer {
-			// 检查技能是否命中目标
-			if !skill.CheckHit(obj.GetPosition()) {
-				continue
-			}
+		// 检查目标类型是否符合技能要求
+		targetType := obj.GetType()
+		validTarget := false
 
-			// 计算伤害
-			var damage int32
-			switch target := obj.(type) {
-			case *object.Player:
-				damage = skill.CalculateDamage(target)
-				damage = damage - target.GetDefense()
-				if damage < 1 {
-					damage = 1 // 确保至少造成1点伤害
-				}
-				target.TakeDamage(damage)
-			case *object.Monster:
-				damage = skill.CalculateDamageToMonster(target)
-				damage = damage - target.GetDefense()
-				if damage < 1 {
-					damage = 1 // 确保至少造成1点伤害
-				}
-				target.TakeDamage(damage)
-			}
+		switch skill.GetEffectType() {
+		case 1: // 伤害
+			validTarget = targetType == common.GameObjectTypeMonster || targetType == common.GameObjectTypePlayer
+		case 2: // 治疗
+			validTarget = targetType == common.GameObjectTypePlayer
+		case 3: // 增益
+			validTarget = targetType == common.GameObjectTypePlayer
+		case 4: // 减益
+			validTarget = targetType == common.GameObjectTypeMonster || targetType == common.GameObjectTypePlayer
+		}
 
-			zLog.Debug("Skill hit target",
-				zap.Int64("skill_id", int64(skill.GetID())),
-				zap.Int64("target_id", int64(obj.GetID())),
-				zap.Int32("damage", damage))
+		if !validTarget {
+			continue
+		}
+
+		// 应用技能效果
+		switch skill.GetEffectType() {
+		case 1: // 伤害
+			if obj.GetType() == common.GameObjectTypeMonster {
+				if monster, ok := obj.(*object.Monster); ok {
+					damage := skill.CalculateDamageToMonster(monster)
+					monster.TakeDamage(damage)
+					if monster.GetHealth() <= 0 {
+						// 怪物死亡
+						m.handleMonsterDeath(monster, skill.GetCasterID())
+					}
+				}
+			} else if obj.GetType() == common.GameObjectTypePlayer {
+				if player, ok := obj.(*object.Player); ok {
+					damage := skill.CalculateDamage(player)
+					player.TakeDamage(damage)
+					if player.GetHealth() <= 0 {
+						// 玩家死亡
+						m.handlePlayerDeath(player)
+					}
+				}
+			}
+		case 2: // 治疗
+			if player, ok := obj.(*object.Player); ok {
+				healAmount := skill.GetDamage() // 这里用伤害值作为治疗量
+				newHealth := player.GetHealth() + healAmount
+				if newHealth > player.GetMaxHealth() {
+					newHealth = player.GetMaxHealth()
+				}
+				player.SetHealth(newHealth)
+			}
+		case 3: // 增益
+			// 这里可以添加增益效果
+		case 4: // 减益
+			// 这里可以添加减益效果
 		}
 	}
 }
 
-// notifySkillUse 通知周围玩家技能释放
-func (m *Map) notifySkillUse(caster *object.Player, skill *skill.Skill) {
-	// 获取周围的玩家
-	players := m.getPlayersInRange(caster.GetPosition(), 100)
+// handleMonsterDeath 处理怪物死亡
+func (m *Map) handleMonsterDeath(monster *object.Monster, killerID id.ObjectIdType) {
+	// 从地图上移除怪物
+	m.RemoveObject(monster.GetID())
 
-	for _, player := range players {
-		// 排除施法者自己
-		if player.GetID() != caster.GetID() {
-			// 发送技能释放通知
-			m.sendSkillUseNotify(player, caster, skill)
+	// 查找 killer
+	killer := m.GetObject(killerID)
+	if killer != nil && killer.GetType() == common.GameObjectTypePlayer {
+		if player, ok := killer.(*object.Player); ok {
+			// 给玩家经验和掉落
+			exp := monster.GetExp()
+			player.AddExp(exp)
+
+			// 掉落物品
+			m.dropItems(monster.GetPosition(), monster.GetLevel())
+
+			zLog.Info("Monster killed",
+				zap.Int64("player_id", int64(player.GetPlayerID())),
+				zap.Int64("monster_id", int64(monster.GetID())),
+				zap.Int64("exp_reward", exp))
 		}
 	}
 }
 
-// sendSkillUseNotify 发送技能释放通知
-func (m *Map) sendSkillUseNotify(player common.IGameObject, caster *object.Player, skill *skill.Skill) {
-	if m.connManager == nil {
-		return
-	}
+// handlePlayerDeath 处理玩家死亡
+func (m *Map) handlePlayerDeath(player *object.Player) {
+	// 这里可以添加玩家死亡的处理逻辑
+	zLog.Info("Player died", zap.Int64("player_id", int64(player.GetPlayerID())))
 
-	// 只有玩家需要收到技能释放通知
-	if player.GetType() != common.GameObjectTypePlayer {
-		return
-	}
-
-	targetPlayerID := id.PlayerIdType(0)
-	if p, ok := player.(*object.Player); ok {
-		targetPlayerID = p.GetPlayerID()
-	}
-
-	if targetPlayerID == 0 {
-		return
-	}
-
-	// 构建技能释放通知
-	skillNotify := &pb.SkillUseNotify{
-		CasterId:  int64(caster.GetID()),
-		SkillId:   int64(skill.GetSkillConfigID()),
-		TargetId:  int64(skill.GetTargetID()),
-		TargetX:   skill.GetPosition().X,
-		TargetY:   skill.GetPosition().Y,
-		TargetZ:   skill.GetPosition().Z,
-		MapId:     int64(m.mapID),
-		EffectId:  skill.GetEffectID(),
-		Timestamp: time.Now().UnixMilli(),
-	}
-
-	data, err := proto.Marshal(skillNotify)
-	if err != nil {
-		zLog.Error("Failed to marshal skill use notify", zap.Error(err))
-		return
-	}
-
-	// 构建消息包：长度 + 消息ID + 数据
-	msgID := uint32(protocol.MsgIdSkillUse)
-	length := uint32(4 + len(data))
-	buffer := make([]byte, 4+4+len(data))
-	binary.BigEndian.PutUint32(buffer[:4], length)
-	binary.BigEndian.PutUint32(buffer[4:8], msgID)
-	copy(buffer[8:], data)
-
-	// 发送到 GameServer
-	err = m.connManager.SendToGameServerByMap(int(m.mapID), buffer)
-	if err != nil {
-		zLog.Error("Failed to send skill use notify", zap.Error(err))
-	}
+	// 可以将玩家传送到复活点
+	// 或者添加死亡惩罚
 }
 
-// UpdateSkills 更新技能状态
-func (m *Map) UpdateSkills() {
-	if m.skillManager != nil {
-		m.skillManager.Update()
-	}
-}
+// dropItems 掉落物品
+func (m *Map) dropItems(position common.Vector3, monsterLevel int32) {
+	// 这里可以添加物品掉落逻辑
+	// 暂时简单实现
+	if rand.Float32() < 0.5 { // 50% 掉落率
+		itemID := int32(1) // 简单起见，只掉落ID为1的物品
+		itemObjectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
+		newItem := object.NewItem(itemObjectID, itemID, "Test Item", position, 1, object.ItemTypeConsumable, object.ItemRarityCommon)
+		m.AddObject(newItem)
 
-// GetTaskManager 获取任务管理器
-func (m *Map) GetTaskManager() *task.TaskManager {
-	return m.taskManager
+		zLog.Debug("Item dropped", zap.Int32("item_id", itemID), zap.Float32("x", position.X), zap.Float32("y", position.Y))
+	}
 }
 
 // HandleTaskAccept 处理任务接取
@@ -1162,13 +954,19 @@ func (m *Map) HandleTaskReward(player *object.Player, taskID int32) error {
 			switch reward.Type {
 			case "exp":
 				// 增加经验
-				// 这里需要实现增加经验的逻辑
+				player.AddExp(int64(reward.Count))
 			case "gold":
 				// 增加金币
-				// 这里需要实现增加金币的逻辑
+				err := m.AddCurrency(player, economy.CurrencyTypeGold, int64(reward.Count))
+				if err != nil {
+					return err
+				}
 			case "item":
 				// 增加物品
-				// 这里需要实现增加物品的逻辑
+				err := m.AddItem(player, reward.Target, reward.Count)
+				if err != nil {
+					return err
+				}
 			case "skill_point":
 				// 增加技能点
 				// 这里需要实现增加技能点的逻辑
@@ -1204,11 +1002,6 @@ func (m *Map) GetAvailableTasks(player *object.Player) []*task.TaskConfig {
 	return m.taskManager.GetAvailableTasks(player.GetPlayerID(), player.GetLevel())
 }
 
-// GetInventoryManager 获取背包管理器
-func (m *Map) GetInventoryManager() *item.InventoryManager {
-	return m.inventoryManager
-}
-
 // AddItem 添加物品到背包
 func (m *Map) AddItem(player *object.Player, itemID int32, count int32) error {
 	if m.inventoryManager == nil {
@@ -1227,46 +1020,7 @@ func (m *Map) RemoveItem(player *object.Player, itemID int32, count int32) error
 	return m.inventoryManager.RemoveItem(player.GetPlayerID(), itemID, count)
 }
 
-// UseItem 使用物品
-func (m *Map) UseItem(player *object.Player, itemID int32) error {
-	if m.inventoryManager == nil {
-		return fmt.Errorf("inventory manager not initialized")
-	}
-
-	// 使用物品
-	err := m.inventoryManager.UseItem(player.GetPlayerID(), itemID)
-	if err != nil {
-		return err
-	}
-
-	// 处理物品效果
-	itemConfig := m.inventoryManager.GetItemConfig(itemID)
-	if itemConfig != nil {
-		for _, effect := range itemConfig.Effects {
-			switch effect.Type {
-			case "health":
-				// 增加生命值
-				// 这里需要实现增加生命值的逻辑
-			case "mana":
-				// 增加魔法值
-				// 这里需要实现增加魔法值的逻辑
-			case "attack":
-				// 增加攻击力
-				// 这里需要实现增加攻击力的逻辑
-			case "defense":
-				// 增加防御力
-				// 这里需要实现增加防御力的逻辑
-			case "speed":
-				// 增加移动速度
-				// 这里需要实现增加移动速度的逻辑
-			}
-		}
-	}
-
-	return nil
-}
-
-// GetItemCount 获取物品数量
+// GetItemCount 获取背包中物品的数量
 func (m *Map) GetItemCount(player *object.Player, itemID int32) int32 {
 	if m.inventoryManager == nil {
 		return 0
@@ -1282,16 +1036,6 @@ func (m *Map) GetInventoryItems(player *object.Player) []*item.InventoryItem {
 	}
 
 	return m.inventoryManager.GetInventoryItems(player.GetPlayerID())
-}
-
-// GetTeamManager 获取队伍管理器
-func (m *Map) GetTeamManager() *social.TeamManager {
-	return m.teamManager
-}
-
-// GetGuildManager 获取公会管理器
-func (m *Map) GetGuildManager() *social.GuildManager {
-	return m.guildManager
 }
 
 // CreateTeam 创建队伍
@@ -1452,41 +1196,6 @@ func (m *Map) GetPlayerGuild(player *object.Player) *social.Guild {
 	return m.guildManager.GetPlayerGuild(player.GetPlayerID())
 }
 
-// GetCurrencyManager 获取货币管理器
-func (m *Map) GetCurrencyManager() *economy.CurrencyManager {
-	return m.currencyManager
-}
-
-// GetTradeManager 获取交易管理器
-func (m *Map) GetTradeManager() *economy.TradeManager {
-	return m.tradeManager
-}
-
-// GetAuctionManager 获取拍卖行管理器
-func (m *Map) GetAuctionManager() *economy.AuctionManager {
-	return m.auctionManager
-}
-
-// GetShopManager 获取商店管理器
-func (m *Map) GetShopManager() *economy.ShopManager {
-	return m.shopManager
-}
-
-// GetAchievementManager 获取成就管理器
-func (m *Map) GetAchievementManager() *achievement.AchievementManager {
-	return m.achievementManager
-}
-
-// GetPetManager 获取宠物管理器
-func (m *Map) GetPetManager() *pet.PetManager {
-	return m.petManager
-}
-
-// GetMountManager 获取坐骑管理器
-func (m *Map) GetMountManager() *mount.MountManager {
-	return m.mountManager
-}
-
 // GetCurrency 获取玩家货币数量
 func (m *Map) GetCurrency(player *object.Player, currencyType economy.CurrencyType) int64 {
 	if m.currencyManager == nil {
@@ -1523,8 +1232,8 @@ func (m *Map) HasEnoughCurrency(player *object.Player, currencyType economy.Curr
 	return m.currencyManager.HasEnoughCurrency(player.GetPlayerID(), currencyType, amount)
 }
 
-// InitiateTrade 发起交易
-func (m *Map) InitiateTrade(initiator, target *object.Player) (*economy.Trade, error) {
+// StartTrade 开始交易
+func (m *Map) StartTrade(initiator, target *object.Player) (*economy.Trade, error) {
 	if m.tradeManager == nil {
 		return nil, fmt.Errorf("trade manager not initialized")
 	}
@@ -1532,8 +1241,26 @@ func (m *Map) InitiateTrade(initiator, target *object.Player) (*economy.Trade, e
 	return m.tradeManager.InitiateTrade(initiator.GetPlayerID(), target.GetPlayerID())
 }
 
+// AddTradeItem 添加交易物品
+func (m *Map) AddTradeItem(player *object.Player, tradeID int64, itemID int32, count int32) error {
+	if m.tradeManager == nil {
+		return fmt.Errorf("trade manager not initialized")
+	}
+
+	return m.tradeManager.AddTradeItem(tradeID, player.GetPlayerID(), itemID, count)
+}
+
+// AddTradeCurrency 添加交易货币
+func (m *Map) AddTradeCurrency(player *object.Player, tradeID int64, currencyType economy.CurrencyType, amount int64) error {
+	if m.tradeManager == nil {
+		return fmt.Errorf("trade manager not initialized")
+	}
+
+	return m.tradeManager.AddTradeCurrency(tradeID, player.GetPlayerID(), currencyType, amount)
+}
+
 // AcceptTrade 接受交易
-func (m *Map) AcceptTrade(tradeID int64, player *object.Player) error {
+func (m *Map) AcceptTrade(player *object.Player, tradeID int64) error {
 	if m.tradeManager == nil {
 		return fmt.Errorf("trade manager not initialized")
 	}
@@ -1542,7 +1269,7 @@ func (m *Map) AcceptTrade(tradeID int64, player *object.Player) error {
 }
 
 // CancelTrade 取消交易
-func (m *Map) CancelTrade(tradeID int64, player *object.Player) error {
+func (m *Map) CancelTrade(player *object.Player, tradeID int64) error {
 	if m.tradeManager == nil {
 		return fmt.Errorf("trade manager not initialized")
 	}
@@ -1550,22 +1277,25 @@ func (m *Map) CancelTrade(tradeID int64, player *object.Player) error {
 	return m.tradeManager.CancelTrade(tradeID, player.GetPlayerID())
 }
 
-// CompleteTrade 完成交易
-func (m *Map) CompleteTrade(tradeID int64, player *object.Player) error {
-	if m.tradeManager == nil {
-		return fmt.Errorf("trade manager not initialized")
-	}
-
-	return m.tradeManager.CompleteTrade(tradeID, player.GetPlayerID())
-}
-
 // CreateAuction 创建拍卖
-func (m *Map) CreateAuction(player *object.Player, itemID, itemCount int32, startingPrice int64, duration time.Duration, currencyType economy.CurrencyType) (*economy.Auction, error) {
+func (m *Map) CreateAuction(player *object.Player, itemID int32, count int32, startingPrice int64, duration int32, currencyType economy.CurrencyType) (int64, error) {
 	if m.auctionManager == nil {
-		return nil, fmt.Errorf("auction manager not initialized")
+		return 0, fmt.Errorf("auction manager not initialized")
 	}
 
-	return m.auctionManager.CreateAuction(player.GetPlayerID(), itemID, itemCount, startingPrice, duration, currencyType)
+	auction, err := m.auctionManager.CreateAuction(
+		player.GetPlayerID(),
+		itemID,
+		count,
+		startingPrice,
+		time.Duration(duration)*time.Second,
+		currencyType,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	return auction.AuctionID, nil
 }
 
 // PlaceBid 出价
@@ -1671,6 +1401,158 @@ func (m *Map) ValidateTarget(caster common.IGameObject, target common.IGameObjec
 	return true
 }
 
+// IsPositionInMap 检查位置是否在地图范围内
+func (m *Map) IsPositionInMap(pos common.Vector3) bool {
+	return pos.X >= 0 && pos.X <= m.width && pos.Y >= 0 && pos.Y <= m.height
+}
+
+// CalculateDistance 计算两点之间的距离平方
+func (m *Map) CalculateDistance(pos1, pos2 common.Vector3) float32 {
+	dx := pos1.X - pos2.X
+	dy := pos1.Y - pos2.Y
+	return dx*dx + dy*dy
+}
+
+// UpdateEvents 更新地图事件
+func (m *Map) UpdateEvents() {
+	if m.eventManager != nil {
+		m.eventManager.UpdateEvents()
+	}
+}
+
+// UpdateSkills 更新技能状态
+func (m *Map) UpdateSkills() {
+	if m.skillManager != nil {
+		m.skillManager.Update()
+	}
+}
+
+// CreateDefaultEvents 创建默认事件
+func (m *Map) CreateDefaultEvents() {
+	// 这里可以添加默认事件
+	zLog.Info("Created default events for map", zap.Int32("map_id", int32(m.mapID)))
+}
+
+// notifyObjectEnter 通知对象进入
+func (m *Map) notifyObjectEnter(object common.IGameObject) {
+	// 通知周围的玩家
+	players := m.GetPlayersInRange(object.GetPosition(), 100)
+	for _, _ = range players {
+		// 构建 AOI 进入通知
+		// 由于我们现在使用统一的协议，这里暂时注释掉AOI通知
+		// 后续需要根据新的协议结构重新实现
+		/*
+			aoiObjects := make([]*pb.AoiObjectInfo, 0)
+			objInfo := &pb.AoiObjectInfo{
+				ObjectId:   int64(object.GetID()),
+				ObjectType: int32(object.GetType()),
+				X:          object.GetPosition().X,
+				Y:          object.GetPosition().Y,
+				Z:          object.GetPosition().Z,
+			}
+
+			// 根据对象类型设置额外信息
+			switch object.GetType() {
+			case common.GameObjectTypePlayer:
+				if pObj, ok := object.(*object.Player); ok {
+					objInfo.EntityId = int64(pObj.GetPlayerID())
+					objInfo.Name = pObj.GetName()
+				}
+			case common.GameObjectTypeMonster:
+				if mObj, ok := object.(*object.Monster); ok {
+					objInfo.EntityId = int64(mObj.GetMonsterID())
+					objInfo.Name = mObj.GetName()
+				}
+			case common.GameObjectTypeNPC:
+				if nObj, ok := object.(*object.NPC); ok {
+					objInfo.EntityId = int64(nObj.GetNPCID())
+					objInfo.Name = nObj.GetName()
+				}
+			}
+
+			aoiObjects = append(aoiObjects, objInfo)
+
+			// 发送 AOI 进入通知
+			m.sendAOIEnterNotify(player.GetPlayerID(), aoiObjects)
+		*/
+	}
+}
+
+// notifyObjectLeave 通知对象离开
+func (m *Map) notifyObjectLeave(object common.IGameObject) {
+	// 通知周围的玩家
+	players := m.GetPlayersInRange(object.GetPosition(), 100)
+	for _, _ = range players {
+		// 发送 AOI 离开通知
+		// 由于我们现在使用统一的协议，这里暂时注释掉AOI通知
+		// 后续需要根据新的协议结构重新实现
+		// objectIDs := []int64{int64(object.GetID())}
+		// m.sendAOILeaveNotify(player.GetPlayerID(), objectIDs)
+	}
+}
+
+// notifyRegionChange 通知区域变化
+func (m *Map) notifyRegionChange(object common.IGameObject, oldRegionID, newRegionID id.RegionIdType) {
+	// 这里可以添加区域变化的通知逻辑
+}
+
+// notifyMovement 通知周围玩家移动
+func (m *Map) notifyMovement(object common.IGameObject, oldPos, newPos common.Vector3) {
+	// 获取周围的玩家
+	players := m.getPlayersInRange(newPos, 100)
+	// 通知玩家移动
+	for _, player := range players {
+		// 排除自己
+		if player.GetID() != object.GetID() {
+			// 由于我们现在使用统一的协议，这里暂时注释掉移动更新
+			// 后续需要根据新的协议结构重新实现
+			// m.sendMovementUpdate(player, object, newPos)
+		}
+	}
+}
+
+// getPlayersInRange 获取指定范围内的玩家
+func (m *Map) getPlayersInRange(pos common.Vector3, radius float32) []common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	players := make([]common.IGameObject, 0)
+
+	for _, obj := range m.objects {
+		if obj.GetType() == common.GameObjectTypePlayer {
+			distance := obj.GetPosition().DistanceTo(pos)
+			if distance <= radius*radius {
+				players = append(players, obj)
+			}
+		}
+	}
+
+	return players
+}
+
+// getRegionID 根据位置获取区域ID
+func (m *Map) getRegionID(pos common.Vector3) id.RegionIdType {
+	regionX := int(pos.X / m.regionSize)
+	regionY := int(pos.Y / m.regionSize)
+	return id.RegionIdType(regionX*1000 + regionY)
+}
+
+// isRegionInRange 检查区域是否在指定范围内
+func (m *Map) isRegionInRange(regionID, centerRegionID id.RegionIdType, radius float32) bool {
+	regionX := int(regionID / 1000)
+	regionY := int(regionID % 1000)
+	centerX := int(centerRegionID / 1000)
+	centerY := int(centerRegionID % 1000)
+
+	dx := float32(regionX - centerX)
+	dy := float32(regionY - centerY)
+	distance := dx*dx + dy*dy
+	maxRegions := int(radius/m.regionSize) + 1
+	maxDistance := float32(maxRegions * maxRegions)
+
+	return distance <= maxDistance
+}
+
 // checkSkillCombo 检查技能组合
 func (m *Map) checkSkillCombo(caster *object.Player) {
 	// 获取技能释放历史
@@ -1729,7 +1611,7 @@ func (m *Map) triggerSkillCombo(caster *object.Player, combo *skill.SkillCombo) 
 	m.handleSkillEffect(comboSkill)
 
 	// 通知周围玩家技能组合释放
-	m.notifySkillUse(caster, comboSkill)
+	// m.notifySkillUse(caster, comboSkill) // 暂时注释，等待后续实现
 
 	zLog.Debug("Skill combo triggered",
 		zap.Int32("combo_id", combo.ID),
@@ -1753,6 +1635,46 @@ func (m *Map) CanUseTeleport(player *object.Player, teleportPoint *models.MapTel
 	// 这里可以添加物品检查逻辑
 
 	return true
+}
+
+// AddPlayer 添加玩家到地图
+func (m *Map) AddPlayer(playerID id.PlayerIdType, objectID id.ObjectIdType, x, y, z float32) error {
+	// 创建玩家对象
+	player := object.NewPlayer(objectID, playerID, "Player", common.Vector3{X: x, Y: y, Z: z}, 1) // 1是默认职业
+
+	// 添加到地图
+	m.AddObject(player)
+
+	zLog.Info("Player added to map", 
+		zap.Int64("player_id", int64(playerID)), 
+		zap.Int32("map_id", int32(m.mapID)),
+		zap.Float32("x", x),
+		zap.Float32("y", y),
+		zap.Float32("z", z))
+
+	return nil
+}
+
+// MovePlayer 移动玩家
+func (m *Map) MovePlayer(playerID id.PlayerIdType, objectID id.ObjectIdType, x, y, z float32) error {
+	return m.MoveObject(objectID, common.Vector3{X: x, Y: y, Z: z})
+}
+
+// AttackTarget 玩家攻击目标
+func (m *Map) AttackTarget(playerID id.PlayerIdType, objectID id.ObjectIdType, targetID id.ObjectIdType) (int64, int64, error) {
+	// 模拟攻击逻辑
+	// 实际应用中，这里需要计算伤害、处理技能效果等
+	var damage int64 = 100
+	var targetHp int64 = 900
+
+	zLog.Info("Player attack target", 
+		zap.Int64("player_id", int64(playerID)), 
+		zap.Int64("object_id", int64(objectID)),
+		zap.Int64("target_id", int64(targetID)),
+		zap.Int64("damage", damage),
+		zap.Int64("target_hp", targetHp))
+
+	return damage, targetHp, nil
 }
 
 // UseTeleport 使用传送点
@@ -1816,6 +1738,40 @@ func (m *Map) UpdateBuilding(building *models.MapBuilding) {
 	}
 }
 
+// Cleanup 清理地图资源
+func (m *Map) Cleanup() {
+	// 清理所有游戏对象
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 清理各种管理器
+	if m.spawnManager != nil {
+		// 清理刷怪系统
+	}
+
+	if m.aiManager != nil {
+		// 清理AI管理器
+	}
+
+	if m.skillManager != nil {
+		// 清理技能管理器
+	}
+
+	// 清空对象和区域
+	m.objects = make(map[id.ObjectIdType]common.IGameObject)
+	m.regions = make(map[id.RegionIdType]*Region)
+	m.players = make(map[id.PlayerIdType]bool)
+
+	zLog.Info("Map cleaned up", zap.Int32("map_id", int32(m.mapID)))
+}
+
+// InitSpawnSystem 初始化刷怪系统
+func (m *Map) InitSpawnSystem() {
+	if m.spawnManager != nil {
+		m.spawnManager.Init(m.mapConfigID)
+	}
+}
+
 // LoadTeleportPoints 从配置加载传送点
 func (m *Map) LoadTeleportPoints() {
 	// 这里可以从配置文件或数据库加载传送点
@@ -1840,45 +1796,5 @@ func (m *Map) LoadTeleportPoints() {
 
 	for _, tp := range defaultTeleportPoints {
 		m.AddTeleportPoint(tp)
-	}
-}
-
-// LoadBuildings 从配置加载建筑
-func (m *Map) LoadBuildings() {
-	// 这里可以从配置文件或数据库加载建筑
-	// 暂时添加一些默认建筑
-	defaultBuildings := []*models.MapBuilding{
-		{
-			ID:      1,
-			MapID:   int32(m.mapID),
-			X:       150,
-			Y:       150,
-			Z:       0,
-			Width:   10,
-			Height:  10,
-			Type:    "town_hall",
-			Name:    "Town Hall",
-			Level:   1,
-			HP:      1000,
-			Faction: 0,
-		},
-		{
-			ID:      2,
-			MapID:   int32(m.mapID),
-			X:       160,
-			Y:       160,
-			Z:       0,
-			Width:   8,
-			Height:  8,
-			Type:    "blacksmith",
-			Name:    "Blacksmith",
-			Level:   1,
-			HP:      500,
-			Faction: 0,
-		},
-	}
-
-	for _, building := range defaultBuildings {
-		m.AddBuilding(building)
 	}
 }

@@ -1,0 +1,180 @@
+[
+  {
+    "quest_id": 10001,
+    "name": "初来乍到",
+    "type": "main",
+    "level": 1,
+    "max_level": 10,
+    "accept_npc": 20001,
+    "submit_npc": 20004,
+    "description": "村长让你去找新手指导员，他会教你一些基本技能。",
+    "objectives": [
+      {
+        "type": "talk",
+        "target": 20004,
+        "target_name": "新手指导员",
+        "count": 1,
+        "description": "与新手指导员对话"
+      }
+    ],
+    "rewards": {
+      "exp": 50,
+      "gold": 20,
+      "items": [
+        {"item_id": 10001, "count": 5}
+      ]
+    },
+    "prev_quest": 0,
+    "next_quest": 10002
+  },
+  {
+    "quest_id": 10002,
+    "name": "野兔危机",
+    "type": "main",
+    "level": 1,
+    "max_level": 10,
+    "accept_npc": 20004,
+    "submit_npc": 20004,
+    "description": "村外的野兔最近变得很猖獗，去消灭5只野兔，保护村民的安全。",
+    "objectives": [
+      {
+        "type": "kill",
+        "target": 10001,
+        "target_name": "野兔",
+        "count": 5,
+        "description": "消灭5只野兔"
+      }
+    ],
+    "rewards": {
+      "exp": 100,
+      "gold": 50,
+      "items": [
+        {"item_id": 10002, "count": 1},
+        {"item_id": 10003, "count": 3}
+      ]
+    },
+    "prev_quest": 10001,
+    "next_quest": 10003
+  },
+  {
+    "quest_id": 10003,
+    "name": "野猪来袭",
+    "type": "main",
+    "level": 3,
+    "max_level": 10,
+    "accept_npc": 20004,
+    "submit_npc": 20001,
+    "description": "野兔问题解决了，但野猪又开始捣乱了。去消灭3只野猪，然后向村长汇报。",
+    "objectives": [
+      {
+        "type": "kill",
+        "target": 10002,
+        "target_name": "野猪",
+        "count": 3,
+        "description": "消灭3只野猪"
+      },
+      {
+        "type": "talk",
+        "target": 20001,
+        "target_name": "村长",
+        "count": 1,
+        "description": "向村长汇报"
+      }
+    ],
+    "rewards": {
+      "exp": 200,
+      "gold": 100,
+      "items": [
+        {"item_id": 10004, "count": 1},
+        {"item_id": 10005, "count": 5}
+      ]
+    },
+    "prev_quest": 10002,
+    "next_quest": 10004
+  },
+  {
+    "quest_id": 10004,
+    "name": "野狼威胁",
+    "type": "main",
+    "level": 5,
+    "max_level": 10,
+    "accept_npc": 20001,
+    "submit_npc": 20001,
+    "description": "野狼出现在村子附近了，这是个危险的信号。去消灭2只野狼，确保村子的安全。完成后你就可以前往主城了。",
+    "objectives": [
+      {
+        "type": "kill",
+        "target": 10003,
+        "target_name": "野狼",
+        "count": 2,
+        "description": "消灭2只野狼"
+      }
+    ],
+    "rewards": {
+      "exp": 500,
+      "gold": 200,
+      "items": [
+        {"item_id": 10006, "count": 1},
+        {"item_id": 10007, "count": 10}
+      ]
+    },
+    "prev_quest": 10003,
+    "next_quest": 0
+  },
+  {
+    "quest_id": 10010,
+    "name": "收集草药",
+    "type": "side",
+    "level": 2,
+    "max_level": 10,
+    "accept_npc": 20002,
+    "submit_npc": 20002,
+    "description": "杂货店需要一些草药来制作药品，帮我收集3株草药吧。",
+    "objectives": [
+      {
+        "type": "collect",
+        "target": 1001,
+        "target_name": "草药",
+        "count": 3,
+        "description": "收集3株草药"
+      }
+    ],
+    "rewards": {
+      "exp": 80,
+      "gold": 30,
+      "items": [
+        {"item_id": 10008, "count": 3}
+      ]
+    },
+    "prev_quest": 0,
+    "next_quest": 0
+  },
+  {
+    "quest_id": 10011,
+    "name": "矿石采集",
+    "type": "side",
+    "level": 3,
+    "max_level": 10,
+    "accept_npc": 20003,
+    "submit_npc": 20003,
+    "description": "铁匠铺需要一些铁矿石来锻造武器，帮我采集2块铁矿石。",
+    "objectives": [
+      {
+        "type": "collect",
+        "target": 1002,
+        "target_name": "铁矿石",
+        "count": 2,
+        "description": "采集2块铁矿石"
+      }
+    ],
+    "rewards": {
+      "exp": 120,
+      "gold": 50,
+      "items": [
+        {"item_id": 10009, "count": 1}
+      ]
+    },
+    "prev_quest": 0,
+    "next_quest": 0
+  }
+]

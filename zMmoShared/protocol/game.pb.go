@@ -21,79 +21,35 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// 消息类型定义
-type MessageType int32
-
-const (
-	MessageType_MSG_TYPE_INVALID MessageType = 0
-	MessageType_MSG_TYPE_SYSTEM  MessageType = 1
-	MessageType_MSG_TYPE_PLAYER  MessageType = 1000
-	MessageType_MSG_TYPE_GUILD   MessageType = 2000
-	MessageType_MSG_TYPE_AUCTION MessageType = 3000
-	MessageType_MSG_TYPE_MAP     MessageType = 4000
-)
-
-// Enum value maps for MessageType.
-var (
-	MessageType_name = map[int32]string{
-		0:    "MSG_TYPE_INVALID",
-		1:    "MSG_TYPE_SYSTEM",
-		1000: "MSG_TYPE_PLAYER",
-		2000: "MSG_TYPE_GUILD",
-		3000: "MSG_TYPE_AUCTION",
-		4000: "MSG_TYPE_MAP",
-	}
-	MessageType_value = map[string]int32{
-		"MSG_TYPE_INVALID": 0,
-		"MSG_TYPE_SYSTEM":  1,
-		"MSG_TYPE_PLAYER":  1000,
-		"MSG_TYPE_GUILD":   2000,
-		"MSG_TYPE_AUCTION": 3000,
-		"MSG_TYPE_MAP":     4000,
-	}
-)
-
-func (x MessageType) Enum() *MessageType {
-	p := new(MessageType)
-	*p = x
-	return p
-}
-
-func (x MessageType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MessageType) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_proto_enumTypes[0].Descriptor()
-}
-
-func (MessageType) Type() protoreflect.EnumType {
-	return &file_game_proto_enumTypes[0]
-}
-
-func (x MessageType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MessageType.Descriptor instead.
-func (MessageType) EnumDescriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{0}
-}
-
-// 系统消息ID
+// 系统消息 1-99
 type SystemMsgId int32
 
 const (
-	SystemMsgId_MSG_SYSTEM_INVALID SystemMsgId = 0
+	SystemMsgId_MSG_SYSTEM_INVALID     SystemMsgId = 0
+	SystemMsgId_MSG_SYSTEM_HEARTBEAT   SystemMsgId = 1
+	SystemMsgId_MSG_SYSTEM_PING        SystemMsgId = 2
+	SystemMsgId_MSG_SYSTEM_PONG        SystemMsgId = 3
+	SystemMsgId_MSG_SYSTEM_KICK        SystemMsgId = 4
+	SystemMsgId_MSG_SYSTEM_MAINTENANCE SystemMsgId = 5
 )
 
 // Enum value maps for SystemMsgId.
 var (
 	SystemMsgId_name = map[int32]string{
 		0: "MSG_SYSTEM_INVALID",
+		1: "MSG_SYSTEM_HEARTBEAT",
+		2: "MSG_SYSTEM_PING",
+		3: "MSG_SYSTEM_PONG",
+		4: "MSG_SYSTEM_KICK",
+		5: "MSG_SYSTEM_MAINTENANCE",
 	}
 	SystemMsgId_value = map[string]int32{
-		"MSG_SYSTEM_INVALID": 0,
+		"MSG_SYSTEM_INVALID":     0,
+		"MSG_SYSTEM_HEARTBEAT":   1,
+		"MSG_SYSTEM_PING":        2,
+		"MSG_SYSTEM_PONG":        3,
+		"MSG_SYSTEM_KICK":        4,
+		"MSG_SYSTEM_MAINTENANCE": 5,
 	}
 )
 
@@ -108,11 +64,11 @@ func (x SystemMsgId) String() string {
 }
 
 func (SystemMsgId) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_proto_enumTypes[1].Descriptor()
+	return file_game_proto_enumTypes[0].Descriptor()
 }
 
 func (SystemMsgId) Type() protoreflect.EnumType {
-	return &file_game_proto_enumTypes[1]
+	return &file_game_proto_enumTypes[0]
 }
 
 func (x SystemMsgId) Number() protoreflect.EnumNumber {
@@ -121,140 +77,100 @@ func (x SystemMsgId) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SystemMsgId.Descriptor instead.
 func (SystemMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{0}
+}
+
+// 账号认证消息 100-199
+type AuthMsgId int32
+
+const (
+	AuthMsgId_MSG_AUTH_INVALID        AuthMsgId = 0
+	AuthMsgId_MSG_AUTH_LOGIN          AuthMsgId = 100
+	AuthMsgId_MSG_AUTH_LOGIN_RESPONSE AuthMsgId = 101
+	AuthMsgId_MSG_AUTH_LOGOUT         AuthMsgId = 102
+	AuthMsgId_MSG_AUTH_TOKEN_REFRESH  AuthMsgId = 103
+)
+
+// Enum value maps for AuthMsgId.
+var (
+	AuthMsgId_name = map[int32]string{
+		0:   "MSG_AUTH_INVALID",
+		100: "MSG_AUTH_LOGIN",
+		101: "MSG_AUTH_LOGIN_RESPONSE",
+		102: "MSG_AUTH_LOGOUT",
+		103: "MSG_AUTH_TOKEN_REFRESH",
+	}
+	AuthMsgId_value = map[string]int32{
+		"MSG_AUTH_INVALID":        0,
+		"MSG_AUTH_LOGIN":          100,
+		"MSG_AUTH_LOGIN_RESPONSE": 101,
+		"MSG_AUTH_LOGOUT":         102,
+		"MSG_AUTH_TOKEN_REFRESH":  103,
+	}
+)
+
+func (x AuthMsgId) Enum() *AuthMsgId {
+	p := new(AuthMsgId)
+	*p = x
+	return p
+}
+
+func (x AuthMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AuthMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[1].Descriptor()
+}
+
+func (AuthMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[1]
+}
+
+func (x AuthMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AuthMsgId.Descriptor instead.
+func (AuthMsgId) EnumDescriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{1}
 }
 
-// 玩家相关消息ID
+// 玩家消息 200-299
 type PlayerMsgId int32
 
 const (
-	PlayerMsgId_MSG_PLAYER_INVALID PlayerMsgId = 0
-	// 账号相关
-	PlayerMsgId_MSG_PLAYER_ACCOUNT_CREATE PlayerMsgId = 1001
-	PlayerMsgId_MSG_PLAYER_ACCOUNT_LOGIN  PlayerMsgId = 1002
-	PlayerMsgId_MSG_PLAYER_PLAYER_CREATE  PlayerMsgId = 1003
-	PlayerMsgId_MSG_PLAYER_PLAYER_LOGIN   PlayerMsgId = 1004
-	PlayerMsgId_MSG_PLAYER_PLAYER_LOGOUT  PlayerMsgId = 1005
-	// 基础信息
-	PlayerMsgId_MSG_PLAYER_GET_INFO    PlayerMsgId = 1006
-	PlayerMsgId_MSG_PLAYER_UPDATE_INFO PlayerMsgId = 1007
-	// 背包相关
-	PlayerMsgId_MSG_PLAYER_INVENTORY_GET    PlayerMsgId = 1010
-	PlayerMsgId_MSG_PLAYER_INVENTORY_ADD    PlayerMsgId = 1011
-	PlayerMsgId_MSG_PLAYER_INVENTORY_REMOVE PlayerMsgId = 1012
-	PlayerMsgId_MSG_PLAYER_INVENTORY_USE    PlayerMsgId = 1013
-	PlayerMsgId_MSG_PLAYER_INVENTORY_SORT   PlayerMsgId = 1014
-	// 装备相关
-	PlayerMsgId_MSG_PLAYER_EQUIPMENT_GET     PlayerMsgId = 1020
-	PlayerMsgId_MSG_PLAYER_EQUIPMENT_EQUIP   PlayerMsgId = 1021
-	PlayerMsgId_MSG_PLAYER_EQUIPMENT_UNEQUIP PlayerMsgId = 1022
-	PlayerMsgId_MSG_PLAYER_EQUIPMENT_UPGRADE PlayerMsgId = 1023
-	// 邮件相关
-	PlayerMsgId_MSG_PLAYER_MAIL_GET_LIST   PlayerMsgId = 1030
-	PlayerMsgId_MSG_PLAYER_MAIL_GET_DETAIL PlayerMsgId = 1031
-	PlayerMsgId_MSG_PLAYER_MAIL_SEND       PlayerMsgId = 1032
-	PlayerMsgId_MSG_PLAYER_MAIL_DELETE     PlayerMsgId = 1033
-	PlayerMsgId_MSG_PLAYER_MAIL_RECEIVE    PlayerMsgId = 1034
-	// 任务相关
-	PlayerMsgId_MSG_PLAYER_TASK_GET_LIST   PlayerMsgId = 1040
-	PlayerMsgId_MSG_PLAYER_TASK_GET_DETAIL PlayerMsgId = 1041
-	PlayerMsgId_MSG_PLAYER_TASK_ACCEPT     PlayerMsgId = 1042
-	PlayerMsgId_MSG_PLAYER_TASK_SUBMIT     PlayerMsgId = 1043
-	PlayerMsgId_MSG_PLAYER_TASK_CANCEL     PlayerMsgId = 1044
-	// 技能相关
-	PlayerMsgId_MSG_PLAYER_SKILL_GET_LIST PlayerMsgId = 1050
-	PlayerMsgId_MSG_PLAYER_SKILL_LEARN    PlayerMsgId = 1051
-	PlayerMsgId_MSG_PLAYER_SKILL_UPGRADE  PlayerMsgId = 1052
-	PlayerMsgId_MSG_PLAYER_SKILL_USE      PlayerMsgId = 1053
-	// Buff相关
-	PlayerMsgId_MSG_PLAYER_BUFF_GET_LIST PlayerMsgId = 1060
-	PlayerMsgId_MSG_PLAYER_BUFF_APPLY    PlayerMsgId = 1061
-	// 活动相关
-	PlayerMsgId_MSG_PLAYER_ACTIVITY_GET_LIST PlayerMsgId = 1070
-	PlayerMsgId_MSG_PLAYER_ACTIVITY_JOIN     PlayerMsgId = 1071
-	PlayerMsgId_MSG_PLAYER_ACTIVITY_PROGRESS PlayerMsgId = 1072
-	PlayerMsgId_MSG_PLAYER_ACTIVITY_CLAIM    PlayerMsgId = 1073
+	PlayerMsgId_MSG_PLAYER_INVALID             PlayerMsgId = 0
+	PlayerMsgId_MSG_PLAYER_CREATE              PlayerMsgId = 200
+	PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE     PlayerMsgId = 201
+	PlayerMsgId_MSG_PLAYER_ENTER_GAME          PlayerMsgId = 202
+	PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE PlayerMsgId = 203
+	PlayerMsgId_MSG_PLAYER_LEAVE_GAME          PlayerMsgId = 204
+	PlayerMsgId_MSG_PLAYER_INFO_UPDATE         PlayerMsgId = 205
+	PlayerMsgId_MSG_PLAYER_LEVEL_UP            PlayerMsgId = 206
 )
 
 // Enum value maps for PlayerMsgId.
 var (
 	PlayerMsgId_name = map[int32]string{
-		0:    "MSG_PLAYER_INVALID",
-		1001: "MSG_PLAYER_ACCOUNT_CREATE",
-		1002: "MSG_PLAYER_ACCOUNT_LOGIN",
-		1003: "MSG_PLAYER_PLAYER_CREATE",
-		1004: "MSG_PLAYER_PLAYER_LOGIN",
-		1005: "MSG_PLAYER_PLAYER_LOGOUT",
-		1006: "MSG_PLAYER_GET_INFO",
-		1007: "MSG_PLAYER_UPDATE_INFO",
-		1010: "MSG_PLAYER_INVENTORY_GET",
-		1011: "MSG_PLAYER_INVENTORY_ADD",
-		1012: "MSG_PLAYER_INVENTORY_REMOVE",
-		1013: "MSG_PLAYER_INVENTORY_USE",
-		1014: "MSG_PLAYER_INVENTORY_SORT",
-		1020: "MSG_PLAYER_EQUIPMENT_GET",
-		1021: "MSG_PLAYER_EQUIPMENT_EQUIP",
-		1022: "MSG_PLAYER_EQUIPMENT_UNEQUIP",
-		1023: "MSG_PLAYER_EQUIPMENT_UPGRADE",
-		1030: "MSG_PLAYER_MAIL_GET_LIST",
-		1031: "MSG_PLAYER_MAIL_GET_DETAIL",
-		1032: "MSG_PLAYER_MAIL_SEND",
-		1033: "MSG_PLAYER_MAIL_DELETE",
-		1034: "MSG_PLAYER_MAIL_RECEIVE",
-		1040: "MSG_PLAYER_TASK_GET_LIST",
-		1041: "MSG_PLAYER_TASK_GET_DETAIL",
-		1042: "MSG_PLAYER_TASK_ACCEPT",
-		1043: "MSG_PLAYER_TASK_SUBMIT",
-		1044: "MSG_PLAYER_TASK_CANCEL",
-		1050: "MSG_PLAYER_SKILL_GET_LIST",
-		1051: "MSG_PLAYER_SKILL_LEARN",
-		1052: "MSG_PLAYER_SKILL_UPGRADE",
-		1053: "MSG_PLAYER_SKILL_USE",
-		1060: "MSG_PLAYER_BUFF_GET_LIST",
-		1061: "MSG_PLAYER_BUFF_APPLY",
-		1070: "MSG_PLAYER_ACTIVITY_GET_LIST",
-		1071: "MSG_PLAYER_ACTIVITY_JOIN",
-		1072: "MSG_PLAYER_ACTIVITY_PROGRESS",
-		1073: "MSG_PLAYER_ACTIVITY_CLAIM",
+		0:   "MSG_PLAYER_INVALID",
+		200: "MSG_PLAYER_CREATE",
+		201: "MSG_PLAYER_CREATE_RESPONSE",
+		202: "MSG_PLAYER_ENTER_GAME",
+		203: "MSG_PLAYER_ENTER_GAME_RESPONSE",
+		204: "MSG_PLAYER_LEAVE_GAME",
+		205: "MSG_PLAYER_INFO_UPDATE",
+		206: "MSG_PLAYER_LEVEL_UP",
 	}
 	PlayerMsgId_value = map[string]int32{
-		"MSG_PLAYER_INVALID":           0,
-		"MSG_PLAYER_ACCOUNT_CREATE":    1001,
-		"MSG_PLAYER_ACCOUNT_LOGIN":     1002,
-		"MSG_PLAYER_PLAYER_CREATE":     1003,
-		"MSG_PLAYER_PLAYER_LOGIN":      1004,
-		"MSG_PLAYER_PLAYER_LOGOUT":     1005,
-		"MSG_PLAYER_GET_INFO":          1006,
-		"MSG_PLAYER_UPDATE_INFO":       1007,
-		"MSG_PLAYER_INVENTORY_GET":     1010,
-		"MSG_PLAYER_INVENTORY_ADD":     1011,
-		"MSG_PLAYER_INVENTORY_REMOVE":  1012,
-		"MSG_PLAYER_INVENTORY_USE":     1013,
-		"MSG_PLAYER_INVENTORY_SORT":    1014,
-		"MSG_PLAYER_EQUIPMENT_GET":     1020,
-		"MSG_PLAYER_EQUIPMENT_EQUIP":   1021,
-		"MSG_PLAYER_EQUIPMENT_UNEQUIP": 1022,
-		"MSG_PLAYER_EQUIPMENT_UPGRADE": 1023,
-		"MSG_PLAYER_MAIL_GET_LIST":     1030,
-		"MSG_PLAYER_MAIL_GET_DETAIL":   1031,
-		"MSG_PLAYER_MAIL_SEND":         1032,
-		"MSG_PLAYER_MAIL_DELETE":       1033,
-		"MSG_PLAYER_MAIL_RECEIVE":      1034,
-		"MSG_PLAYER_TASK_GET_LIST":     1040,
-		"MSG_PLAYER_TASK_GET_DETAIL":   1041,
-		"MSG_PLAYER_TASK_ACCEPT":       1042,
-		"MSG_PLAYER_TASK_SUBMIT":       1043,
-		"MSG_PLAYER_TASK_CANCEL":       1044,
-		"MSG_PLAYER_SKILL_GET_LIST":    1050,
-		"MSG_PLAYER_SKILL_LEARN":       1051,
-		"MSG_PLAYER_SKILL_UPGRADE":     1052,
-		"MSG_PLAYER_SKILL_USE":         1053,
-		"MSG_PLAYER_BUFF_GET_LIST":     1060,
-		"MSG_PLAYER_BUFF_APPLY":        1061,
-		"MSG_PLAYER_ACTIVITY_GET_LIST": 1070,
-		"MSG_PLAYER_ACTIVITY_JOIN":     1071,
-		"MSG_PLAYER_ACTIVITY_PROGRESS": 1072,
-		"MSG_PLAYER_ACTIVITY_CLAIM":    1073,
+		"MSG_PLAYER_INVALID":             0,
+		"MSG_PLAYER_CREATE":              200,
+		"MSG_PLAYER_CREATE_RESPONSE":     201,
+		"MSG_PLAYER_ENTER_GAME":          202,
+		"MSG_PLAYER_ENTER_GAME_RESPONSE": 203,
+		"MSG_PLAYER_LEAVE_GAME":          204,
+		"MSG_PLAYER_INFO_UPDATE":         205,
+		"MSG_PLAYER_LEVEL_UP":            206,
 	}
 )
 
@@ -285,53 +201,488 @@ func (PlayerMsgId) EnumDescriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{2}
 }
 
-// 公会相关消息ID
+// 背包消息 300-399
+type BagMsgId int32
+
+const (
+	BagMsgId_MSG_BAG_INVALID            BagMsgId = 0
+	BagMsgId_MSG_BAG_GET_ITEMS          BagMsgId = 300
+	BagMsgId_MSG_BAG_GET_ITEMS_RESPONSE BagMsgId = 301
+	BagMsgId_MSG_BAG_USE_ITEM           BagMsgId = 302
+	BagMsgId_MSG_BAG_USE_ITEM_RESPONSE  BagMsgId = 303
+	BagMsgId_MSG_BAG_ADD_ITEM           BagMsgId = 304
+	BagMsgId_MSG_BAG_REMOVE_ITEM        BagMsgId = 305
+	BagMsgId_MSG_BAG_ITEM_UPDATE        BagMsgId = 306
+	BagMsgId_MSG_BAG_SORT               BagMsgId = 307
+	BagMsgId_MSG_BAG_EXPAND             BagMsgId = 308
+)
+
+// Enum value maps for BagMsgId.
+var (
+	BagMsgId_name = map[int32]string{
+		0:   "MSG_BAG_INVALID",
+		300: "MSG_BAG_GET_ITEMS",
+		301: "MSG_BAG_GET_ITEMS_RESPONSE",
+		302: "MSG_BAG_USE_ITEM",
+		303: "MSG_BAG_USE_ITEM_RESPONSE",
+		304: "MSG_BAG_ADD_ITEM",
+		305: "MSG_BAG_REMOVE_ITEM",
+		306: "MSG_BAG_ITEM_UPDATE",
+		307: "MSG_BAG_SORT",
+		308: "MSG_BAG_EXPAND",
+	}
+	BagMsgId_value = map[string]int32{
+		"MSG_BAG_INVALID":            0,
+		"MSG_BAG_GET_ITEMS":          300,
+		"MSG_BAG_GET_ITEMS_RESPONSE": 301,
+		"MSG_BAG_USE_ITEM":           302,
+		"MSG_BAG_USE_ITEM_RESPONSE":  303,
+		"MSG_BAG_ADD_ITEM":           304,
+		"MSG_BAG_REMOVE_ITEM":        305,
+		"MSG_BAG_ITEM_UPDATE":        306,
+		"MSG_BAG_SORT":               307,
+		"MSG_BAG_EXPAND":             308,
+	}
+)
+
+func (x BagMsgId) Enum() *BagMsgId {
+	p := new(BagMsgId)
+	*p = x
+	return p
+}
+
+func (x BagMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BagMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[3].Descriptor()
+}
+
+func (BagMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[3]
+}
+
+func (x BagMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BagMsgId.Descriptor instead.
+func (BagMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{3}
+}
+
+// 装备消息 400-499
+type EquipMsgId int32
+
+const (
+	EquipMsgId_MSG_EQUIP_INVALID             EquipMsgId = 0
+	EquipMsgId_MSG_EQUIP_GET_LIST            EquipMsgId = 400
+	EquipMsgId_MSG_EQUIP_GET_LIST_RESPONSE   EquipMsgId = 401
+	EquipMsgId_MSG_EQUIP_PUT_ON              EquipMsgId = 402
+	EquipMsgId_MSG_EQUIP_PUT_ON_RESPONSE     EquipMsgId = 403
+	EquipMsgId_MSG_EQUIP_TAKE_OFF            EquipMsgId = 404
+	EquipMsgId_MSG_EQUIP_TAKE_OFF_RESPONSE   EquipMsgId = 405
+	EquipMsgId_MSG_EQUIP_STRENGTHEN          EquipMsgId = 406
+	EquipMsgId_MSG_EQUIP_STRENGTHEN_RESPONSE EquipMsgId = 407
+	EquipMsgId_MSG_EQUIP_UPGRADE             EquipMsgId = 408
+	EquipMsgId_MSG_EQUIP_UPGRADE_RESPONSE    EquipMsgId = 409
+)
+
+// Enum value maps for EquipMsgId.
+var (
+	EquipMsgId_name = map[int32]string{
+		0:   "MSG_EQUIP_INVALID",
+		400: "MSG_EQUIP_GET_LIST",
+		401: "MSG_EQUIP_GET_LIST_RESPONSE",
+		402: "MSG_EQUIP_PUT_ON",
+		403: "MSG_EQUIP_PUT_ON_RESPONSE",
+		404: "MSG_EQUIP_TAKE_OFF",
+		405: "MSG_EQUIP_TAKE_OFF_RESPONSE",
+		406: "MSG_EQUIP_STRENGTHEN",
+		407: "MSG_EQUIP_STRENGTHEN_RESPONSE",
+		408: "MSG_EQUIP_UPGRADE",
+		409: "MSG_EQUIP_UPGRADE_RESPONSE",
+	}
+	EquipMsgId_value = map[string]int32{
+		"MSG_EQUIP_INVALID":             0,
+		"MSG_EQUIP_GET_LIST":            400,
+		"MSG_EQUIP_GET_LIST_RESPONSE":   401,
+		"MSG_EQUIP_PUT_ON":              402,
+		"MSG_EQUIP_PUT_ON_RESPONSE":     403,
+		"MSG_EQUIP_TAKE_OFF":            404,
+		"MSG_EQUIP_TAKE_OFF_RESPONSE":   405,
+		"MSG_EQUIP_STRENGTHEN":          406,
+		"MSG_EQUIP_STRENGTHEN_RESPONSE": 407,
+		"MSG_EQUIP_UPGRADE":             408,
+		"MSG_EQUIP_UPGRADE_RESPONSE":    409,
+	}
+)
+
+func (x EquipMsgId) Enum() *EquipMsgId {
+	p := new(EquipMsgId)
+	*p = x
+	return p
+}
+
+func (x EquipMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EquipMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[4].Descriptor()
+}
+
+func (EquipMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[4]
+}
+
+func (x EquipMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EquipMsgId.Descriptor instead.
+func (EquipMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{4}
+}
+
+// 技能消息 500-599
+type SkillMsgId int32
+
+const (
+	SkillMsgId_MSG_SKILL_INVALID           SkillMsgId = 0
+	SkillMsgId_MSG_SKILL_GET_LIST          SkillMsgId = 500
+	SkillMsgId_MSG_SKILL_GET_LIST_RESPONSE SkillMsgId = 501
+	SkillMsgId_MSG_SKILL_LEARN             SkillMsgId = 502
+	SkillMsgId_MSG_SKILL_LEARN_RESPONSE    SkillMsgId = 503
+	SkillMsgId_MSG_SKILL_UPGRADE           SkillMsgId = 504
+	SkillMsgId_MSG_SKILL_UPGRADE_RESPONSE  SkillMsgId = 505
+	SkillMsgId_MSG_SKILL_USE               SkillMsgId = 506
+	SkillMsgId_MSG_SKILL_USE_RESPONSE      SkillMsgId = 507
+	SkillMsgId_MSG_SKILL_CAST              SkillMsgId = 508
+	SkillMsgId_MSG_SKILL_CAST_RESULT       SkillMsgId = 509
+	SkillMsgId_MSG_SKILL_COOLDOWN          SkillMsgId = 510
+)
+
+// Enum value maps for SkillMsgId.
+var (
+	SkillMsgId_name = map[int32]string{
+		0:   "MSG_SKILL_INVALID",
+		500: "MSG_SKILL_GET_LIST",
+		501: "MSG_SKILL_GET_LIST_RESPONSE",
+		502: "MSG_SKILL_LEARN",
+		503: "MSG_SKILL_LEARN_RESPONSE",
+		504: "MSG_SKILL_UPGRADE",
+		505: "MSG_SKILL_UPGRADE_RESPONSE",
+		506: "MSG_SKILL_USE",
+		507: "MSG_SKILL_USE_RESPONSE",
+		508: "MSG_SKILL_CAST",
+		509: "MSG_SKILL_CAST_RESULT",
+		510: "MSG_SKILL_COOLDOWN",
+	}
+	SkillMsgId_value = map[string]int32{
+		"MSG_SKILL_INVALID":           0,
+		"MSG_SKILL_GET_LIST":          500,
+		"MSG_SKILL_GET_LIST_RESPONSE": 501,
+		"MSG_SKILL_LEARN":             502,
+		"MSG_SKILL_LEARN_RESPONSE":    503,
+		"MSG_SKILL_UPGRADE":           504,
+		"MSG_SKILL_UPGRADE_RESPONSE":  505,
+		"MSG_SKILL_USE":               506,
+		"MSG_SKILL_USE_RESPONSE":      507,
+		"MSG_SKILL_CAST":              508,
+		"MSG_SKILL_CAST_RESULT":       509,
+		"MSG_SKILL_COOLDOWN":          510,
+	}
+)
+
+func (x SkillMsgId) Enum() *SkillMsgId {
+	p := new(SkillMsgId)
+	*p = x
+	return p
+}
+
+func (x SkillMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SkillMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[5].Descriptor()
+}
+
+func (SkillMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[5]
+}
+
+func (x SkillMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SkillMsgId.Descriptor instead.
+func (SkillMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{5}
+}
+
+// 任务消息 600-699
+type TaskMsgId int32
+
+const (
+	TaskMsgId_MSG_TASK_INVALID           TaskMsgId = 0
+	TaskMsgId_MSG_TASK_GET_LIST          TaskMsgId = 600
+	TaskMsgId_MSG_TASK_GET_LIST_RESPONSE TaskMsgId = 601
+	TaskMsgId_MSG_TASK_ACCEPT            TaskMsgId = 602
+	TaskMsgId_MSG_TASK_ACCEPT_RESPONSE   TaskMsgId = 603
+	TaskMsgId_MSG_TASK_SUBMIT            TaskMsgId = 604
+	TaskMsgId_MSG_TASK_SUBMIT_RESPONSE   TaskMsgId = 605
+	TaskMsgId_MSG_TASK_GIVE_UP           TaskMsgId = 606
+	TaskMsgId_MSG_TASK_GIVE_UP_RESPONSE  TaskMsgId = 607
+	TaskMsgId_MSG_TASK_UPDATE            TaskMsgId = 608
+	TaskMsgId_MSG_TASK_COMPLETE_NOTIFY   TaskMsgId = 609
+)
+
+// Enum value maps for TaskMsgId.
+var (
+	TaskMsgId_name = map[int32]string{
+		0:   "MSG_TASK_INVALID",
+		600: "MSG_TASK_GET_LIST",
+		601: "MSG_TASK_GET_LIST_RESPONSE",
+		602: "MSG_TASK_ACCEPT",
+		603: "MSG_TASK_ACCEPT_RESPONSE",
+		604: "MSG_TASK_SUBMIT",
+		605: "MSG_TASK_SUBMIT_RESPONSE",
+		606: "MSG_TASK_GIVE_UP",
+		607: "MSG_TASK_GIVE_UP_RESPONSE",
+		608: "MSG_TASK_UPDATE",
+		609: "MSG_TASK_COMPLETE_NOTIFY",
+	}
+	TaskMsgId_value = map[string]int32{
+		"MSG_TASK_INVALID":           0,
+		"MSG_TASK_GET_LIST":          600,
+		"MSG_TASK_GET_LIST_RESPONSE": 601,
+		"MSG_TASK_ACCEPT":            602,
+		"MSG_TASK_ACCEPT_RESPONSE":   603,
+		"MSG_TASK_SUBMIT":            604,
+		"MSG_TASK_SUBMIT_RESPONSE":   605,
+		"MSG_TASK_GIVE_UP":           606,
+		"MSG_TASK_GIVE_UP_RESPONSE":  607,
+		"MSG_TASK_UPDATE":            608,
+		"MSG_TASK_COMPLETE_NOTIFY":   609,
+	}
+)
+
+func (x TaskMsgId) Enum() *TaskMsgId {
+	p := new(TaskMsgId)
+	*p = x
+	return p
+}
+
+func (x TaskMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TaskMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[6].Descriptor()
+}
+
+func (TaskMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[6]
+}
+
+func (x TaskMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TaskMsgId.Descriptor instead.
+func (TaskMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{6}
+}
+
+// 邮件消息 700-799
+type MailMsgId int32
+
+const (
+	MailMsgId_MSG_MAIL_INVALID                 MailMsgId = 0
+	MailMsgId_MSG_MAIL_GET_LIST                MailMsgId = 700
+	MailMsgId_MSG_MAIL_GET_LIST_RESPONSE       MailMsgId = 701
+	MailMsgId_MSG_MAIL_READ                    MailMsgId = 702
+	MailMsgId_MSG_MAIL_READ_RESPONSE           MailMsgId = 703
+	MailMsgId_MSG_MAIL_GET_ATTACHMENT          MailMsgId = 704
+	MailMsgId_MSG_MAIL_GET_ATTACHMENT_RESPONSE MailMsgId = 705
+	MailMsgId_MSG_MAIL_DELETE                  MailMsgId = 706
+	MailMsgId_MSG_MAIL_DELETE_RESPONSE         MailMsgId = 707
+	MailMsgId_MSG_MAIL_NEW_NOTIFY              MailMsgId = 708
+)
+
+// Enum value maps for MailMsgId.
+var (
+	MailMsgId_name = map[int32]string{
+		0:   "MSG_MAIL_INVALID",
+		700: "MSG_MAIL_GET_LIST",
+		701: "MSG_MAIL_GET_LIST_RESPONSE",
+		702: "MSG_MAIL_READ",
+		703: "MSG_MAIL_READ_RESPONSE",
+		704: "MSG_MAIL_GET_ATTACHMENT",
+		705: "MSG_MAIL_GET_ATTACHMENT_RESPONSE",
+		706: "MSG_MAIL_DELETE",
+		707: "MSG_MAIL_DELETE_RESPONSE",
+		708: "MSG_MAIL_NEW_NOTIFY",
+	}
+	MailMsgId_value = map[string]int32{
+		"MSG_MAIL_INVALID":                 0,
+		"MSG_MAIL_GET_LIST":                700,
+		"MSG_MAIL_GET_LIST_RESPONSE":       701,
+		"MSG_MAIL_READ":                    702,
+		"MSG_MAIL_READ_RESPONSE":           703,
+		"MSG_MAIL_GET_ATTACHMENT":          704,
+		"MSG_MAIL_GET_ATTACHMENT_RESPONSE": 705,
+		"MSG_MAIL_DELETE":                  706,
+		"MSG_MAIL_DELETE_RESPONSE":         707,
+		"MSG_MAIL_NEW_NOTIFY":              708,
+	}
+)
+
+func (x MailMsgId) Enum() *MailMsgId {
+	p := new(MailMsgId)
+	*p = x
+	return p
+}
+
+func (x MailMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MailMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[7].Descriptor()
+}
+
+func (MailMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[7]
+}
+
+func (x MailMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MailMsgId.Descriptor instead.
+func (MailMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{7}
+}
+
+// 聊天消息 800-899
+type ChatMsgId int32
+
+const (
+	ChatMsgId_MSG_CHAT_INVALID          ChatMsgId = 0
+	ChatMsgId_MSG_CHAT_SEND             ChatMsgId = 800
+	ChatMsgId_MSG_CHAT_SEND_RESPONSE    ChatMsgId = 801
+	ChatMsgId_MSG_CHAT_RECEIVE          ChatMsgId = 802
+	ChatMsgId_MSG_CHAT_HISTORY          ChatMsgId = 803
+	ChatMsgId_MSG_CHAT_HISTORY_RESPONSE ChatMsgId = 804
+)
+
+// Enum value maps for ChatMsgId.
+var (
+	ChatMsgId_name = map[int32]string{
+		0:   "MSG_CHAT_INVALID",
+		800: "MSG_CHAT_SEND",
+		801: "MSG_CHAT_SEND_RESPONSE",
+		802: "MSG_CHAT_RECEIVE",
+		803: "MSG_CHAT_HISTORY",
+		804: "MSG_CHAT_HISTORY_RESPONSE",
+	}
+	ChatMsgId_value = map[string]int32{
+		"MSG_CHAT_INVALID":          0,
+		"MSG_CHAT_SEND":             800,
+		"MSG_CHAT_SEND_RESPONSE":    801,
+		"MSG_CHAT_RECEIVE":          802,
+		"MSG_CHAT_HISTORY":          803,
+		"MSG_CHAT_HISTORY_RESPONSE": 804,
+	}
+)
+
+func (x ChatMsgId) Enum() *ChatMsgId {
+	p := new(ChatMsgId)
+	*p = x
+	return p
+}
+
+func (x ChatMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ChatMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[8].Descriptor()
+}
+
+func (ChatMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[8]
+}
+
+func (x ChatMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ChatMsgId.Descriptor instead.
+func (ChatMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{8}
+}
+
+// 公会消息 900-999
 type GuildMsgId int32
 
 const (
-	GuildMsgId_MSG_GUILD_INVALID        GuildMsgId = 0
-	GuildMsgId_MSG_GUILD_CREATE         GuildMsgId = 2001
-	GuildMsgId_MSG_GUILD_JOIN           GuildMsgId = 2002
-	GuildMsgId_MSG_GUILD_LEAVE          GuildMsgId = 2003
-	GuildMsgId_MSG_GUILD_DISBAND        GuildMsgId = 2004
-	GuildMsgId_MSG_GUILD_GET_INFO       GuildMsgId = 2005
-	GuildMsgId_MSG_GUILD_GET_MEMBERS    GuildMsgId = 2006
-	GuildMsgId_MSG_GUILD_APPLY          GuildMsgId = 2007
-	GuildMsgId_MSG_GUILD_PROCESS_APPLY  GuildMsgId = 2008
-	GuildMsgId_MSG_GUILD_UPDATE_NOTICE  GuildMsgId = 2009
-	GuildMsgId_MSG_GUILD_PROMOTE_MEMBER GuildMsgId = 2010
-	GuildMsgId_MSG_GUILD_KICK_MEMBER    GuildMsgId = 2011
+	GuildMsgId_MSG_GUILD_INVALID           GuildMsgId = 0
+	GuildMsgId_MSG_GUILD_GET_LIST          GuildMsgId = 900
+	GuildMsgId_MSG_GUILD_GET_LIST_RESPONSE GuildMsgId = 901
+	GuildMsgId_MSG_GUILD_CREATE            GuildMsgId = 902
+	GuildMsgId_MSG_GUILD_CREATE_RESPONSE   GuildMsgId = 903
+	GuildMsgId_MSG_GUILD_JOIN              GuildMsgId = 904
+	GuildMsgId_MSG_GUILD_JOIN_RESPONSE     GuildMsgId = 905
+	GuildMsgId_MSG_GUILD_LEAVE             GuildMsgId = 906
+	GuildMsgId_MSG_GUILD_LEAVE_RESPONSE    GuildMsgId = 907
+	GuildMsgId_MSG_GUILD_INFO              GuildMsgId = 908
+	GuildMsgId_MSG_GUILD_INFO_RESPONSE     GuildMsgId = 909
+	GuildMsgId_MSG_GUILD_MEMBERS           GuildMsgId = 910
+	GuildMsgId_MSG_GUILD_MEMBERS_RESPONSE  GuildMsgId = 911
+	GuildMsgId_MSG_GUILD_KICK              GuildMsgId = 912
+	GuildMsgId_MSG_GUILD_KICK_RESPONSE     GuildMsgId = 913
 )
 
 // Enum value maps for GuildMsgId.
 var (
 	GuildMsgId_name = map[int32]string{
-		0:    "MSG_GUILD_INVALID",
-		2001: "MSG_GUILD_CREATE",
-		2002: "MSG_GUILD_JOIN",
-		2003: "MSG_GUILD_LEAVE",
-		2004: "MSG_GUILD_DISBAND",
-		2005: "MSG_GUILD_GET_INFO",
-		2006: "MSG_GUILD_GET_MEMBERS",
-		2007: "MSG_GUILD_APPLY",
-		2008: "MSG_GUILD_PROCESS_APPLY",
-		2009: "MSG_GUILD_UPDATE_NOTICE",
-		2010: "MSG_GUILD_PROMOTE_MEMBER",
-		2011: "MSG_GUILD_KICK_MEMBER",
+		0:   "MSG_GUILD_INVALID",
+		900: "MSG_GUILD_GET_LIST",
+		901: "MSG_GUILD_GET_LIST_RESPONSE",
+		902: "MSG_GUILD_CREATE",
+		903: "MSG_GUILD_CREATE_RESPONSE",
+		904: "MSG_GUILD_JOIN",
+		905: "MSG_GUILD_JOIN_RESPONSE",
+		906: "MSG_GUILD_LEAVE",
+		907: "MSG_GUILD_LEAVE_RESPONSE",
+		908: "MSG_GUILD_INFO",
+		909: "MSG_GUILD_INFO_RESPONSE",
+		910: "MSG_GUILD_MEMBERS",
+		911: "MSG_GUILD_MEMBERS_RESPONSE",
+		912: "MSG_GUILD_KICK",
+		913: "MSG_GUILD_KICK_RESPONSE",
 	}
 	GuildMsgId_value = map[string]int32{
-		"MSG_GUILD_INVALID":        0,
-		"MSG_GUILD_CREATE":         2001,
-		"MSG_GUILD_JOIN":           2002,
-		"MSG_GUILD_LEAVE":          2003,
-		"MSG_GUILD_DISBAND":        2004,
-		"MSG_GUILD_GET_INFO":       2005,
-		"MSG_GUILD_GET_MEMBERS":    2006,
-		"MSG_GUILD_APPLY":          2007,
-		"MSG_GUILD_PROCESS_APPLY":  2008,
-		"MSG_GUILD_UPDATE_NOTICE":  2009,
-		"MSG_GUILD_PROMOTE_MEMBER": 2010,
-		"MSG_GUILD_KICK_MEMBER":    2011,
+		"MSG_GUILD_INVALID":           0,
+		"MSG_GUILD_GET_LIST":          900,
+		"MSG_GUILD_GET_LIST_RESPONSE": 901,
+		"MSG_GUILD_CREATE":            902,
+		"MSG_GUILD_CREATE_RESPONSE":   903,
+		"MSG_GUILD_JOIN":              904,
+		"MSG_GUILD_JOIN_RESPONSE":     905,
+		"MSG_GUILD_LEAVE":             906,
+		"MSG_GUILD_LEAVE_RESPONSE":    907,
+		"MSG_GUILD_INFO":              908,
+		"MSG_GUILD_INFO_RESPONSE":     909,
+		"MSG_GUILD_MEMBERS":           910,
+		"MSG_GUILD_MEMBERS_RESPONSE":  911,
+		"MSG_GUILD_KICK":              912,
+		"MSG_GUILD_KICK_RESPONSE":     913,
 	}
 )
 
@@ -346,11 +697,11 @@ func (x GuildMsgId) String() string {
 }
 
 func (GuildMsgId) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_proto_enumTypes[3].Descriptor()
+	return file_game_proto_enumTypes[9].Descriptor()
 }
 
 func (GuildMsgId) Type() protoreflect.EnumType {
-	return &file_game_proto_enumTypes[3]
+	return &file_game_proto_enumTypes[9]
 }
 
 func (x GuildMsgId) Number() protoreflect.EnumNumber {
@@ -359,115 +710,198 @@ func (x GuildMsgId) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GuildMsgId.Descriptor instead.
 func (GuildMsgId) EnumDescriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{3}
+	return file_game_proto_rawDescGZIP(), []int{9}
 }
 
-// 拍卖行相关消息ID
-type AuctionMsgId int32
+// 商城消息 1000-1099
+type ShopMsgId int32
 
 const (
-	AuctionMsgId_MSG_AUCTION_INVALID         AuctionMsgId = 0
-	AuctionMsgId_MSG_AUCTION_CREATE          AuctionMsgId = 3001
-	AuctionMsgId_MSG_AUCTION_PLACE_BID       AuctionMsgId = 3002
-	AuctionMsgId_MSG_AUCTION_BUYOUT          AuctionMsgId = 3003
-	AuctionMsgId_MSG_AUCTION_CANCEL          AuctionMsgId = 3004
-	AuctionMsgId_MSG_AUCTION_GET_LIST        AuctionMsgId = 3005
-	AuctionMsgId_MSG_AUCTION_GET_DETAIL      AuctionMsgId = 3006
-	AuctionMsgId_MSG_AUCTION_GET_MY_AUCTIONS AuctionMsgId = 3007
+	ShopMsgId_MSG_SHOP_INVALID            ShopMsgId = 0
+	ShopMsgId_MSG_SHOP_GET_ITEMS          ShopMsgId = 1000
+	ShopMsgId_MSG_SHOP_GET_ITEMS_RESPONSE ShopMsgId = 1001
+	ShopMsgId_MSG_SHOP_BUY                ShopMsgId = 1002
+	ShopMsgId_MSG_SHOP_BUY_RESPONSE       ShopMsgId = 1003
+	ShopMsgId_MSG_SHOP_REFRESH            ShopMsgId = 1004
+	ShopMsgId_MSG_SHOP_REFRESH_RESPONSE   ShopMsgId = 1005
 )
 
-// Enum value maps for AuctionMsgId.
+// Enum value maps for ShopMsgId.
 var (
-	AuctionMsgId_name = map[int32]string{
-		0:    "MSG_AUCTION_INVALID",
-		3001: "MSG_AUCTION_CREATE",
-		3002: "MSG_AUCTION_PLACE_BID",
-		3003: "MSG_AUCTION_BUYOUT",
-		3004: "MSG_AUCTION_CANCEL",
-		3005: "MSG_AUCTION_GET_LIST",
-		3006: "MSG_AUCTION_GET_DETAIL",
-		3007: "MSG_AUCTION_GET_MY_AUCTIONS",
+	ShopMsgId_name = map[int32]string{
+		0:    "MSG_SHOP_INVALID",
+		1000: "MSG_SHOP_GET_ITEMS",
+		1001: "MSG_SHOP_GET_ITEMS_RESPONSE",
+		1002: "MSG_SHOP_BUY",
+		1003: "MSG_SHOP_BUY_RESPONSE",
+		1004: "MSG_SHOP_REFRESH",
+		1005: "MSG_SHOP_REFRESH_RESPONSE",
 	}
-	AuctionMsgId_value = map[string]int32{
-		"MSG_AUCTION_INVALID":         0,
-		"MSG_AUCTION_CREATE":          3001,
-		"MSG_AUCTION_PLACE_BID":       3002,
-		"MSG_AUCTION_BUYOUT":          3003,
-		"MSG_AUCTION_CANCEL":          3004,
-		"MSG_AUCTION_GET_LIST":        3005,
-		"MSG_AUCTION_GET_DETAIL":      3006,
-		"MSG_AUCTION_GET_MY_AUCTIONS": 3007,
+	ShopMsgId_value = map[string]int32{
+		"MSG_SHOP_INVALID":            0,
+		"MSG_SHOP_GET_ITEMS":          1000,
+		"MSG_SHOP_GET_ITEMS_RESPONSE": 1001,
+		"MSG_SHOP_BUY":                1002,
+		"MSG_SHOP_BUY_RESPONSE":       1003,
+		"MSG_SHOP_REFRESH":            1004,
+		"MSG_SHOP_REFRESH_RESPONSE":   1005,
 	}
 )
 
-func (x AuctionMsgId) Enum() *AuctionMsgId {
-	p := new(AuctionMsgId)
+func (x ShopMsgId) Enum() *ShopMsgId {
+	p := new(ShopMsgId)
 	*p = x
 	return p
 }
 
-func (x AuctionMsgId) String() string {
+func (x ShopMsgId) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (AuctionMsgId) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_proto_enumTypes[4].Descriptor()
+func (ShopMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[10].Descriptor()
 }
 
-func (AuctionMsgId) Type() protoreflect.EnumType {
-	return &file_game_proto_enumTypes[4]
+func (ShopMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[10]
 }
 
-func (x AuctionMsgId) Number() protoreflect.EnumNumber {
+func (x ShopMsgId) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use AuctionMsgId.Descriptor instead.
-func (AuctionMsgId) EnumDescriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{4}
+// Deprecated: Use ShopMsgId.Descriptor instead.
+func (ShopMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{10}
 }
 
-// 地图相关消息ID
+// 副本消息 1100-1199
+type DungeonMsgId int32
+
+const (
+	DungeonMsgId_MSG_DUNGEON_INVALID           DungeonMsgId = 0
+	DungeonMsgId_MSG_DUNGEON_GET_LIST          DungeonMsgId = 1100
+	DungeonMsgId_MSG_DUNGEON_GET_LIST_RESPONSE DungeonMsgId = 1101
+	DungeonMsgId_MSG_DUNGEON_ENTER             DungeonMsgId = 1102
+	DungeonMsgId_MSG_DUNGEON_ENTER_RESPONSE    DungeonMsgId = 1103
+	DungeonMsgId_MSG_DUNGEON_EXIT              DungeonMsgId = 1104
+	DungeonMsgId_MSG_DUNGEON_EXIT_RESPONSE     DungeonMsgId = 1105
+	DungeonMsgId_MSG_DUNGEON_COMPLETE          DungeonMsgId = 1106
+	DungeonMsgId_MSG_DUNGEON_COMPLETE_RESPONSE DungeonMsgId = 1107
+	DungeonMsgId_MSG_DUNGEON_FAIL              DungeonMsgId = 1108
+)
+
+// Enum value maps for DungeonMsgId.
+var (
+	DungeonMsgId_name = map[int32]string{
+		0:    "MSG_DUNGEON_INVALID",
+		1100: "MSG_DUNGEON_GET_LIST",
+		1101: "MSG_DUNGEON_GET_LIST_RESPONSE",
+		1102: "MSG_DUNGEON_ENTER",
+		1103: "MSG_DUNGEON_ENTER_RESPONSE",
+		1104: "MSG_DUNGEON_EXIT",
+		1105: "MSG_DUNGEON_EXIT_RESPONSE",
+		1106: "MSG_DUNGEON_COMPLETE",
+		1107: "MSG_DUNGEON_COMPLETE_RESPONSE",
+		1108: "MSG_DUNGEON_FAIL",
+	}
+	DungeonMsgId_value = map[string]int32{
+		"MSG_DUNGEON_INVALID":           0,
+		"MSG_DUNGEON_GET_LIST":          1100,
+		"MSG_DUNGEON_GET_LIST_RESPONSE": 1101,
+		"MSG_DUNGEON_ENTER":             1102,
+		"MSG_DUNGEON_ENTER_RESPONSE":    1103,
+		"MSG_DUNGEON_EXIT":              1104,
+		"MSG_DUNGEON_EXIT_RESPONSE":     1105,
+		"MSG_DUNGEON_COMPLETE":          1106,
+		"MSG_DUNGEON_COMPLETE_RESPONSE": 1107,
+		"MSG_DUNGEON_FAIL":              1108,
+	}
+)
+
+func (x DungeonMsgId) Enum() *DungeonMsgId {
+	p := new(DungeonMsgId)
+	*p = x
+	return p
+}
+
+func (x DungeonMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DungeonMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[11].Descriptor()
+}
+
+func (DungeonMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[11]
+}
+
+func (x DungeonMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DungeonMsgId.Descriptor instead.
+func (DungeonMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{11}
+}
+
+// 地图消息 1200-1299
 type MapMsgId int32
 
 const (
-	MapMsgId_MSG_MAP_INVALID      MapMsgId = 0
-	MapMsgId_MSG_MAP_ENTER        MapMsgId = 4001
-	MapMsgId_MSG_MAP_LEAVE        MapMsgId = 4002
-	MapMsgId_MSG_MAP_MOVE         MapMsgId = 4003
-	MapMsgId_MSG_MAP_GET_PATH     MapMsgId = 4004
-	MapMsgId_MSG_MAP_GET_OBJECTS  MapMsgId = 4005
-	MapMsgId_MSG_MAP_SYNC_OBJECTS MapMsgId = 4006
-	MapMsgId_MSG_MAP_AOI_ENTER    MapMsgId = 4007
-	MapMsgId_MSG_MAP_AOI_LEAVE    MapMsgId = 4008
-	MapMsgId_MSG_MAP_MOVE_SYNC    MapMsgId = 4009
+	MapMsgId_MSG_MAP_INVALID              MapMsgId = 0
+	MapMsgId_MSG_MAP_ENTER                MapMsgId = 1200
+	MapMsgId_MSG_MAP_ENTER_RESPONSE       MapMsgId = 1201
+	MapMsgId_MSG_MAP_LEAVE                MapMsgId = 1202
+	MapMsgId_MSG_MAP_LEAVE_RESPONSE       MapMsgId = 1203
+	MapMsgId_MSG_MAP_MOVE                 MapMsgId = 1204
+	MapMsgId_MSG_MAP_MOVE_RESPONSE        MapMsgId = 1205
+	MapMsgId_MSG_MAP_ATTACK               MapMsgId = 1206
+	MapMsgId_MSG_MAP_ATTACK_RESPONSE      MapMsgId = 1207
+	MapMsgId_MSG_MAP_SYNC                 MapMsgId = 1208
+	MapMsgId_MSG_MAP_SYNC_RESPONSE        MapMsgId = 1209
+	MapMsgId_MSG_MAP_TELEPORT             MapMsgId = 1210
+	MapMsgId_MSG_MAP_TELEPORT_RESPONSE    MapMsgId = 1211
+	MapMsgId_MSG_MAP_GET_OBJECTS          MapMsgId = 1212
+	MapMsgId_MSG_MAP_GET_OBJECTS_RESPONSE MapMsgId = 1213
 )
 
 // Enum value maps for MapMsgId.
 var (
 	MapMsgId_name = map[int32]string{
 		0:    "MSG_MAP_INVALID",
-		4001: "MSG_MAP_ENTER",
-		4002: "MSG_MAP_LEAVE",
-		4003: "MSG_MAP_MOVE",
-		4004: "MSG_MAP_GET_PATH",
-		4005: "MSG_MAP_GET_OBJECTS",
-		4006: "MSG_MAP_SYNC_OBJECTS",
-		4007: "MSG_MAP_AOI_ENTER",
-		4008: "MSG_MAP_AOI_LEAVE",
-		4009: "MSG_MAP_MOVE_SYNC",
+		1200: "MSG_MAP_ENTER",
+		1201: "MSG_MAP_ENTER_RESPONSE",
+		1202: "MSG_MAP_LEAVE",
+		1203: "MSG_MAP_LEAVE_RESPONSE",
+		1204: "MSG_MAP_MOVE",
+		1205: "MSG_MAP_MOVE_RESPONSE",
+		1206: "MSG_MAP_ATTACK",
+		1207: "MSG_MAP_ATTACK_RESPONSE",
+		1208: "MSG_MAP_SYNC",
+		1209: "MSG_MAP_SYNC_RESPONSE",
+		1210: "MSG_MAP_TELEPORT",
+		1211: "MSG_MAP_TELEPORT_RESPONSE",
+		1212: "MSG_MAP_GET_OBJECTS",
+		1213: "MSG_MAP_GET_OBJECTS_RESPONSE",
 	}
 	MapMsgId_value = map[string]int32{
-		"MSG_MAP_INVALID":      0,
-		"MSG_MAP_ENTER":        4001,
-		"MSG_MAP_LEAVE":        4002,
-		"MSG_MAP_MOVE":         4003,
-		"MSG_MAP_GET_PATH":     4004,
-		"MSG_MAP_GET_OBJECTS":  4005,
-		"MSG_MAP_SYNC_OBJECTS": 4006,
-		"MSG_MAP_AOI_ENTER":    4007,
-		"MSG_MAP_AOI_LEAVE":    4008,
-		"MSG_MAP_MOVE_SYNC":    4009,
+		"MSG_MAP_INVALID":              0,
+		"MSG_MAP_ENTER":                1200,
+		"MSG_MAP_ENTER_RESPONSE":       1201,
+		"MSG_MAP_LEAVE":                1202,
+		"MSG_MAP_LEAVE_RESPONSE":       1203,
+		"MSG_MAP_MOVE":                 1204,
+		"MSG_MAP_MOVE_RESPONSE":        1205,
+		"MSG_MAP_ATTACK":               1206,
+		"MSG_MAP_ATTACK_RESPONSE":      1207,
+		"MSG_MAP_SYNC":                 1208,
+		"MSG_MAP_SYNC_RESPONSE":        1209,
+		"MSG_MAP_TELEPORT":             1210,
+		"MSG_MAP_TELEPORT_RESPONSE":    1211,
+		"MSG_MAP_GET_OBJECTS":          1212,
+		"MSG_MAP_GET_OBJECTS_RESPONSE": 1213,
 	}
 )
 
@@ -482,11 +916,11 @@ func (x MapMsgId) String() string {
 }
 
 func (MapMsgId) Descriptor() protoreflect.EnumDescriptor {
-	return file_game_proto_enumTypes[5].Descriptor()
+	return file_game_proto_enumTypes[12].Descriptor()
 }
 
 func (MapMsgId) Type() protoreflect.EnumType {
-	return &file_game_proto_enumTypes[5]
+	return &file_game_proto_enumTypes[12]
 }
 
 func (x MapMsgId) Number() protoreflect.EnumNumber {
@@ -495,34 +929,480 @@ func (x MapMsgId) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MapMsgId.Descriptor instead.
 func (MapMsgId) EnumDescriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{5}
+	return file_game_proto_rawDescGZIP(), []int{12}
 }
 
-// 基础消息结构
-type Message struct {
+// AOI消息 1300-1399
+type AoiMsgId int32
+
+const (
+	AoiMsgId_MSG_AOI_INVALID AoiMsgId = 0
+	AoiMsgId_MSG_AOI_ENTER   AoiMsgId = 1300
+	AoiMsgId_MSG_AOI_LEAVE   AoiMsgId = 1301
+	AoiMsgId_MSG_AOI_MOVE    AoiMsgId = 1302
+	AoiMsgId_MSG_AOI_UPDATE  AoiMsgId = 1303
+)
+
+// Enum value maps for AoiMsgId.
+var (
+	AoiMsgId_name = map[int32]string{
+		0:    "MSG_AOI_INVALID",
+		1300: "MSG_AOI_ENTER",
+		1301: "MSG_AOI_LEAVE",
+		1302: "MSG_AOI_MOVE",
+		1303: "MSG_AOI_UPDATE",
+	}
+	AoiMsgId_value = map[string]int32{
+		"MSG_AOI_INVALID": 0,
+		"MSG_AOI_ENTER":   1300,
+		"MSG_AOI_LEAVE":   1301,
+		"MSG_AOI_MOVE":    1302,
+		"MSG_AOI_UPDATE":  1303,
+	}
+)
+
+func (x AoiMsgId) Enum() *AoiMsgId {
+	p := new(AoiMsgId)
+	*p = x
+	return p
+}
+
+func (x AoiMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AoiMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[13].Descriptor()
+}
+
+func (AoiMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[13]
+}
+
+func (x AoiMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AoiMsgId.Descriptor instead.
+func (AoiMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{13}
+}
+
+// 战斗消息 1400-1499
+type CombatMsgId int32
+
+const (
+	CombatMsgId_MSG_COMBAT_INVALID         CombatMsgId = 0
+	CombatMsgId_MSG_COMBAT_ATTACK          CombatMsgId = 1400
+	CombatMsgId_MSG_COMBAT_ATTACK_RESPONSE CombatMsgId = 1401
+	CombatMsgId_MSG_COMBAT_DAMAGE          CombatMsgId = 1402
+	CombatMsgId_MSG_COMBAT_HEAL            CombatMsgId = 1403
+	CombatMsgId_MSG_COMBAT_BUFF_APPLY      CombatMsgId = 1404
+	CombatMsgId_MSG_COMBAT_BUFF_REMOVE     CombatMsgId = 1405
+	CombatMsgId_MSG_COMBAT_DEATH           CombatMsgId = 1406
+	CombatMsgId_MSG_COMBAT_REVIVE          CombatMsgId = 1407
+)
+
+// Enum value maps for CombatMsgId.
+var (
+	CombatMsgId_name = map[int32]string{
+		0:    "MSG_COMBAT_INVALID",
+		1400: "MSG_COMBAT_ATTACK",
+		1401: "MSG_COMBAT_ATTACK_RESPONSE",
+		1402: "MSG_COMBAT_DAMAGE",
+		1403: "MSG_COMBAT_HEAL",
+		1404: "MSG_COMBAT_BUFF_APPLY",
+		1405: "MSG_COMBAT_BUFF_REMOVE",
+		1406: "MSG_COMBAT_DEATH",
+		1407: "MSG_COMBAT_REVIVE",
+	}
+	CombatMsgId_value = map[string]int32{
+		"MSG_COMBAT_INVALID":         0,
+		"MSG_COMBAT_ATTACK":          1400,
+		"MSG_COMBAT_ATTACK_RESPONSE": 1401,
+		"MSG_COMBAT_DAMAGE":          1402,
+		"MSG_COMBAT_HEAL":            1403,
+		"MSG_COMBAT_BUFF_APPLY":      1404,
+		"MSG_COMBAT_BUFF_REMOVE":     1405,
+		"MSG_COMBAT_DEATH":           1406,
+		"MSG_COMBAT_REVIVE":          1407,
+	}
+)
+
+func (x CombatMsgId) Enum() *CombatMsgId {
+	p := new(CombatMsgId)
+	*p = x
+	return p
+}
+
+func (x CombatMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CombatMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[14].Descriptor()
+}
+
+func (CombatMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[14]
+}
+
+func (x CombatMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CombatMsgId.Descriptor instead.
+func (CombatMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{14}
+}
+
+// 活动消息 1500-1599
+type ActivityMsgId int32
+
+const (
+	ActivityMsgId_MSG_ACTIVITY_INVALID             ActivityMsgId = 0
+	ActivityMsgId_MSG_ACTIVITY_GET_LIST            ActivityMsgId = 1500
+	ActivityMsgId_MSG_ACTIVITY_GET_LIST_RESPONSE   ActivityMsgId = 1501
+	ActivityMsgId_MSG_ACTIVITY_JOIN                ActivityMsgId = 1502
+	ActivityMsgId_MSG_ACTIVITY_JOIN_RESPONSE       ActivityMsgId = 1503
+	ActivityMsgId_MSG_ACTIVITY_PROGRESS            ActivityMsgId = 1504
+	ActivityMsgId_MSG_ACTIVITY_PROGRESS_RESPONSE   ActivityMsgId = 1505
+	ActivityMsgId_MSG_ACTIVITY_GET_REWARD          ActivityMsgId = 1506
+	ActivityMsgId_MSG_ACTIVITY_GET_REWARD_RESPONSE ActivityMsgId = 1507
+)
+
+// Enum value maps for ActivityMsgId.
+var (
+	ActivityMsgId_name = map[int32]string{
+		0:    "MSG_ACTIVITY_INVALID",
+		1500: "MSG_ACTIVITY_GET_LIST",
+		1501: "MSG_ACTIVITY_GET_LIST_RESPONSE",
+		1502: "MSG_ACTIVITY_JOIN",
+		1503: "MSG_ACTIVITY_JOIN_RESPONSE",
+		1504: "MSG_ACTIVITY_PROGRESS",
+		1505: "MSG_ACTIVITY_PROGRESS_RESPONSE",
+		1506: "MSG_ACTIVITY_GET_REWARD",
+		1507: "MSG_ACTIVITY_GET_REWARD_RESPONSE",
+	}
+	ActivityMsgId_value = map[string]int32{
+		"MSG_ACTIVITY_INVALID":             0,
+		"MSG_ACTIVITY_GET_LIST":            1500,
+		"MSG_ACTIVITY_GET_LIST_RESPONSE":   1501,
+		"MSG_ACTIVITY_JOIN":                1502,
+		"MSG_ACTIVITY_JOIN_RESPONSE":       1503,
+		"MSG_ACTIVITY_PROGRESS":            1504,
+		"MSG_ACTIVITY_PROGRESS_RESPONSE":   1505,
+		"MSG_ACTIVITY_GET_REWARD":          1506,
+		"MSG_ACTIVITY_GET_REWARD_RESPONSE": 1507,
+	}
+)
+
+func (x ActivityMsgId) Enum() *ActivityMsgId {
+	p := new(ActivityMsgId)
+	*p = x
+	return p
+}
+
+func (x ActivityMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ActivityMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[15].Descriptor()
+}
+
+func (ActivityMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[15]
+}
+
+func (x ActivityMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ActivityMsgId.Descriptor instead.
+func (ActivityMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{15}
+}
+
+// 交易/拍卖消息 1600-1699
+type TradeMsgId int32
+
+const (
+	TradeMsgId_MSG_TRADE_INVALID             TradeMsgId = 0
+	TradeMsgId_MSG_TRADE_REQUEST             TradeMsgId = 1600
+	TradeMsgId_MSG_TRADE_REQUEST_RESPONSE    TradeMsgId = 1601
+	TradeMsgId_MSG_TRADE_ACCEPT              TradeMsgId = 1602
+	TradeMsgId_MSG_TRADE_ACCEPT_RESPONSE     TradeMsgId = 1603
+	TradeMsgId_MSG_TRADE_PUT_ITEM            TradeMsgId = 1604
+	TradeMsgId_MSG_TRADE_PUT_ITEM_RESPONSE   TradeMsgId = 1605
+	TradeMsgId_MSG_TRADE_CONFIRM             TradeMsgId = 1606
+	TradeMsgId_MSG_TRADE_CONFIRM_RESPONSE    TradeMsgId = 1607
+	TradeMsgId_MSG_TRADE_CANCEL              TradeMsgId = 1608
+	TradeMsgId_MSG_TRADE_CANCEL_RESPONSE     TradeMsgId = 1609
+	TradeMsgId_MSG_AUCTION_GET_LIST          TradeMsgId = 1610
+	TradeMsgId_MSG_AUCTION_GET_LIST_RESPONSE TradeMsgId = 1611
+	TradeMsgId_MSG_AUCTION_CREATE            TradeMsgId = 1612
+	TradeMsgId_MSG_AUCTION_CREATE_RESPONSE   TradeMsgId = 1613
+	TradeMsgId_MSG_AUCTION_BID               TradeMsgId = 1614
+	TradeMsgId_MSG_AUCTION_BID_RESPONSE      TradeMsgId = 1615
+)
+
+// Enum value maps for TradeMsgId.
+var (
+	TradeMsgId_name = map[int32]string{
+		0:    "MSG_TRADE_INVALID",
+		1600: "MSG_TRADE_REQUEST",
+		1601: "MSG_TRADE_REQUEST_RESPONSE",
+		1602: "MSG_TRADE_ACCEPT",
+		1603: "MSG_TRADE_ACCEPT_RESPONSE",
+		1604: "MSG_TRADE_PUT_ITEM",
+		1605: "MSG_TRADE_PUT_ITEM_RESPONSE",
+		1606: "MSG_TRADE_CONFIRM",
+		1607: "MSG_TRADE_CONFIRM_RESPONSE",
+		1608: "MSG_TRADE_CANCEL",
+		1609: "MSG_TRADE_CANCEL_RESPONSE",
+		1610: "MSG_AUCTION_GET_LIST",
+		1611: "MSG_AUCTION_GET_LIST_RESPONSE",
+		1612: "MSG_AUCTION_CREATE",
+		1613: "MSG_AUCTION_CREATE_RESPONSE",
+		1614: "MSG_AUCTION_BID",
+		1615: "MSG_AUCTION_BID_RESPONSE",
+	}
+	TradeMsgId_value = map[string]int32{
+		"MSG_TRADE_INVALID":             0,
+		"MSG_TRADE_REQUEST":             1600,
+		"MSG_TRADE_REQUEST_RESPONSE":    1601,
+		"MSG_TRADE_ACCEPT":              1602,
+		"MSG_TRADE_ACCEPT_RESPONSE":     1603,
+		"MSG_TRADE_PUT_ITEM":            1604,
+		"MSG_TRADE_PUT_ITEM_RESPONSE":   1605,
+		"MSG_TRADE_CONFIRM":             1606,
+		"MSG_TRADE_CONFIRM_RESPONSE":    1607,
+		"MSG_TRADE_CANCEL":              1608,
+		"MSG_TRADE_CANCEL_RESPONSE":     1609,
+		"MSG_AUCTION_GET_LIST":          1610,
+		"MSG_AUCTION_GET_LIST_RESPONSE": 1611,
+		"MSG_AUCTION_CREATE":            1612,
+		"MSG_AUCTION_CREATE_RESPONSE":   1613,
+		"MSG_AUCTION_BID":               1614,
+		"MSG_AUCTION_BID_RESPONSE":      1615,
+	}
+)
+
+func (x TradeMsgId) Enum() *TradeMsgId {
+	p := new(TradeMsgId)
+	*p = x
+	return p
+}
+
+func (x TradeMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TradeMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[16].Descriptor()
+}
+
+func (TradeMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[16]
+}
+
+func (x TradeMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TradeMsgId.Descriptor instead.
+func (TradeMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{16}
+}
+
+// 组队消息 1700-1799
+type TeamMsgId int32
+
+const (
+	TeamMsgId_MSG_TEAM_INVALID          TeamMsgId = 0
+	TeamMsgId_MSG_TEAM_CREATE           TeamMsgId = 1700
+	TeamMsgId_MSG_TEAM_CREATE_RESPONSE  TeamMsgId = 1701
+	TeamMsgId_MSG_TEAM_INVITE           TeamMsgId = 1702
+	TeamMsgId_MSG_TEAM_INVITE_RESPONSE  TeamMsgId = 1703
+	TeamMsgId_MSG_TEAM_JOIN             TeamMsgId = 1704
+	TeamMsgId_MSG_TEAM_JOIN_RESPONSE    TeamMsgId = 1705
+	TeamMsgId_MSG_TEAM_LEAVE            TeamMsgId = 1706
+	TeamMsgId_MSG_TEAM_LEAVE_RESPONSE   TeamMsgId = 1707
+	TeamMsgId_MSG_TEAM_KICK             TeamMsgId = 1708
+	TeamMsgId_MSG_TEAM_KICK_RESPONSE    TeamMsgId = 1709
+	TeamMsgId_MSG_TEAM_DISBAND          TeamMsgId = 1710
+	TeamMsgId_MSG_TEAM_DISBAND_RESPONSE TeamMsgId = 1711
+	TeamMsgId_MSG_TEAM_INFO             TeamMsgId = 1712
+	TeamMsgId_MSG_TEAM_INFO_RESPONSE    TeamMsgId = 1713
+)
+
+// Enum value maps for TeamMsgId.
+var (
+	TeamMsgId_name = map[int32]string{
+		0:    "MSG_TEAM_INVALID",
+		1700: "MSG_TEAM_CREATE",
+		1701: "MSG_TEAM_CREATE_RESPONSE",
+		1702: "MSG_TEAM_INVITE",
+		1703: "MSG_TEAM_INVITE_RESPONSE",
+		1704: "MSG_TEAM_JOIN",
+		1705: "MSG_TEAM_JOIN_RESPONSE",
+		1706: "MSG_TEAM_LEAVE",
+		1707: "MSG_TEAM_LEAVE_RESPONSE",
+		1708: "MSG_TEAM_KICK",
+		1709: "MSG_TEAM_KICK_RESPONSE",
+		1710: "MSG_TEAM_DISBAND",
+		1711: "MSG_TEAM_DISBAND_RESPONSE",
+		1712: "MSG_TEAM_INFO",
+		1713: "MSG_TEAM_INFO_RESPONSE",
+	}
+	TeamMsgId_value = map[string]int32{
+		"MSG_TEAM_INVALID":          0,
+		"MSG_TEAM_CREATE":           1700,
+		"MSG_TEAM_CREATE_RESPONSE":  1701,
+		"MSG_TEAM_INVITE":           1702,
+		"MSG_TEAM_INVITE_RESPONSE":  1703,
+		"MSG_TEAM_JOIN":             1704,
+		"MSG_TEAM_JOIN_RESPONSE":    1705,
+		"MSG_TEAM_LEAVE":            1706,
+		"MSG_TEAM_LEAVE_RESPONSE":   1707,
+		"MSG_TEAM_KICK":             1708,
+		"MSG_TEAM_KICK_RESPONSE":    1709,
+		"MSG_TEAM_DISBAND":          1710,
+		"MSG_TEAM_DISBAND_RESPONSE": 1711,
+		"MSG_TEAM_INFO":             1712,
+		"MSG_TEAM_INFO_RESPONSE":    1713,
+	}
+)
+
+func (x TeamMsgId) Enum() *TeamMsgId {
+	p := new(TeamMsgId)
+	*p = x
+	return p
+}
+
+func (x TeamMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TeamMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[17].Descriptor()
+}
+
+func (TeamMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[17]
+}
+
+func (x TeamMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TeamMsgId.Descriptor instead.
+func (TeamMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{17}
+}
+
+// 好友消息 1800-1899
+type FriendMsgId int32
+
+const (
+	FriendMsgId_MSG_FRIEND_INVALID           FriendMsgId = 0
+	FriendMsgId_MSG_FRIEND_GET_LIST          FriendMsgId = 1800
+	FriendMsgId_MSG_FRIEND_GET_LIST_RESPONSE FriendMsgId = 1801
+	FriendMsgId_MSG_FRIEND_ADD               FriendMsgId = 1802
+	FriendMsgId_MSG_FRIEND_ADD_RESPONSE      FriendMsgId = 1803
+	FriendMsgId_MSG_FRIEND_REMOVE            FriendMsgId = 1804
+	FriendMsgId_MSG_FRIEND_REMOVE_RESPONSE   FriendMsgId = 1805
+	FriendMsgId_MSG_FRIEND_APPLY             FriendMsgId = 1806
+	FriendMsgId_MSG_FRIEND_APPLY_RESPONSE    FriendMsgId = 1807
+	FriendMsgId_MSG_FRIEND_SEARCH            FriendMsgId = 1808
+	FriendMsgId_MSG_FRIEND_SEARCH_RESPONSE   FriendMsgId = 1809
+)
+
+// Enum value maps for FriendMsgId.
+var (
+	FriendMsgId_name = map[int32]string{
+		0:    "MSG_FRIEND_INVALID",
+		1800: "MSG_FRIEND_GET_LIST",
+		1801: "MSG_FRIEND_GET_LIST_RESPONSE",
+		1802: "MSG_FRIEND_ADD",
+		1803: "MSG_FRIEND_ADD_RESPONSE",
+		1804: "MSG_FRIEND_REMOVE",
+		1805: "MSG_FRIEND_REMOVE_RESPONSE",
+		1806: "MSG_FRIEND_APPLY",
+		1807: "MSG_FRIEND_APPLY_RESPONSE",
+		1808: "MSG_FRIEND_SEARCH",
+		1809: "MSG_FRIEND_SEARCH_RESPONSE",
+	}
+	FriendMsgId_value = map[string]int32{
+		"MSG_FRIEND_INVALID":           0,
+		"MSG_FRIEND_GET_LIST":          1800,
+		"MSG_FRIEND_GET_LIST_RESPONSE": 1801,
+		"MSG_FRIEND_ADD":               1802,
+		"MSG_FRIEND_ADD_RESPONSE":      1803,
+		"MSG_FRIEND_REMOVE":            1804,
+		"MSG_FRIEND_REMOVE_RESPONSE":   1805,
+		"MSG_FRIEND_APPLY":             1806,
+		"MSG_FRIEND_APPLY_RESPONSE":    1807,
+		"MSG_FRIEND_SEARCH":            1808,
+		"MSG_FRIEND_SEARCH_RESPONSE":   1809,
+	}
+)
+
+func (x FriendMsgId) Enum() *FriendMsgId {
+	p := new(FriendMsgId)
+	*p = x
+	return p
+}
+
+func (x FriendMsgId) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FriendMsgId) Descriptor() protoreflect.EnumDescriptor {
+	return file_game_proto_enumTypes[18].Descriptor()
+}
+
+func (FriendMsgId) Type() protoreflect.EnumType {
+	return &file_game_proto_enumTypes[18]
+}
+
+func (x FriendMsgId) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FriendMsgId.Descriptor instead.
+func (FriendMsgId) EnumDescriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{18}
+}
+
+// 客户端到服务器的消息头
+type ClientMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MsgId         uint32                 `protobuf:"varint,1,opt,name=msg_id,json=msgId,proto3" json:"msg_id,omitempty"`
 	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
 	SessionId     int64                  `protobuf:"varint,3,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
 	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	Token         string                 `protobuf:"bytes,6,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Message) Reset() {
-	*x = Message{}
+func (x *ClientMessage) Reset() {
+	*x = ClientMessage{}
 	mi := &file_game_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Message) String() string {
+func (x *ClientMessage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Message) ProtoMessage() {}
+func (*ClientMessage) ProtoMessage() {}
 
-func (x *Message) ProtoReflect() protoreflect.Message {
+func (x *ClientMessage) ProtoReflect() protoreflect.Message {
 	mi := &file_game_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -534,64 +1414,79 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Message.ProtoReflect.Descriptor instead.
-func (*Message) Descriptor() ([]byte, []int) {
+// Deprecated: Use ClientMessage.ProtoReflect.Descriptor instead.
+func (*ClientMessage) Descriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *Message) GetMsgId() uint32 {
+func (x *ClientMessage) GetMsgId() uint32 {
 	if x != nil {
 		return x.MsgId
 	}
 	return 0
 }
 
-func (x *Message) GetPlayerId() int64 {
+func (x *ClientMessage) GetPlayerId() int64 {
 	if x != nil {
 		return x.PlayerId
 	}
 	return 0
 }
 
-func (x *Message) GetSessionId() int64 {
+func (x *ClientMessage) GetSessionId() int64 {
 	if x != nil {
 		return x.SessionId
 	}
 	return 0
 }
 
-func (x *Message) GetData() []byte {
+func (x *ClientMessage) GetData() []byte {
 	if x != nil {
 		return x.Data
 	}
 	return nil
 }
 
-// 响应消息结构
-type Response struct {
+func (x *ClientMessage) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ClientMessage) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+// 服务器到客户端的消息头
+type ServerMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MsgId         uint32                 `protobuf:"varint,1,opt,name=msg_id,json=msgId,proto3" json:"msg_id,omitempty"`
 	Result        int32                  `protobuf:"varint,2,opt,name=result,proto3" json:"result,omitempty"`
 	ErrorMsg      string                 `protobuf:"bytes,3,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
 	Data          []byte                 `protobuf:"bytes,4,opt,name=data,proto3" json:"data,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Response) Reset() {
-	*x = Response{}
+func (x *ServerMessage) Reset() {
+	*x = ServerMessage{}
 	mi := &file_game_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Response) String() string {
+func (x *ServerMessage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Response) ProtoMessage() {}
+func (*ServerMessage) ProtoMessage() {}
 
-func (x *Response) ProtoReflect() protoreflect.Message {
+func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 	mi := &file_game_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -603,65 +1498,68 @@ func (x *Response) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Response.ProtoReflect.Descriptor instead.
-func (*Response) Descriptor() ([]byte, []int) {
+// Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
+func (*ServerMessage) Descriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Response) GetMsgId() uint32 {
+func (x *ServerMessage) GetMsgId() uint32 {
 	if x != nil {
 		return x.MsgId
 	}
 	return 0
 }
 
-func (x *Response) GetResult() int32 {
+func (x *ServerMessage) GetResult() int32 {
 	if x != nil {
 		return x.Result
 	}
 	return 0
 }
 
-func (x *Response) GetErrorMsg() string {
+func (x *ServerMessage) GetErrorMsg() string {
 	if x != nil {
 		return x.ErrorMsg
 	}
 	return ""
 }
 
-func (x *Response) GetData() []byte {
+func (x *ServerMessage) GetData() []byte {
 	if x != nil {
 		return x.Data
 	}
 	return nil
 }
 
-// 玩家信息
-type PlayerInfo struct {
+func (x *ServerMessage) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+// 心跳请求
+type HeartbeatRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Level         int32                  `protobuf:"varint,3,opt,name=level,proto3" json:"level,omitempty"`
-	Sex           int32                  `protobuf:"varint,4,opt,name=sex,proto3" json:"sex,omitempty"`
-	Age           int32                  `protobuf:"varint,5,opt,name=age,proto3" json:"age,omitempty"`
+	ClientTime    int64                  `protobuf:"varint,1,opt,name=client_time,json=clientTime,proto3" json:"client_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PlayerInfo) Reset() {
-	*x = PlayerInfo{}
+func (x *HeartbeatRequest) Reset() {
+	*x = HeartbeatRequest{}
 	mi := &file_game_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PlayerInfo) String() string {
+func (x *HeartbeatRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PlayerInfo) ProtoMessage() {}
+func (*HeartbeatRequest) ProtoMessage() {}
 
-func (x *PlayerInfo) ProtoReflect() protoreflect.Message {
+func (x *HeartbeatRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_game_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -673,70 +1571,41 @@ func (x *PlayerInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PlayerInfo.ProtoReflect.Descriptor instead.
-func (*PlayerInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use HeartbeatRequest.ProtoReflect.Descriptor instead.
+func (*HeartbeatRequest) Descriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PlayerInfo) GetPlayerId() int64 {
+func (x *HeartbeatRequest) GetClientTime() int64 {
 	if x != nil {
-		return x.PlayerId
+		return x.ClientTime
 	}
 	return 0
 }
 
-func (x *PlayerInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PlayerInfo) GetLevel() int32 {
-	if x != nil {
-		return x.Level
-	}
-	return 0
-}
-
-func (x *PlayerInfo) GetSex() int32 {
-	if x != nil {
-		return x.Sex
-	}
-	return 0
-}
-
-func (x *PlayerInfo) GetAge() int32 {
-	if x != nil {
-		return x.Age
-	}
-	return 0
-}
-
-// 玩家创建请求
-type PlayerCreateRequest struct {
+// 心跳响应
+type HeartbeatResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Sex           int32                  `protobuf:"varint,2,opt,name=sex,proto3" json:"sex,omitempty"`
-	Age           int32                  `protobuf:"varint,3,opt,name=age,proto3" json:"age,omitempty"`
+	ClientTime    int64                  `protobuf:"varint,1,opt,name=client_time,json=clientTime,proto3" json:"client_time,omitempty"`
+	ServerTime    int64                  `protobuf:"varint,2,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PlayerCreateRequest) Reset() {
-	*x = PlayerCreateRequest{}
+func (x *HeartbeatResponse) Reset() {
+	*x = HeartbeatResponse{}
 	mi := &file_game_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PlayerCreateRequest) String() string {
+func (x *HeartbeatResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PlayerCreateRequest) ProtoMessage() {}
+func (*HeartbeatResponse) ProtoMessage() {}
 
-func (x *PlayerCreateRequest) ProtoReflect() protoreflect.Message {
+func (x *HeartbeatResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_game_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -748,524 +1617,21 @@ func (x *PlayerCreateRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PlayerCreateRequest.ProtoReflect.Descriptor instead.
-func (*PlayerCreateRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use HeartbeatResponse.ProtoReflect.Descriptor instead.
+func (*HeartbeatResponse) Descriptor() ([]byte, []int) {
 	return file_game_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PlayerCreateRequest) GetName() string {
+func (x *HeartbeatResponse) GetClientTime() int64 {
 	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PlayerCreateRequest) GetSex() int32 {
-	if x != nil {
-		return x.Sex
+		return x.ClientTime
 	}
 	return 0
 }
 
-func (x *PlayerCreateRequest) GetAge() int32 {
+func (x *HeartbeatResponse) GetServerTime() int64 {
 	if x != nil {
-		return x.Age
-	}
-	return 0
-}
-
-// 玩家创建响应
-type PlayerCreateResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Player        *PlayerInfo            `protobuf:"bytes,3,opt,name=player,proto3" json:"player,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerCreateResponse) Reset() {
-	*x = PlayerCreateResponse{}
-	mi := &file_game_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerCreateResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerCreateResponse) ProtoMessage() {}
-
-func (x *PlayerCreateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerCreateResponse.ProtoReflect.Descriptor instead.
-func (*PlayerCreateResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *PlayerCreateResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PlayerCreateResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *PlayerCreateResponse) GetPlayer() *PlayerInfo {
-	if x != nil {
-		return x.Player
-	}
-	return nil
-}
-
-// 玩家登录请求
-type PlayerLoginRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerLoginRequest) Reset() {
-	*x = PlayerLoginRequest{}
-	mi := &file_game_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerLoginRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerLoginRequest) ProtoMessage() {}
-
-func (x *PlayerLoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerLoginRequest.ProtoReflect.Descriptor instead.
-func (*PlayerLoginRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *PlayerLoginRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-// 玩家登录响应
-type PlayerLoginResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Level         int32                  `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
-	Gold          int64                  `protobuf:"varint,6,opt,name=gold,proto3" json:"gold,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerLoginResponse) Reset() {
-	*x = PlayerLoginResponse{}
-	mi := &file_game_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerLoginResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerLoginResponse) ProtoMessage() {}
-
-func (x *PlayerLoginResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerLoginResponse.ProtoReflect.Descriptor instead.
-func (*PlayerLoginResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *PlayerLoginResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PlayerLoginResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *PlayerLoginResponse) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *PlayerLoginResponse) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PlayerLoginResponse) GetLevel() int32 {
-	if x != nil {
-		return x.Level
-	}
-	return 0
-}
-
-func (x *PlayerLoginResponse) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-// 玩家获取信息请求
-type PlayerGetInfoRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerGetInfoRequest) Reset() {
-	*x = PlayerGetInfoRequest{}
-	mi := &file_game_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerGetInfoRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerGetInfoRequest) ProtoMessage() {}
-
-func (x *PlayerGetInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerGetInfoRequest.ProtoReflect.Descriptor instead.
-func (*PlayerGetInfoRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *PlayerGetInfoRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-// 玩家获取信息响应
-type PlayerGetInfoResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	PlayerInfo    *PlayerBasicInfo       `protobuf:"bytes,3,opt,name=player_info,json=playerInfo,proto3" json:"player_info,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerGetInfoResponse) Reset() {
-	*x = PlayerGetInfoResponse{}
-	mi := &file_game_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerGetInfoResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerGetInfoResponse) ProtoMessage() {}
-
-func (x *PlayerGetInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerGetInfoResponse.ProtoReflect.Descriptor instead.
-func (*PlayerGetInfoResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *PlayerGetInfoResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PlayerGetInfoResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *PlayerGetInfoResponse) GetPlayerInfo() *PlayerBasicInfo {
-	if x != nil {
-		return x.PlayerInfo
-	}
-	return nil
-}
-
-// 玩家登出请求
-type PlayerLogoutRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerLogoutRequest) Reset() {
-	*x = PlayerLogoutRequest{}
-	mi := &file_game_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerLogoutRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerLogoutRequest) ProtoMessage() {}
-
-func (x *PlayerLogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerLogoutRequest.ProtoReflect.Descriptor instead.
-func (*PlayerLogoutRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *PlayerLogoutRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-// 玩家登出响应
-type PlayerLogoutResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerLogoutResponse) Reset() {
-	*x = PlayerLogoutResponse{}
-	mi := &file_game_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerLogoutResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerLogoutResponse) ProtoMessage() {}
-
-func (x *PlayerLogoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerLogoutResponse.ProtoReflect.Descriptor instead.
-func (*PlayerLogoutResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *PlayerLogoutResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *PlayerLogoutResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-// 玩家基础信息
-type PlayerBasicInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Level         int32                  `protobuf:"varint,3,opt,name=level,proto3" json:"level,omitempty"`
-	Exp           int64                  `protobuf:"varint,4,opt,name=exp,proto3" json:"exp,omitempty"`
-	Gold          int64                  `protobuf:"varint,5,opt,name=gold,proto3" json:"gold,omitempty"`
-	VipLevel      int32                  `protobuf:"varint,6,opt,name=vip_level,json=vipLevel,proto3" json:"vip_level,omitempty"`
-	ServerId      int32                  `protobuf:"varint,7,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
-	CreateTime    int64                  `protobuf:"varint,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PlayerBasicInfo) Reset() {
-	*x = PlayerBasicInfo{}
-	mi := &file_game_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PlayerBasicInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PlayerBasicInfo) ProtoMessage() {}
-
-func (x *PlayerBasicInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PlayerBasicInfo.ProtoReflect.Descriptor instead.
-func (*PlayerBasicInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *PlayerBasicInfo) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PlayerBasicInfo) GetLevel() int32 {
-	if x != nil {
-		return x.Level
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetVipLevel() int32 {
-	if x != nil {
-		return x.VipLevel
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetServerId() int32 {
-	if x != nil {
-		return x.ServerId
-	}
-	return 0
-}
-
-func (x *PlayerBasicInfo) GetCreateTime() int64 {
-	if x != nil {
-		return x.CreateTime
+		return x.ServerTime
 	}
 	return 0
 }
@@ -1274,20 +1640,20 @@ func (x *PlayerBasicInfo) GetCreateTime() int64 {
 type ItemInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	ItemType      int32                  `protobuf:"varint,2,opt,name=item_type,json=itemType,proto3" json:"item_type,omitempty"`
-	ItemName      string                 `protobuf:"bytes,3,opt,name=item_name,json=itemName,proto3" json:"item_name,omitempty"`
-	ItemCount     int32                  `protobuf:"varint,4,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
-	ItemLevel     int32                  `protobuf:"varint,5,opt,name=item_level,json=itemLevel,proto3" json:"item_level,omitempty"`
-	ItemQuality   int32                  `protobuf:"varint,6,opt,name=item_quality,json=itemQuality,proto3" json:"item_quality,omitempty"`
-	BindType      int32                  `protobuf:"varint,7,opt,name=bind_type,json=bindType,proto3" json:"bind_type,omitempty"`
-	Position      int32                  `protobuf:"varint,8,opt,name=position,proto3" json:"position,omitempty"`
+	ConfigId      int32                  `protobuf:"varint,2,opt,name=config_id,json=configId,proto3" json:"config_id,omitempty"`
+	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	Level         int32                  `protobuf:"varint,4,opt,name=level,proto3" json:"level,omitempty"`
+	Quality       int32                  `protobuf:"varint,5,opt,name=quality,proto3" json:"quality,omitempty"`
+	BindType      int32                  `protobuf:"varint,6,opt,name=bind_type,json=bindType,proto3" json:"bind_type,omitempty"`
+	Position      int32                  `protobuf:"varint,7,opt,name=position,proto3" json:"position,omitempty"`
+	Attributes    []*ItemAttribute       `protobuf:"bytes,8,rep,name=attributes,proto3" json:"attributes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ItemInfo) Reset() {
 	*x = ItemInfo{}
-	mi := &file_game_proto_msgTypes[12]
+	mi := &file_game_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1299,7 +1665,7 @@ func (x *ItemInfo) String() string {
 func (*ItemInfo) ProtoMessage() {}
 
 func (x *ItemInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[12]
+	mi := &file_game_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1312,7 +1678,7 @@ func (x *ItemInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ItemInfo.ProtoReflect.Descriptor instead.
 func (*ItemInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{12}
+	return file_game_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ItemInfo) GetItemId() int64 {
@@ -1322,37 +1688,30 @@ func (x *ItemInfo) GetItemId() int64 {
 	return 0
 }
 
-func (x *ItemInfo) GetItemType() int32 {
+func (x *ItemInfo) GetConfigId() int32 {
 	if x != nil {
-		return x.ItemType
+		return x.ConfigId
 	}
 	return 0
 }
 
-func (x *ItemInfo) GetItemName() string {
+func (x *ItemInfo) GetCount() int32 {
 	if x != nil {
-		return x.ItemName
-	}
-	return ""
-}
-
-func (x *ItemInfo) GetItemCount() int32 {
-	if x != nil {
-		return x.ItemCount
+		return x.Count
 	}
 	return 0
 }
 
-func (x *ItemInfo) GetItemLevel() int32 {
+func (x *ItemInfo) GetLevel() int32 {
 	if x != nil {
-		return x.ItemLevel
+		return x.Level
 	}
 	return 0
 }
 
-func (x *ItemInfo) GetItemQuality() int32 {
+func (x *ItemInfo) GetQuality() int32 {
 	if x != nil {
-		return x.ItemQuality
+		return x.Quality
 	}
 	return 0
 }
@@ -1371,37 +1730,37 @@ func (x *ItemInfo) GetPosition() int32 {
 	return 0
 }
 
-// 任务信息
-type TaskInfo struct {
+func (x *ItemInfo) GetAttributes() []*ItemAttribute {
+	if x != nil {
+		return x.Attributes
+	}
+	return nil
+}
+
+// 物品属性
+type ItemAttribute struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	TaskId        int64                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
-	TaskType      int32                  `protobuf:"varint,2,opt,name=task_type,json=taskType,proto3" json:"task_type,omitempty"`
-	TaskName      string                 `protobuf:"bytes,3,opt,name=task_name,json=taskName,proto3" json:"task_name,omitempty"`
-	TaskDesc      string                 `protobuf:"bytes,4,opt,name=task_desc,json=taskDesc,proto3" json:"task_desc,omitempty"`
-	Status        int32                  `protobuf:"varint,5,opt,name=status,proto3" json:"status,omitempty"`
-	Progress      []int32                `protobuf:"varint,6,rep,packed,name=progress,proto3" json:"progress,omitempty"`
-	Rewards       []*ItemInfo            `protobuf:"bytes,7,rep,name=rewards,proto3" json:"rewards,omitempty"`
-	AcceptTime    int64                  `protobuf:"varint,8,opt,name=accept_time,json=acceptTime,proto3" json:"accept_time,omitempty"`
-	CompleteTime  int64                  `protobuf:"varint,9,opt,name=complete_time,json=completeTime,proto3" json:"complete_time,omitempty"`
+	AttrId        int32                  `protobuf:"varint,1,opt,name=attr_id,json=attrId,proto3" json:"attr_id,omitempty"`
+	AttrValue     int64                  `protobuf:"varint,2,opt,name=attr_value,json=attrValue,proto3" json:"attr_value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *TaskInfo) Reset() {
-	*x = TaskInfo{}
-	mi := &file_game_proto_msgTypes[13]
+func (x *ItemAttribute) Reset() {
+	*x = ItemAttribute{}
+	mi := &file_game_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *TaskInfo) String() string {
+func (x *ItemAttribute) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*TaskInfo) ProtoMessage() {}
+func (*ItemAttribute) ProtoMessage() {}
 
-func (x *TaskInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[13]
+func (x *ItemAttribute) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1412,90 +1771,39 @@ func (x *TaskInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use TaskInfo.ProtoReflect.Descriptor instead.
-func (*TaskInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{13}
+// Deprecated: Use ItemAttribute.ProtoReflect.Descriptor instead.
+func (*ItemAttribute) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *TaskInfo) GetTaskId() int64 {
+func (x *ItemAttribute) GetAttrId() int32 {
 	if x != nil {
-		return x.TaskId
+		return x.AttrId
 	}
 	return 0
 }
 
-func (x *TaskInfo) GetTaskType() int32 {
+func (x *ItemAttribute) GetAttrValue() int64 {
 	if x != nil {
-		return x.TaskType
-	}
-	return 0
-}
-
-func (x *TaskInfo) GetTaskName() string {
-	if x != nil {
-		return x.TaskName
-	}
-	return ""
-}
-
-func (x *TaskInfo) GetTaskDesc() string {
-	if x != nil {
-		return x.TaskDesc
-	}
-	return ""
-}
-
-func (x *TaskInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *TaskInfo) GetProgress() []int32 {
-	if x != nil {
-		return x.Progress
-	}
-	return nil
-}
-
-func (x *TaskInfo) GetRewards() []*ItemInfo {
-	if x != nil {
-		return x.Rewards
-	}
-	return nil
-}
-
-func (x *TaskInfo) GetAcceptTime() int64 {
-	if x != nil {
-		return x.AcceptTime
-	}
-	return 0
-}
-
-func (x *TaskInfo) GetCompleteTime() int64 {
-	if x != nil {
-		return x.CompleteTime
+		return x.AttrValue
 	}
 	return 0
 }
 
 // 技能信息
 type SkillInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SkillId       int64                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	SkillName     string                 `protobuf:"bytes,2,opt,name=skill_name,json=skillName,proto3" json:"skill_name,omitempty"`
-	SkillLevel    int32                  `protobuf:"varint,3,opt,name=skill_level,json=skillLevel,proto3" json:"skill_level,omitempty"`
-	SkillType     int32                  `protobuf:"varint,4,opt,name=skill_type,json=skillType,proto3" json:"skill_type,omitempty"`
-	SkillCoolTime int64                  `protobuf:"varint,5,opt,name=skill_cool_time,json=skillCoolTime,proto3" json:"skill_cool_time,omitempty"`
-	SkillDamage   int64                  `protobuf:"varint,6,opt,name=skill_damage,json=skillDamage,proto3" json:"skill_damage,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	SkillId         int32                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
+	Level           int32                  `protobuf:"varint,2,opt,name=level,proto3" json:"level,omitempty"`
+	Exp             int32                  `protobuf:"varint,3,opt,name=exp,proto3" json:"exp,omitempty"`
+	CooldownEndTime int64                  `protobuf:"varint,4,opt,name=cooldown_end_time,json=cooldownEndTime,proto3" json:"cooldown_end_time,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SkillInfo) Reset() {
 	*x = SkillInfo{}
-	mi := &file_game_proto_msgTypes[14]
+	mi := &file_game_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1507,7 +1815,7 @@ func (x *SkillInfo) String() string {
 func (*SkillInfo) ProtoMessage() {}
 
 func (x *SkillInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[14]
+	mi := &file_game_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1520,79 +1828,63 @@ func (x *SkillInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInfo.ProtoReflect.Descriptor instead.
 func (*SkillInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{14}
+	return file_game_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *SkillInfo) GetSkillId() int64 {
+func (x *SkillInfo) GetSkillId() int32 {
 	if x != nil {
 		return x.SkillId
 	}
 	return 0
 }
 
-func (x *SkillInfo) GetSkillName() string {
+func (x *SkillInfo) GetLevel() int32 {
 	if x != nil {
-		return x.SkillName
-	}
-	return ""
-}
-
-func (x *SkillInfo) GetSkillLevel() int32 {
-	if x != nil {
-		return x.SkillLevel
+		return x.Level
 	}
 	return 0
 }
 
-func (x *SkillInfo) GetSkillType() int32 {
+func (x *SkillInfo) GetExp() int32 {
 	if x != nil {
-		return x.SkillType
+		return x.Exp
 	}
 	return 0
 }
 
-func (x *SkillInfo) GetSkillCoolTime() int64 {
+func (x *SkillInfo) GetCooldownEndTime() int64 {
 	if x != nil {
-		return x.SkillCoolTime
-	}
-	return 0
-}
-
-func (x *SkillInfo) GetSkillDamage() int64 {
-	if x != nil {
-		return x.SkillDamage
+		return x.CooldownEndTime
 	}
 	return 0
 }
 
 // 技能释放请求
-type SkillUseRequest struct {
+type SkillCastRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	SkillId       int64                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
+	SkillId       int32                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
 	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	TargetX       float32                `protobuf:"fixed32,3,opt,name=target_x,json=targetX,proto3" json:"target_x,omitempty"`
-	TargetY       float32                `protobuf:"fixed32,4,opt,name=target_y,json=targetY,proto3" json:"target_y,omitempty"`
-	TargetZ       float32                `protobuf:"fixed32,5,opt,name=target_z,json=targetZ,proto3" json:"target_z,omitempty"`
-	MapId         int64                  `protobuf:"varint,6,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	TargetPos     *Position              `protobuf:"bytes,3,opt,name=target_pos,json=targetPos,proto3" json:"target_pos,omitempty"`
+	TargetType    int32                  `protobuf:"varint,4,opt,name=target_type,json=targetType,proto3" json:"target_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SkillUseRequest) Reset() {
-	*x = SkillUseRequest{}
-	mi := &file_game_proto_msgTypes[15]
+func (x *SkillCastRequest) Reset() {
+	*x = SkillCastRequest{}
+	mi := &file_game_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SkillUseRequest) String() string {
+func (x *SkillCastRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SkillUseRequest) ProtoMessage() {}
+func (*SkillCastRequest) ProtoMessage() {}
 
-func (x *SkillUseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[15]
+func (x *SkillCastRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1603,314 +1895,65 @@ func (x *SkillUseRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SkillUseRequest.ProtoReflect.Descriptor instead.
-func (*SkillUseRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{15}
+// Deprecated: Use SkillCastRequest.ProtoReflect.Descriptor instead.
+func (*SkillCastRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *SkillUseRequest) GetSkillId() int64 {
+func (x *SkillCastRequest) GetSkillId() int32 {
 	if x != nil {
 		return x.SkillId
 	}
 	return 0
 }
 
-func (x *SkillUseRequest) GetTargetId() int64 {
+func (x *SkillCastRequest) GetTargetId() int64 {
 	if x != nil {
 		return x.TargetId
 	}
 	return 0
 }
 
-func (x *SkillUseRequest) GetTargetX() float32 {
+func (x *SkillCastRequest) GetTargetPos() *Position {
 	if x != nil {
-		return x.TargetX
-	}
-	return 0
-}
-
-func (x *SkillUseRequest) GetTargetY() float32 {
-	if x != nil {
-		return x.TargetY
-	}
-	return 0
-}
-
-func (x *SkillUseRequest) GetTargetZ() float32 {
-	if x != nil {
-		return x.TargetZ
-	}
-	return 0
-}
-
-func (x *SkillUseRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-// 技能释放响应
-type SkillUseResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	SkillId       int64                  `protobuf:"varint,3,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	Cooldown      int64                  `protobuf:"varint,5,opt,name=cooldown,proto3" json:"cooldown,omitempty"`
-	Damage        int64                  `protobuf:"varint,6,opt,name=damage,proto3" json:"damage,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUseResponse) Reset() {
-	*x = SkillUseResponse{}
-	mi := &file_game_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUseResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUseResponse) ProtoMessage() {}
-
-func (x *SkillUseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUseResponse.ProtoReflect.Descriptor instead.
-func (*SkillUseResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *SkillUseResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *SkillUseResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *SkillUseResponse) GetSkillId() int64 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-func (x *SkillUseResponse) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-func (x *SkillUseResponse) GetCooldown() int64 {
-	if x != nil {
-		return x.Cooldown
-	}
-	return 0
-}
-
-func (x *SkillUseResponse) GetDamage() int64 {
-	if x != nil {
-		return x.Damage
-	}
-	return 0
-}
-
-// 技能冷却状态
-type SkillCooldownInfo struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	SkillId           int64                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	RemainingCooldown int64                  `protobuf:"varint,2,opt,name=remaining_cooldown,json=remainingCooldown,proto3" json:"remaining_cooldown,omitempty"`
-	TotalCooldown     int64                  `protobuf:"varint,3,opt,name=total_cooldown,json=totalCooldown,proto3" json:"total_cooldown,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *SkillCooldownInfo) Reset() {
-	*x = SkillCooldownInfo{}
-	mi := &file_game_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillCooldownInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillCooldownInfo) ProtoMessage() {}
-
-func (x *SkillCooldownInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillCooldownInfo.ProtoReflect.Descriptor instead.
-func (*SkillCooldownInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *SkillCooldownInfo) GetSkillId() int64 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-func (x *SkillCooldownInfo) GetRemainingCooldown() int64 {
-	if x != nil {
-		return x.RemainingCooldown
-	}
-	return 0
-}
-
-func (x *SkillCooldownInfo) GetTotalCooldown() int64 {
-	if x != nil {
-		return x.TotalCooldown
-	}
-	return 0
-}
-
-// 技能冷却通知
-type SkillCooldownNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cooldowns     []*SkillCooldownInfo   `protobuf:"bytes,1,rep,name=cooldowns,proto3" json:"cooldowns,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillCooldownNotify) Reset() {
-	*x = SkillCooldownNotify{}
-	mi := &file_game_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillCooldownNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillCooldownNotify) ProtoMessage() {}
-
-func (x *SkillCooldownNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillCooldownNotify.ProtoReflect.Descriptor instead.
-func (*SkillCooldownNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *SkillCooldownNotify) GetCooldowns() []*SkillCooldownInfo {
-	if x != nil {
-		return x.Cooldowns
+		return x.TargetPos
 	}
 	return nil
 }
 
-// 技能列表请求
-type SkillListRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillListRequest) Reset() {
-	*x = SkillListRequest{}
-	mi := &file_game_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillListRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillListRequest) ProtoMessage() {}
-
-func (x *SkillListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[19]
+func (x *SkillCastRequest) GetTargetType() int32 {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillListRequest.ProtoReflect.Descriptor instead.
-func (*SkillListRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *SkillListRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
+		return x.TargetType
 	}
 	return 0
 }
 
-// 技能列表响应
-type SkillListResponse struct {
+// 技能释放结果
+type SkillCastResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Skills        []*SkillInfo           `protobuf:"bytes,3,rep,name=skills,proto3" json:"skills,omitempty"`
+	SkillId       int32                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
+	CasterId      int64                  `protobuf:"varint,2,opt,name=caster_id,json=casterId,proto3" json:"caster_id,omitempty"`
+	Result        int32                  `protobuf:"varint,3,opt,name=result,proto3" json:"result,omitempty"`
+	Effects       []*SkillEffect         `protobuf:"bytes,4,rep,name=effects,proto3" json:"effects,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *SkillListResponse) Reset() {
-	*x = SkillListResponse{}
-	mi := &file_game_proto_msgTypes[20]
+func (x *SkillCastResult) Reset() {
+	*x = SkillCastResult{}
+	mi := &file_game_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SkillListResponse) String() string {
+func (x *SkillCastResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SkillListResponse) ProtoMessage() {}
+func (*SkillCastResult) ProtoMessage() {}
 
-func (x *SkillListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[20]
+func (x *SkillCastResult) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1921,381 +1964,1078 @@ func (x *SkillListResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SkillListResponse.ProtoReflect.Descriptor instead.
-func (*SkillListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{20}
+// Deprecated: Use SkillCastResult.ProtoReflect.Descriptor instead.
+func (*SkillCastResult) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *SkillListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *SkillListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *SkillListResponse) GetSkills() []*SkillInfo {
-	if x != nil {
-		return x.Skills
-	}
-	return nil
-}
-
-// 技能升级请求
-type SkillUpgradeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SkillId       int64                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUpgradeRequest) Reset() {
-	*x = SkillUpgradeRequest{}
-	mi := &file_game_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUpgradeRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUpgradeRequest) ProtoMessage() {}
-
-func (x *SkillUpgradeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUpgradeRequest.ProtoReflect.Descriptor instead.
-func (*SkillUpgradeRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *SkillUpgradeRequest) GetSkillId() int64 {
+func (x *SkillCastResult) GetSkillId() int32 {
 	if x != nil {
 		return x.SkillId
 	}
 	return 0
 }
 
-// 技能升级响应
-type SkillUpgradeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	SkillId       int64                  `protobuf:"varint,3,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	NewLevel      int32                  `protobuf:"varint,4,opt,name=new_level,json=newLevel,proto3" json:"new_level,omitempty"`
-	NewDamage     int64                  `protobuf:"varint,5,opt,name=new_damage,json=newDamage,proto3" json:"new_damage,omitempty"`
-	NewCooldown   int64                  `protobuf:"varint,6,opt,name=new_cooldown,json=newCooldown,proto3" json:"new_cooldown,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUpgradeResponse) Reset() {
-	*x = SkillUpgradeResponse{}
-	mi := &file_game_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUpgradeResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUpgradeResponse) ProtoMessage() {}
-
-func (x *SkillUpgradeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUpgradeResponse.ProtoReflect.Descriptor instead.
-func (*SkillUpgradeResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *SkillUpgradeResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *SkillUpgradeResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *SkillUpgradeResponse) GetSkillId() int64 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-func (x *SkillUpgradeResponse) GetNewLevel() int32 {
-	if x != nil {
-		return x.NewLevel
-	}
-	return 0
-}
-
-func (x *SkillUpgradeResponse) GetNewDamage() int64 {
-	if x != nil {
-		return x.NewDamage
-	}
-	return 0
-}
-
-func (x *SkillUpgradeResponse) GetNewCooldown() int64 {
-	if x != nil {
-		return x.NewCooldown
-	}
-	return 0
-}
-
-// 技能解锁请求
-type SkillUnlockRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SkillId       int64                  `protobuf:"varint,1,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUnlockRequest) Reset() {
-	*x = SkillUnlockRequest{}
-	mi := &file_game_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUnlockRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUnlockRequest) ProtoMessage() {}
-
-func (x *SkillUnlockRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUnlockRequest.ProtoReflect.Descriptor instead.
-func (*SkillUnlockRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *SkillUnlockRequest) GetSkillId() int64 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-// 技能解锁响应
-type SkillUnlockResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	SkillId       int64                  `protobuf:"varint,3,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	SkillName     string                 `protobuf:"bytes,4,opt,name=skill_name,json=skillName,proto3" json:"skill_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUnlockResponse) Reset() {
-	*x = SkillUnlockResponse{}
-	mi := &file_game_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUnlockResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUnlockResponse) ProtoMessage() {}
-
-func (x *SkillUnlockResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUnlockResponse.ProtoReflect.Descriptor instead.
-func (*SkillUnlockResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *SkillUnlockResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *SkillUnlockResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *SkillUnlockResponse) GetSkillId() int64 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-func (x *SkillUnlockResponse) GetSkillName() string {
-	if x != nil {
-		return x.SkillName
-	}
-	return ""
-}
-
-// 技能释放通知
-type SkillUseNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CasterId      int64                  `protobuf:"varint,1,opt,name=caster_id,json=casterId,proto3" json:"caster_id,omitempty"`
-	SkillId       int64                  `protobuf:"varint,2,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	TargetX       float32                `protobuf:"fixed32,4,opt,name=target_x,json=targetX,proto3" json:"target_x,omitempty"`
-	TargetY       float32                `protobuf:"fixed32,5,opt,name=target_y,json=targetY,proto3" json:"target_y,omitempty"`
-	TargetZ       float32                `protobuf:"fixed32,6,opt,name=target_z,json=targetZ,proto3" json:"target_z,omitempty"`
-	MapId         int64                  `protobuf:"varint,7,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	EffectId      int32                  `protobuf:"varint,8,opt,name=effect_id,json=effectId,proto3" json:"effect_id,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,9,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SkillUseNotify) Reset() {
-	*x = SkillUseNotify{}
-	mi := &file_game_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SkillUseNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SkillUseNotify) ProtoMessage() {}
-
-func (x *SkillUseNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SkillUseNotify.ProtoReflect.Descriptor instead.
-func (*SkillUseNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *SkillUseNotify) GetCasterId() int64 {
+func (x *SkillCastResult) GetCasterId() int64 {
 	if x != nil {
 		return x.CasterId
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetSkillId() int64 {
+func (x *SkillCastResult) GetResult() int32 {
 	if x != nil {
-		return x.SkillId
+		return x.Result
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetTargetId() int64 {
+func (x *SkillCastResult) GetEffects() []*SkillEffect {
+	if x != nil {
+		return x.Effects
+	}
+	return nil
+}
+
+// 技能效果
+type SkillEffect struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EffectType    int32                  `protobuf:"varint,1,opt,name=effect_type,json=effectType,proto3" json:"effect_type,omitempty"`
+	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Value         int64                  `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
+	Pos           *Position              `protobuf:"bytes,4,opt,name=pos,proto3" json:"pos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkillEffect) Reset() {
+	*x = SkillEffect{}
+	mi := &file_game_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkillEffect) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkillEffect) ProtoMessage() {}
+
+func (x *SkillEffect) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkillEffect.ProtoReflect.Descriptor instead.
+func (*SkillEffect) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *SkillEffect) GetEffectType() int32 {
+	if x != nil {
+		return x.EffectType
+	}
+	return 0
+}
+
+func (x *SkillEffect) GetTargetId() int64 {
 	if x != nil {
 		return x.TargetId
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetTargetX() float32 {
+func (x *SkillEffect) GetValue() int64 {
 	if x != nil {
-		return x.TargetX
+		return x.Value
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetTargetY() float32 {
+func (x *SkillEffect) GetPos() *Position {
 	if x != nil {
-		return x.TargetY
+		return x.Pos
+	}
+	return nil
+}
+
+// 地图对象
+type MapObject struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	ObjectType    int32                  `protobuf:"varint,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"` // 1=玩家, 2=NPC, 3=怪物, 4=道具
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Pos           *Position              `protobuf:"bytes,4,opt,name=pos,proto3" json:"pos,omitempty"`
+	Level         int32                  `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
+	Hp            int64                  `protobuf:"varint,6,opt,name=hp,proto3" json:"hp,omitempty"`
+	MaxHp         int64                  `protobuf:"varint,7,opt,name=max_hp,json=maxHp,proto3" json:"max_hp,omitempty"`
+	Status        int32                  `protobuf:"varint,8,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapObject) Reset() {
+	*x = MapObject{}
+	mi := &file_game_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapObject) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapObject) ProtoMessage() {}
+
+func (x *MapObject) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapObject.ProtoReflect.Descriptor instead.
+func (*MapObject) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *MapObject) GetObjectId() int64 {
+	if x != nil {
+		return x.ObjectId
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetTargetZ() float32 {
+func (x *MapObject) GetObjectType() int32 {
 	if x != nil {
-		return x.TargetZ
+		return x.ObjectType
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetMapId() int64 {
+func (x *MapObject) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MapObject) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+func (x *MapObject) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *MapObject) GetHp() int64 {
+	if x != nil {
+		return x.Hp
+	}
+	return 0
+}
+
+func (x *MapObject) GetMaxHp() int64 {
+	if x != nil {
+		return x.MaxHp
+	}
+	return 0
+}
+
+func (x *MapObject) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+// 移动请求
+type MoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetPos     *Position              `protobuf:"bytes,1,opt,name=target_pos,json=targetPos,proto3" json:"target_pos,omitempty"`
+	MoveType      int32                  `protobuf:"varint,2,opt,name=move_type,json=moveType,proto3" json:"move_type,omitempty"` // 1=步行, 2=跑步, 3=传送
+	Path          []*Position            `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveRequest) Reset() {
+	*x = MoveRequest{}
+	mi := &file_game_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveRequest) ProtoMessage() {}
+
+func (x *MoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveRequest.ProtoReflect.Descriptor instead.
+func (*MoveRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MoveRequest) GetTargetPos() *Position {
+	if x != nil {
+		return x.TargetPos
+	}
+	return nil
+}
+
+func (x *MoveRequest) GetMoveType() int32 {
+	if x != nil {
+		return x.MoveType
+	}
+	return 0
+}
+
+func (x *MoveRequest) GetPath() []*Position {
+	if x != nil {
+		return x.Path
+	}
+	return nil
+}
+
+// 移动响应/通知
+type MoveNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	Pos           *Position              `protobuf:"bytes,2,opt,name=pos,proto3" json:"pos,omitempty"`
+	MoveType      int32                  `protobuf:"varint,3,opt,name=move_type,json=moveType,proto3" json:"move_type,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,4,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MoveNotify) Reset() {
+	*x = MoveNotify{}
+	mi := &file_game_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MoveNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MoveNotify) ProtoMessage() {}
+
+func (x *MoveNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MoveNotify.ProtoReflect.Descriptor instead.
+func (*MoveNotify) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *MoveNotify) GetObjectId() int64 {
+	if x != nil {
+		return x.ObjectId
+	}
+	return 0
+}
+
+func (x *MoveNotify) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+func (x *MoveNotify) GetMoveType() int32 {
+	if x != nil {
+		return x.MoveType
+	}
+	return 0
+}
+
+func (x *MoveNotify) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+// 进入地图请求
+type ClientMapEnterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapEnterRequest) Reset() {
+	*x = ClientMapEnterRequest{}
+	mi := &file_game_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapEnterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapEnterRequest) ProtoMessage() {}
+
+func (x *ClientMapEnterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapEnterRequest.ProtoReflect.Descriptor instead.
+func (*ClientMapEnterRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ClientMapEnterRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ClientMapEnterRequest) GetMapId() int32 {
 	if x != nil {
 		return x.MapId
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetEffectId() int32 {
+// 进入地图响应
+type ClientMapEnterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	MapId         int32                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	Pos           *Position              `protobuf:"bytes,4,opt,name=pos,proto3" json:"pos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapEnterResponse) Reset() {
+	*x = ClientMapEnterResponse{}
+	mi := &file_game_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapEnterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapEnterResponse) ProtoMessage() {}
+
+func (x *ClientMapEnterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[14]
 	if x != nil {
-		return x.EffectId
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapEnterResponse.ProtoReflect.Descriptor instead.
+func (*ClientMapEnterResponse) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ClientMapEnterResponse) GetResult() int32 {
+	if x != nil {
+		return x.Result
 	}
 	return 0
 }
 
-func (x *SkillUseNotify) GetTimestamp() int64 {
+func (x *ClientMapEnterResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *ClientMapEnterResponse) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *ClientMapEnterResponse) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+// 地图移动请求
+type ClientMapMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	Pos           *Position              `protobuf:"bytes,3,opt,name=pos,proto3" json:"pos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapMoveRequest) Reset() {
+	*x = ClientMapMoveRequest{}
+	mi := &file_game_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapMoveRequest) ProtoMessage() {}
+
+func (x *ClientMapMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapMoveRequest.ProtoReflect.Descriptor instead.
+func (*ClientMapMoveRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ClientMapMoveRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ClientMapMoveRequest) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *ClientMapMoveRequest) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+// 地图移动响应
+type ClientMapMoveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"`
+	Pos           *Position              `protobuf:"bytes,2,opt,name=pos,proto3" json:"pos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapMoveResponse) Reset() {
+	*x = ClientMapMoveResponse{}
+	mi := &file_game_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapMoveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapMoveResponse) ProtoMessage() {}
+
+func (x *ClientMapMoveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapMoveResponse.ProtoReflect.Descriptor instead.
+func (*ClientMapMoveResponse) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ClientMapMoveResponse) GetResult() int32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
+func (x *ClientMapMoveResponse) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
+// 地图攻击请求
+type ClientMapAttackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	TargetId      int64                  `protobuf:"varint,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapAttackRequest) Reset() {
+	*x = ClientMapAttackRequest{}
+	mi := &file_game_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapAttackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapAttackRequest) ProtoMessage() {}
+
+func (x *ClientMapAttackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapAttackRequest.ProtoReflect.Descriptor instead.
+func (*ClientMapAttackRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ClientMapAttackRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ClientMapAttackRequest) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *ClientMapAttackRequest) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// 地图攻击响应
+type ClientMapAttackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"`
+	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Damage        int64                  `protobuf:"varint,3,opt,name=damage,proto3" json:"damage,omitempty"`
+	TargetHp      int64                  `protobuf:"varint,4,opt,name=target_hp,json=targetHp,proto3" json:"target_hp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientMapAttackResponse) Reset() {
+	*x = ClientMapAttackResponse{}
+	mi := &file_game_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientMapAttackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientMapAttackResponse) ProtoMessage() {}
+
+func (x *ClientMapAttackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientMapAttackResponse.ProtoReflect.Descriptor instead.
+func (*ClientMapAttackResponse) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ClientMapAttackResponse) GetResult() int32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
+func (x *ClientMapAttackResponse) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *ClientMapAttackResponse) GetDamage() int64 {
+	if x != nil {
+		return x.Damage
+	}
+	return 0
+}
+
+func (x *ClientMapAttackResponse) GetTargetHp() int64 {
+	if x != nil {
+		return x.TargetHp
+	}
+	return 0
+}
+
+// 攻击请求
+type AttackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TargetId      int64                  `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	AttackType    int32                  `protobuf:"varint,2,opt,name=attack_type,json=attackType,proto3" json:"attack_type,omitempty"` // 1=普通攻击, 2=技能攻击
+	SkillId       int32                  `protobuf:"varint,3,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttackRequest) Reset() {
+	*x = AttackRequest{}
+	mi := &file_game_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttackRequest) ProtoMessage() {}
+
+func (x *AttackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttackRequest.ProtoReflect.Descriptor instead.
+func (*AttackRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *AttackRequest) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *AttackRequest) GetAttackType() int32 {
+	if x != nil {
+		return x.AttackType
+	}
+	return 0
+}
+
+func (x *AttackRequest) GetSkillId() int32 {
+	if x != nil {
+		return x.SkillId
+	}
+	return 0
+}
+
+// 伤害信息
+type DamageInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AttackerId    int64                  `protobuf:"varint,1,opt,name=attacker_id,json=attackerId,proto3" json:"attacker_id,omitempty"`
+	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Damage        int64                  `protobuf:"varint,3,opt,name=damage,proto3" json:"damage,omitempty"`
+	DamageType    int32                  `protobuf:"varint,4,opt,name=damage_type,json=damageType,proto3" json:"damage_type,omitempty"` // 1=物理, 2=魔法, 3=真实
+	IsCritical    bool                   `protobuf:"varint,5,opt,name=is_critical,json=isCritical,proto3" json:"is_critical,omitempty"`
+	IsMiss        bool                   `protobuf:"varint,6,opt,name=is_miss,json=isMiss,proto3" json:"is_miss,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DamageInfo) Reset() {
+	*x = DamageInfo{}
+	mi := &file_game_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DamageInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DamageInfo) ProtoMessage() {}
+
+func (x *DamageInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DamageInfo.ProtoReflect.Descriptor instead.
+func (*DamageInfo) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DamageInfo) GetAttackerId() int64 {
+	if x != nil {
+		return x.AttackerId
+	}
+	return 0
+}
+
+func (x *DamageInfo) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *DamageInfo) GetDamage() int64 {
+	if x != nil {
+		return x.Damage
+	}
+	return 0
+}
+
+func (x *DamageInfo) GetDamageType() int32 {
+	if x != nil {
+		return x.DamageType
+	}
+	return 0
+}
+
+func (x *DamageInfo) GetIsCritical() bool {
+	if x != nil {
+		return x.IsCritical
+	}
+	return false
+}
+
+func (x *DamageInfo) GetIsMiss() bool {
+	if x != nil {
+		return x.IsMiss
+	}
+	return false
+}
+
+// Buff信息
+type BuffInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	BuffId        int32                  `protobuf:"varint,1,opt,name=buff_id,json=buffId,proto3" json:"buff_id,omitempty"`
+	CasterId      int64                  `protobuf:"varint,2,opt,name=caster_id,json=casterId,proto3" json:"caster_id,omitempty"`
+	TargetId      int64                  `protobuf:"varint,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	StartTime     int64                  `protobuf:"varint,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       int64                  `protobuf:"varint,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	Layer         int32                  `protobuf:"varint,6,opt,name=layer,proto3" json:"layer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuffInfo) Reset() {
+	*x = BuffInfo{}
+	mi := &file_game_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuffInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuffInfo) ProtoMessage() {}
+
+func (x *BuffInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuffInfo.ProtoReflect.Descriptor instead.
+func (*BuffInfo) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *BuffInfo) GetBuffId() int32 {
+	if x != nil {
+		return x.BuffId
+	}
+	return 0
+}
+
+func (x *BuffInfo) GetCasterId() int64 {
+	if x != nil {
+		return x.CasterId
+	}
+	return 0
+}
+
+func (x *BuffInfo) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *BuffInfo) GetStartTime() int64 {
+	if x != nil {
+		return x.StartTime
+	}
+	return 0
+}
+
+func (x *BuffInfo) GetEndTime() int64 {
+	if x != nil {
+		return x.EndTime
+	}
+	return 0
+}
+
+func (x *BuffInfo) GetLayer() int32 {
+	if x != nil {
+		return x.Layer
+	}
+	return 0
+}
+
+// 聊天消息
+type ChatMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       int32                  `protobuf:"varint,1,opt,name=channel,proto3" json:"channel,omitempty"` // 1=附近, 2=地图, 3=世界, 4=公会, 5=队伍, 6=私聊
+	SenderId      int64                  `protobuf:"varint,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	SenderName    string                 `protobuf:"bytes,3,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
+	Content       string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	TargetId      int64                  `protobuf:"varint,6,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"` // 私聊目标
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatMessage) Reset() {
+	*x = ChatMessage{}
+	mi := &file_game_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatMessage) ProtoMessage() {}
+
+func (x *ChatMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatMessage.ProtoReflect.Descriptor instead.
+func (*ChatMessage) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ChatMessage) GetChannel() int32 {
+	if x != nil {
+		return x.Channel
+	}
+	return 0
+}
+
+func (x *ChatMessage) GetSenderId() int64 {
+	if x != nil {
+		return x.SenderId
+	}
+	return 0
+}
+
+func (x *ChatMessage) GetSenderName() string {
+	if x != nil {
+		return x.SenderName
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ChatMessage) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ChatMessage) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// 发送聊天请求
+type ChatSendRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Channel       int32                  `protobuf:"varint,1,opt,name=channel,proto3" json:"channel,omitempty"`
+	Content       string                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	TargetId      int64                  `protobuf:"varint,3,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChatSendRequest) Reset() {
+	*x = ChatSendRequest{}
+	mi := &file_game_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChatSendRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChatSendRequest) ProtoMessage() {}
+
+func (x *ChatSendRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChatSendRequest.ProtoReflect.Descriptor instead.
+func (*ChatSendRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *ChatSendRequest) GetChannel() int32 {
+	if x != nil {
+		return x.Channel
+	}
+	return 0
+}
+
+func (x *ChatSendRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *ChatSendRequest) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
 	}
 	return 0
 }
@@ -2304,24 +3044,21 @@ func (x *SkillUseNotify) GetTimestamp() int64 {
 type MailInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MailId        int64                  `protobuf:"varint,1,opt,name=mail_id,json=mailId,proto3" json:"mail_id,omitempty"`
-	SenderId      int64                  `protobuf:"varint,2,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
-	SenderName    string                 `protobuf:"bytes,3,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
-	ReceiverId    int64                  `protobuf:"varint,4,opt,name=receiver_id,json=receiverId,proto3" json:"receiver_id,omitempty"`
-	ReceiverName  string                 `protobuf:"bytes,5,opt,name=receiver_name,json=receiverName,proto3" json:"receiver_name,omitempty"`
-	Title         string                 `protobuf:"bytes,6,opt,name=title,proto3" json:"title,omitempty"`
-	Content       string                 `protobuf:"bytes,7,opt,name=content,proto3" json:"content,omitempty"`
-	Items         []*ItemInfo            `protobuf:"bytes,8,rep,name=items,proto3" json:"items,omitempty"`
-	Gold          int64                  `protobuf:"varint,9,opt,name=gold,proto3" json:"gold,omitempty"`
-	Status        int32                  `protobuf:"varint,10,opt,name=status,proto3" json:"status,omitempty"`
-	SendTime      int64                  `protobuf:"varint,11,opt,name=send_time,json=sendTime,proto3" json:"send_time,omitempty"`
-	ReadTime      int64                  `protobuf:"varint,12,opt,name=read_time,json=readTime,proto3" json:"read_time,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Content       string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	SenderId      int64                  `protobuf:"varint,4,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
+	SenderName    string                 `protobuf:"bytes,5,opt,name=sender_name,json=senderName,proto3" json:"sender_name,omitempty"`
+	SendTime      int64                  `protobuf:"varint,6,opt,name=send_time,json=sendTime,proto3" json:"send_time,omitempty"`
+	IsRead        bool                   `protobuf:"varint,7,opt,name=is_read,json=isRead,proto3" json:"is_read,omitempty"`
+	HasAttachment bool                   `protobuf:"varint,8,opt,name=has_attachment,json=hasAttachment,proto3" json:"has_attachment,omitempty"`
+	Attachments   []*ItemInfo            `protobuf:"bytes,9,rep,name=attachments,proto3" json:"attachments,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MailInfo) Reset() {
 	*x = MailInfo{}
-	mi := &file_game_proto_msgTypes[26]
+	mi := &file_game_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2333,7 +3070,7 @@ func (x *MailInfo) String() string {
 func (*MailInfo) ProtoMessage() {}
 
 func (x *MailInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[26]
+	mi := &file_game_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2346,7 +3083,7 @@ func (x *MailInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MailInfo.ProtoReflect.Descriptor instead.
 func (*MailInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{26}
+	return file_game_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *MailInfo) GetMailId() int64 {
@@ -2354,34 +3091,6 @@ func (x *MailInfo) GetMailId() int64 {
 		return x.MailId
 	}
 	return 0
-}
-
-func (x *MailInfo) GetSenderId() int64 {
-	if x != nil {
-		return x.SenderId
-	}
-	return 0
-}
-
-func (x *MailInfo) GetSenderName() string {
-	if x != nil {
-		return x.SenderName
-	}
-	return ""
-}
-
-func (x *MailInfo) GetReceiverId() int64 {
-	if x != nil {
-		return x.ReceiverId
-	}
-	return 0
-}
-
-func (x *MailInfo) GetReceiverName() string {
-	if x != nil {
-		return x.ReceiverName
-	}
-	return ""
 }
 
 func (x *MailInfo) GetTitle() string {
@@ -2398,25 +3107,18 @@ func (x *MailInfo) GetContent() string {
 	return ""
 }
 
-func (x *MailInfo) GetItems() []*ItemInfo {
+func (x *MailInfo) GetSenderId() int64 {
 	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *MailInfo) GetGold() int64 {
-	if x != nil {
-		return x.Gold
+		return x.SenderId
 	}
 	return 0
 }
 
-func (x *MailInfo) GetStatus() int32 {
+func (x *MailInfo) GetSenderName() string {
 	if x != nil {
-		return x.Status
+		return x.SenderName
 	}
-	return 0
+	return ""
 }
 
 func (x *MailInfo) GetSendTime() int64 {
@@ -2426,33 +3128,139 @@ func (x *MailInfo) GetSendTime() int64 {
 	return 0
 }
 
-func (x *MailInfo) GetReadTime() int64 {
+func (x *MailInfo) GetIsRead() bool {
 	if x != nil {
-		return x.ReadTime
+		return x.IsRead
+	}
+	return false
+}
+
+func (x *MailInfo) GetHasAttachment() bool {
+	if x != nil {
+		return x.HasAttachment
+	}
+	return false
+}
+
+func (x *MailInfo) GetAttachments() []*ItemInfo {
+	if x != nil {
+		return x.Attachments
+	}
+	return nil
+}
+
+// 任务信息
+type TaskInfo struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	TaskId         int32                  `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	Status         int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"` // 1=未接受, 2=进行中, 3=可完成, 4=已完成
+	Progress       int32                  `protobuf:"varint,3,opt,name=progress,proto3" json:"progress,omitempty"`
+	TargetProgress int32                  `protobuf:"varint,4,opt,name=target_progress,json=targetProgress,proto3" json:"target_progress,omitempty"`
+	AcceptTime     int64                  `protobuf:"varint,5,opt,name=accept_time,json=acceptTime,proto3" json:"accept_time,omitempty"`
+	CompleteTime   int64                  `protobuf:"varint,6,opt,name=complete_time,json=completeTime,proto3" json:"complete_time,omitempty"`
+	Rewards        []*ItemInfo            `protobuf:"bytes,7,rep,name=rewards,proto3" json:"rewards,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *TaskInfo) Reset() {
+	*x = TaskInfo{}
+	mi := &file_game_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TaskInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TaskInfo) ProtoMessage() {}
+
+func (x *TaskInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TaskInfo.ProtoReflect.Descriptor instead.
+func (*TaskInfo) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *TaskInfo) GetTaskId() int32 {
+	if x != nil {
+		return x.TaskId
 	}
 	return 0
 }
 
+func (x *TaskInfo) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *TaskInfo) GetProgress() int32 {
+	if x != nil {
+		return x.Progress
+	}
+	return 0
+}
+
+func (x *TaskInfo) GetTargetProgress() int32 {
+	if x != nil {
+		return x.TargetProgress
+	}
+	return 0
+}
+
+func (x *TaskInfo) GetAcceptTime() int64 {
+	if x != nil {
+		return x.AcceptTime
+	}
+	return 0
+}
+
+func (x *TaskInfo) GetCompleteTime() int64 {
+	if x != nil {
+		return x.CompleteTime
+	}
+	return 0
+}
+
+func (x *TaskInfo) GetRewards() []*ItemInfo {
+	if x != nil {
+		return x.Rewards
+	}
+	return nil
+}
+
 // 公会信息
 type GuildInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	GuildId       int64                  `protobuf:"varint,1,opt,name=guild_id,json=guildId,proto3" json:"guild_id,omitempty"`
-	GuildName     string                 `protobuf:"bytes,2,opt,name=guild_name,json=guildName,proto3" json:"guild_name,omitempty"`
-	Level         int32                  `protobuf:"varint,3,opt,name=level,proto3" json:"level,omitempty"`
-	Exp           int64                  `protobuf:"varint,4,opt,name=exp,proto3" json:"exp,omitempty"`
-	LeaderId      int64                  `protobuf:"varint,5,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
-	LeaderName    string                 `protobuf:"bytes,6,opt,name=leader_name,json=leaderName,proto3" json:"leader_name,omitempty"`
-	MemberCount   int32                  `protobuf:"varint,7,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
-	MaxMembers    int32                  `protobuf:"varint,8,opt,name=max_members,json=maxMembers,proto3" json:"max_members,omitempty"`
-	Notice        string                 `protobuf:"bytes,9,opt,name=notice,proto3" json:"notice,omitempty"`
-	CreateTime    int64                  `protobuf:"varint,10,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	GuildId        int64                  `protobuf:"varint,1,opt,name=guild_id,json=guildId,proto3" json:"guild_id,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	LeaderId       int64                  `protobuf:"varint,3,opt,name=leader_id,json=leaderId,proto3" json:"leader_id,omitempty"`
+	LeaderName     string                 `protobuf:"bytes,4,opt,name=leader_name,json=leaderName,proto3" json:"leader_name,omitempty"`
+	Level          int32                  `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
+	MemberCount    int32                  `protobuf:"varint,6,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	MaxMemberCount int32                  `protobuf:"varint,7,opt,name=max_member_count,json=maxMemberCount,proto3" json:"max_member_count,omitempty"`
+	Notice         string                 `protobuf:"bytes,8,opt,name=notice,proto3" json:"notice,omitempty"`
+	CreateTime     int64                  `protobuf:"varint,9,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GuildInfo) Reset() {
 	*x = GuildInfo{}
-	mi := &file_game_proto_msgTypes[27]
+	mi := &file_game_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2464,7 +3272,7 @@ func (x *GuildInfo) String() string {
 func (*GuildInfo) ProtoMessage() {}
 
 func (x *GuildInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[27]
+	mi := &file_game_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2477,7 +3285,7 @@ func (x *GuildInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GuildInfo.ProtoReflect.Descriptor instead.
 func (*GuildInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{27}
+	return file_game_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GuildInfo) GetGuildId() int64 {
@@ -2487,25 +3295,11 @@ func (x *GuildInfo) GetGuildId() int64 {
 	return 0
 }
 
-func (x *GuildInfo) GetGuildName() string {
+func (x *GuildInfo) GetName() string {
 	if x != nil {
-		return x.GuildName
+		return x.Name
 	}
 	return ""
-}
-
-func (x *GuildInfo) GetLevel() int32 {
-	if x != nil {
-		return x.Level
-	}
-	return 0
-}
-
-func (x *GuildInfo) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
 }
 
 func (x *GuildInfo) GetLeaderId() int64 {
@@ -2522,6 +3316,13 @@ func (x *GuildInfo) GetLeaderName() string {
 	return ""
 }
 
+func (x *GuildInfo) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
 func (x *GuildInfo) GetMemberCount() int32 {
 	if x != nil {
 		return x.MemberCount
@@ -2529,9 +3330,9 @@ func (x *GuildInfo) GetMemberCount() int32 {
 	return 0
 }
 
-func (x *GuildInfo) GetMaxMembers() int32 {
+func (x *GuildInfo) GetMaxMemberCount() int32 {
 	if x != nil {
-		return x.MaxMembers
+		return x.MaxMemberCount
 	}
 	return 0
 }
@@ -2550,35 +3351,34 @@ func (x *GuildInfo) GetCreateTime() int64 {
 	return 0
 }
 
-// 公会成员信息
-type GuildMemberInfo struct {
+// 公会成员
+type GuildMember struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Position      int32                  `protobuf:"varint,3,opt,name=position,proto3" json:"position,omitempty"`
-	Contribution  int64                  `protobuf:"varint,4,opt,name=contribution,proto3" json:"contribution,omitempty"`
+	Level         int32                  `protobuf:"varint,3,opt,name=level,proto3" json:"level,omitempty"`
+	Position      int32                  `protobuf:"varint,4,opt,name=position,proto3" json:"position,omitempty"` // 1=会长, 2=副会长, 3=精英, 4=普通
 	JoinTime      int64                  `protobuf:"varint,5,opt,name=join_time,json=joinTime,proto3" json:"join_time,omitempty"`
-	Online        bool                   `protobuf:"varint,6,opt,name=online,proto3" json:"online,omitempty"`
-	LastOnline    int64                  `protobuf:"varint,7,opt,name=last_online,json=lastOnline,proto3" json:"last_online,omitempty"`
+	LastLoginTime int64                  `protobuf:"varint,6,opt,name=last_login_time,json=lastLoginTime,proto3" json:"last_login_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GuildMemberInfo) Reset() {
-	*x = GuildMemberInfo{}
-	mi := &file_game_proto_msgTypes[28]
+func (x *GuildMember) Reset() {
+	*x = GuildMember{}
+	mi := &file_game_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GuildMemberInfo) String() string {
+func (x *GuildMember) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GuildMemberInfo) ProtoMessage() {}
+func (*GuildMember) ProtoMessage() {}
 
-func (x *GuildMemberInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[28]
+func (x *GuildMember) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2589,3791 +3389,49 @@ func (x *GuildMemberInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GuildMemberInfo.ProtoReflect.Descriptor instead.
-func (*GuildMemberInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{28}
+// Deprecated: Use GuildMember.ProtoReflect.Descriptor instead.
+func (*GuildMember) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{27}
 }
 
-func (x *GuildMemberInfo) GetPlayerId() int64 {
+func (x *GuildMember) GetPlayerId() int64 {
 	if x != nil {
 		return x.PlayerId
 	}
 	return 0
 }
 
-func (x *GuildMemberInfo) GetName() string {
+func (x *GuildMember) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *GuildMemberInfo) GetPosition() int32 {
+func (x *GuildMember) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *GuildMember) GetPosition() int32 {
 	if x != nil {
 		return x.Position
 	}
 	return 0
 }
 
-func (x *GuildMemberInfo) GetContribution() int64 {
-	if x != nil {
-		return x.Contribution
-	}
-	return 0
-}
-
-func (x *GuildMemberInfo) GetJoinTime() int64 {
+func (x *GuildMember) GetJoinTime() int64 {
 	if x != nil {
 		return x.JoinTime
 	}
 	return 0
 }
 
-func (x *GuildMemberInfo) GetOnline() bool {
+func (x *GuildMember) GetLastLoginTime() int64 {
 	if x != nil {
-		return x.Online
-	}
-	return false
-}
-
-func (x *GuildMemberInfo) GetLastOnline() int64 {
-	if x != nil {
-		return x.LastOnline
-	}
-	return 0
-}
-
-// 公会申请信息
-type GuildApplyInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApplyId       int64                  `protobuf:"varint,1,opt,name=apply_id,json=applyId,proto3" json:"apply_id,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	PlayerName    string                 `protobuf:"bytes,3,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
-	GuildId       int64                  `protobuf:"varint,4,opt,name=guild_id,json=guildId,proto3" json:"guild_id,omitempty"`
-	GuildName     string                 `protobuf:"bytes,5,opt,name=guild_name,json=guildName,proto3" json:"guild_name,omitempty"`
-	ApplyTime     int64                  `protobuf:"varint,6,opt,name=apply_time,json=applyTime,proto3" json:"apply_time,omitempty"`
-	Status        int32                  `protobuf:"varint,7,opt,name=status,proto3" json:"status,omitempty"`
-	Remark        string                 `protobuf:"bytes,8,opt,name=remark,proto3" json:"remark,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GuildApplyInfo) Reset() {
-	*x = GuildApplyInfo{}
-	mi := &file_game_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GuildApplyInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GuildApplyInfo) ProtoMessage() {}
-
-func (x *GuildApplyInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GuildApplyInfo.ProtoReflect.Descriptor instead.
-func (*GuildApplyInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *GuildApplyInfo) GetApplyId() int64 {
-	if x != nil {
-		return x.ApplyId
-	}
-	return 0
-}
-
-func (x *GuildApplyInfo) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *GuildApplyInfo) GetPlayerName() string {
-	if x != nil {
-		return x.PlayerName
-	}
-	return ""
-}
-
-func (x *GuildApplyInfo) GetGuildId() int64 {
-	if x != nil {
-		return x.GuildId
-	}
-	return 0
-}
-
-func (x *GuildApplyInfo) GetGuildName() string {
-	if x != nil {
-		return x.GuildName
-	}
-	return ""
-}
-
-func (x *GuildApplyInfo) GetApplyTime() int64 {
-	if x != nil {
-		return x.ApplyTime
-	}
-	return 0
-}
-
-func (x *GuildApplyInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *GuildApplyInfo) GetRemark() string {
-	if x != nil {
-		return x.Remark
-	}
-	return ""
-}
-
-// 拍卖物品信息
-type AuctionItemInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	AuctionId     int64                  `protobuf:"varint,1,opt,name=auction_id,json=auctionId,proto3" json:"auction_id,omitempty"`
-	SellerId      int64                  `protobuf:"varint,2,opt,name=seller_id,json=sellerId,proto3" json:"seller_id,omitempty"`
-	SellerName    string                 `protobuf:"bytes,3,opt,name=seller_name,json=sellerName,proto3" json:"seller_name,omitempty"`
-	ItemId        int64                  `protobuf:"varint,4,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	ItemName      string                 `protobuf:"bytes,5,opt,name=item_name,json=itemName,proto3" json:"item_name,omitempty"`
-	ItemType      int32                  `protobuf:"varint,6,opt,name=item_type,json=itemType,proto3" json:"item_type,omitempty"`
-	ItemCount     int32                  `protobuf:"varint,7,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
-	AuctionType   int32                  `protobuf:"varint,8,opt,name=auction_type,json=auctionType,proto3" json:"auction_type,omitempty"`
-	StartingPrice int64                  `protobuf:"varint,9,opt,name=starting_price,json=startingPrice,proto3" json:"starting_price,omitempty"`
-	CurrentPrice  int64                  `protobuf:"varint,10,opt,name=current_price,json=currentPrice,proto3" json:"current_price,omitempty"`
-	BuyoutPrice   int64                  `protobuf:"varint,11,opt,name=buyout_price,json=buyoutPrice,proto3" json:"buyout_price,omitempty"`
-	BidIncrement  int64                  `protobuf:"varint,12,opt,name=bid_increment,json=bidIncrement,proto3" json:"bid_increment,omitempty"`
-	StartTime     int64                  `protobuf:"varint,13,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       int64                  `protobuf:"varint,14,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	Status        int32                  `protobuf:"varint,15,opt,name=status,proto3" json:"status,omitempty"`
-	CurrentWinner int64                  `protobuf:"varint,16,opt,name=current_winner,json=currentWinner,proto3" json:"current_winner,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuctionItemInfo) Reset() {
-	*x = AuctionItemInfo{}
-	mi := &file_game_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuctionItemInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuctionItemInfo) ProtoMessage() {}
-
-func (x *AuctionItemInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuctionItemInfo.ProtoReflect.Descriptor instead.
-func (*AuctionItemInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *AuctionItemInfo) GetAuctionId() int64 {
-	if x != nil {
-		return x.AuctionId
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetSellerId() int64 {
-	if x != nil {
-		return x.SellerId
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetSellerName() string {
-	if x != nil {
-		return x.SellerName
-	}
-	return ""
-}
-
-func (x *AuctionItemInfo) GetItemId() int64 {
-	if x != nil {
-		return x.ItemId
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetItemName() string {
-	if x != nil {
-		return x.ItemName
-	}
-	return ""
-}
-
-func (x *AuctionItemInfo) GetItemType() int32 {
-	if x != nil {
-		return x.ItemType
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetItemCount() int32 {
-	if x != nil {
-		return x.ItemCount
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetAuctionType() int32 {
-	if x != nil {
-		return x.AuctionType
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetStartingPrice() int64 {
-	if x != nil {
-		return x.StartingPrice
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetCurrentPrice() int64 {
-	if x != nil {
-		return x.CurrentPrice
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetBuyoutPrice() int64 {
-	if x != nil {
-		return x.BuyoutPrice
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetBidIncrement() int64 {
-	if x != nil {
-		return x.BidIncrement
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetStartTime() int64 {
-	if x != nil {
-		return x.StartTime
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetEndTime() int64 {
-	if x != nil {
-		return x.EndTime
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *AuctionItemInfo) GetCurrentWinner() int64 {
-	if x != nil {
-		return x.CurrentWinner
-	}
-	return 0
-}
-
-// 拍卖竞拍信息
-type AuctionBidInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BidId         int64                  `protobuf:"varint,1,opt,name=bid_id,json=bidId,proto3" json:"bid_id,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	PlayerName    string                 `protobuf:"bytes,3,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
-	AuctionId     int64                  `protobuf:"varint,4,opt,name=auction_id,json=auctionId,proto3" json:"auction_id,omitempty"`
-	BidPrice      int64                  `protobuf:"varint,5,opt,name=bid_price,json=bidPrice,proto3" json:"bid_price,omitempty"`
-	BidTime       int64                  `protobuf:"varint,6,opt,name=bid_time,json=bidTime,proto3" json:"bid_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AuctionBidInfo) Reset() {
-	*x = AuctionBidInfo{}
-	mi := &file_game_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AuctionBidInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AuctionBidInfo) ProtoMessage() {}
-
-func (x *AuctionBidInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AuctionBidInfo.ProtoReflect.Descriptor instead.
-func (*AuctionBidInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *AuctionBidInfo) GetBidId() int64 {
-	if x != nil {
-		return x.BidId
-	}
-	return 0
-}
-
-func (x *AuctionBidInfo) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AuctionBidInfo) GetPlayerName() string {
-	if x != nil {
-		return x.PlayerName
-	}
-	return ""
-}
-
-func (x *AuctionBidInfo) GetAuctionId() int64 {
-	if x != nil {
-		return x.AuctionId
-	}
-	return 0
-}
-
-func (x *AuctionBidInfo) GetBidPrice() int64 {
-	if x != nil {
-		return x.BidPrice
-	}
-	return 0
-}
-
-func (x *AuctionBidInfo) GetBidTime() int64 {
-	if x != nil {
-		return x.BidTime
-	}
-	return 0
-}
-
-// 地图对象信息
-type MapObjectInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	ObjectType    int32                  `protobuf:"varint,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,7,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	MoveSpeed     float32                `protobuf:"fixed32,8,opt,name=move_speed,json=moveSpeed,proto3" json:"move_speed,omitempty"`
-	IsMoving      bool                   `protobuf:"varint,9,opt,name=is_moving,json=isMoving,proto3" json:"is_moving,omitempty"`
-	Status        int32                  `protobuf:"varint,10,opt,name=status,proto3" json:"status,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapObjectInfo) Reset() {
-	*x = MapObjectInfo{}
-	mi := &file_game_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapObjectInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapObjectInfo) ProtoMessage() {}
-
-func (x *MapObjectInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapObjectInfo.ProtoReflect.Descriptor instead.
-func (*MapObjectInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *MapObjectInfo) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetObjectType() int32 {
-	if x != nil {
-		return x.ObjectType
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetMoveSpeed() float32 {
-	if x != nil {
-		return x.MoveSpeed
-	}
-	return 0
-}
-
-func (x *MapObjectInfo) GetIsMoving() bool {
-	if x != nil {
-		return x.IsMoving
-	}
-	return false
-}
-
-func (x *MapObjectInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-// 地图移动请求
-type MapMoveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MapId         int64                  `protobuf:"varint,1,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,2,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,3,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,4,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,5,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveRequest) Reset() {
-	*x = MapMoveRequest{}
-	mi := &file_game_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveRequest) ProtoMessage() {}
-
-func (x *MapMoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveRequest.ProtoReflect.Descriptor instead.
-func (*MapMoveRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *MapMoveRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-// 地图移动响应
-type MapMoveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	ObjectId      int64                  `protobuf:"varint,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,7,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	Time          int64                  `protobuf:"varint,8,opt,name=time,proto3" json:"time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveResponse) Reset() {
-	*x = MapMoveResponse{}
-	mi := &file_game_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveResponse) ProtoMessage() {}
-
-func (x *MapMoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveResponse.ProtoReflect.Descriptor instead.
-func (*MapMoveResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *MapMoveResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapMoveResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapMoveResponse) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetTime() int64 {
-	if x != nil {
-		return x.Time
-	}
-	return 0
-}
-
-// 路径请求
-type MapPathRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MapId         int64                  `protobuf:"varint,1,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	StartX        float32                `protobuf:"fixed32,2,opt,name=start_x,json=startX,proto3" json:"start_x,omitempty"`
-	StartY        float32                `protobuf:"fixed32,3,opt,name=start_y,json=startY,proto3" json:"start_y,omitempty"`
-	EndX          float32                `protobuf:"fixed32,4,opt,name=end_x,json=endX,proto3" json:"end_x,omitempty"`
-	EndY          float32                `protobuf:"fixed32,5,opt,name=end_y,json=endY,proto3" json:"end_y,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapPathRequest) Reset() {
-	*x = MapPathRequest{}
-	mi := &file_game_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapPathRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapPathRequest) ProtoMessage() {}
-
-func (x *MapPathRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapPathRequest.ProtoReflect.Descriptor instead.
-func (*MapPathRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *MapPathRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapPathRequest) GetStartX() float32 {
-	if x != nil {
-		return x.StartX
-	}
-	return 0
-}
-
-func (x *MapPathRequest) GetStartY() float32 {
-	if x != nil {
-		return x.StartY
-	}
-	return 0
-}
-
-func (x *MapPathRequest) GetEndX() float32 {
-	if x != nil {
-		return x.EndX
-	}
-	return 0
-}
-
-func (x *MapPathRequest) GetEndY() float32 {
-	if x != nil {
-		return x.EndY
-	}
-	return 0
-}
-
-// 路径响应
-type MapPathResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Success       bool                     `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                   `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Path          []*MapPathResponse_Point `protobuf:"bytes,3,rep,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapPathResponse) Reset() {
-	*x = MapPathResponse{}
-	mi := &file_game_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapPathResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapPathResponse) ProtoMessage() {}
-
-func (x *MapPathResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapPathResponse.ProtoReflect.Descriptor instead.
-func (*MapPathResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *MapPathResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapPathResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapPathResponse) GetPath() []*MapPathResponse_Point {
-	if x != nil {
-		return x.Path
-	}
-	return nil
-}
-
-// 地图对象同步
-type MapSyncObjects struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MapId         int64                  `protobuf:"varint,1,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Objects       []*MapObjectInfo       `protobuf:"bytes,2,rep,name=objects,proto3" json:"objects,omitempty"`
-	SyncTime      int64                  `protobuf:"varint,3,opt,name=sync_time,json=syncTime,proto3" json:"sync_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapSyncObjects) Reset() {
-	*x = MapSyncObjects{}
-	mi := &file_game_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapSyncObjects) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapSyncObjects) ProtoMessage() {}
-
-func (x *MapSyncObjects) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapSyncObjects.ProtoReflect.Descriptor instead.
-func (*MapSyncObjects) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *MapSyncObjects) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapSyncObjects) GetObjects() []*MapObjectInfo {
-	if x != nil {
-		return x.Objects
-	}
-	return nil
-}
-
-func (x *MapSyncObjects) GetSyncTime() int64 {
-	if x != nil {
-		return x.SyncTime
-	}
-	return 0
-}
-
-// AOI对象信息
-type AoiObjectInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	ObjectType    int32                  `protobuf:"varint,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	EntityId      int64                  `protobuf:"varint,3,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	X             float32                `protobuf:"fixed32,5,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,6,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,7,opt,name=z,proto3" json:"z,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiObjectInfo) Reset() {
-	*x = AoiObjectInfo{}
-	mi := &file_game_proto_msgTypes[38]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiObjectInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiObjectInfo) ProtoMessage() {}
-
-func (x *AoiObjectInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[38]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiObjectInfo.ProtoReflect.Descriptor instead.
-func (*AoiObjectInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{38}
-}
-
-func (x *AoiObjectInfo) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetObjectType() int32 {
-	if x != nil {
-		return x.ObjectType
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetEntityId() int64 {
-	if x != nil {
-		return x.EntityId
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *AoiObjectInfo) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-// AOI进入通知
-type AoiEnterNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Objects       []*AoiObjectInfo       `protobuf:"bytes,3,rep,name=objects,proto3" json:"objects,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiEnterNotify) Reset() {
-	*x = AoiEnterNotify{}
-	mi := &file_game_proto_msgTypes[39]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiEnterNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiEnterNotify) ProtoMessage() {}
-
-func (x *AoiEnterNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[39]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiEnterNotify.ProtoReflect.Descriptor instead.
-func (*AoiEnterNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *AoiEnterNotify) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AoiEnterNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *AoiEnterNotify) GetObjects() []*AoiObjectInfo {
-	if x != nil {
-		return x.Objects
-	}
-	return nil
-}
-
-// AOI离开通知
-type AoiLeaveNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	ObjectIds     []int64                `protobuf:"varint,3,rep,packed,name=object_ids,json=objectIds,proto3" json:"object_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiLeaveNotify) Reset() {
-	*x = AoiLeaveNotify{}
-	mi := &file_game_proto_msgTypes[40]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiLeaveNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiLeaveNotify) ProtoMessage() {}
-
-func (x *AoiLeaveNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[40]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiLeaveNotify.ProtoReflect.Descriptor instead.
-func (*AoiLeaveNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{40}
-}
-
-func (x *AoiLeaveNotify) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AoiLeaveNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *AoiLeaveNotify) GetObjectIds() []int64 {
-	if x != nil {
-		return x.ObjectIds
-	}
-	return nil
-}
-
-// 地图移动同步
-type MapMoveSync struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,5,opt,name=z,proto3" json:"z,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,6,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveSync) Reset() {
-	*x = MapMoveSync{}
-	mi := &file_game_proto_msgTypes[41]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveSync) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveSync) ProtoMessage() {}
-
-func (x *MapMoveSync) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[41]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveSync.ProtoReflect.Descriptor instead.
-func (*MapMoveSync) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{41}
-}
-
-func (x *MapMoveSync) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-// Buff信息
-type BuffInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BuffId        int32                  `protobuf:"varint,1,opt,name=buff_id,json=buffId,proto3" json:"buff_id,omitempty"`
-	BuffName      string                 `protobuf:"bytes,2,opt,name=buff_name,json=buffName,proto3" json:"buff_name,omitempty"`
-	BuffDesc      string                 `protobuf:"bytes,3,opt,name=buff_desc,json=buffDesc,proto3" json:"buff_desc,omitempty"`
-	BuffType      int32                  `protobuf:"varint,4,opt,name=buff_type,json=buffType,proto3" json:"buff_type,omitempty"`
-	Duration      int32                  `protobuf:"varint,5,opt,name=duration,proto3" json:"duration,omitempty"`
-	RemainingTime int32                  `protobuf:"varint,6,opt,name=remaining_time,json=remainingTime,proto3" json:"remaining_time,omitempty"`
-	Stacks        int32                  `protobuf:"varint,7,opt,name=stacks,proto3" json:"stacks,omitempty"`
-	IsBeneficial  bool                   `protobuf:"varint,8,opt,name=is_beneficial,json=isBeneficial,proto3" json:"is_beneficial,omitempty"`
-	Effects       map[string]int32       `protobuf:"bytes,9,rep,name=effects,proto3" json:"effects,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffInfo) Reset() {
-	*x = BuffInfo{}
-	mi := &file_game_proto_msgTypes[42]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffInfo) ProtoMessage() {}
-
-func (x *BuffInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[42]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffInfo.ProtoReflect.Descriptor instead.
-func (*BuffInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{42}
-}
-
-func (x *BuffInfo) GetBuffId() int32 {
-	if x != nil {
-		return x.BuffId
-	}
-	return 0
-}
-
-func (x *BuffInfo) GetBuffName() string {
-	if x != nil {
-		return x.BuffName
-	}
-	return ""
-}
-
-func (x *BuffInfo) GetBuffDesc() string {
-	if x != nil {
-		return x.BuffDesc
-	}
-	return ""
-}
-
-func (x *BuffInfo) GetBuffType() int32 {
-	if x != nil {
-		return x.BuffType
-	}
-	return 0
-}
-
-func (x *BuffInfo) GetDuration() int32 {
-	if x != nil {
-		return x.Duration
-	}
-	return 0
-}
-
-func (x *BuffInfo) GetRemainingTime() int32 {
-	if x != nil {
-		return x.RemainingTime
-	}
-	return 0
-}
-
-func (x *BuffInfo) GetStacks() int32 {
-	if x != nil {
-		return x.Stacks
-	}
-	return 0
-}
-
-func (x *BuffInfo) GetIsBeneficial() bool {
-	if x != nil {
-		return x.IsBeneficial
-	}
-	return false
-}
-
-func (x *BuffInfo) GetEffects() map[string]int32 {
-	if x != nil {
-		return x.Effects
-	}
-	return nil
-}
-
-// Buff列表响应
-type BuffListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Buffs         []*BuffInfo            `protobuf:"bytes,3,rep,name=buffs,proto3" json:"buffs,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffListResponse) Reset() {
-	*x = BuffListResponse{}
-	mi := &file_game_proto_msgTypes[43]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffListResponse) ProtoMessage() {}
-
-func (x *BuffListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[43]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffListResponse.ProtoReflect.Descriptor instead.
-func (*BuffListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{43}
-}
-
-func (x *BuffListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *BuffListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *BuffListResponse) GetBuffs() []*BuffInfo {
-	if x != nil {
-		return x.Buffs
-	}
-	return nil
-}
-
-// Buff应用请求
-type BuffApplyRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BuffId        int32                  `protobuf:"varint,1,opt,name=buff_id,json=buffId,proto3" json:"buff_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffApplyRequest) Reset() {
-	*x = BuffApplyRequest{}
-	mi := &file_game_proto_msgTypes[44]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffApplyRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffApplyRequest) ProtoMessage() {}
-
-func (x *BuffApplyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[44]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffApplyRequest.ProtoReflect.Descriptor instead.
-func (*BuffApplyRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{44}
-}
-
-func (x *BuffApplyRequest) GetBuffId() int32 {
-	if x != nil {
-		return x.BuffId
-	}
-	return 0
-}
-
-func (x *BuffApplyRequest) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-// Buff应用响应
-type BuffApplyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Buff          *BuffInfo              `protobuf:"bytes,3,opt,name=buff,proto3" json:"buff,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffApplyResponse) Reset() {
-	*x = BuffApplyResponse{}
-	mi := &file_game_proto_msgTypes[45]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffApplyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffApplyResponse) ProtoMessage() {}
-
-func (x *BuffApplyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[45]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffApplyResponse.ProtoReflect.Descriptor instead.
-func (*BuffApplyResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{45}
-}
-
-func (x *BuffApplyResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *BuffApplyResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *BuffApplyResponse) GetBuff() *BuffInfo {
-	if x != nil {
-		return x.Buff
-	}
-	return nil
-}
-
-// 活动信息
-type ActivityInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActivityId    int32                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	ActivityName  string                 `protobuf:"bytes,2,opt,name=activity_name,json=activityName,proto3" json:"activity_name,omitempty"`
-	ActivityDesc  string                 `protobuf:"bytes,3,opt,name=activity_desc,json=activityDesc,proto3" json:"activity_desc,omitempty"`
-	ActivityType  int32                  `protobuf:"varint,4,opt,name=activity_type,json=activityType,proto3" json:"activity_type,omitempty"`
-	StartTime     int64                  `protobuf:"varint,5,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       int64                  `protobuf:"varint,6,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	Status        int32                  `protobuf:"varint,7,opt,name=status,proto3" json:"status,omitempty"`
-	MinLevel      int32                  `protobuf:"varint,8,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
-	Progress      int32                  `protobuf:"varint,9,opt,name=progress,proto3" json:"progress,omitempty"`
-	IsCompleted   bool                   `protobuf:"varint,10,opt,name=is_completed,json=isCompleted,proto3" json:"is_completed,omitempty"`
-	IsRewarded    bool                   `protobuf:"varint,11,opt,name=is_rewarded,json=isRewarded,proto3" json:"is_rewarded,omitempty"`
-	RemainingTime int32                  `protobuf:"varint,12,opt,name=remaining_time,json=remainingTime,proto3" json:"remaining_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityInfo) Reset() {
-	*x = ActivityInfo{}
-	mi := &file_game_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityInfo) ProtoMessage() {}
-
-func (x *ActivityInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityInfo.ProtoReflect.Descriptor instead.
-func (*ActivityInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *ActivityInfo) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetActivityName() string {
-	if x != nil {
-		return x.ActivityName
-	}
-	return ""
-}
-
-func (x *ActivityInfo) GetActivityDesc() string {
-	if x != nil {
-		return x.ActivityDesc
-	}
-	return ""
-}
-
-func (x *ActivityInfo) GetActivityType() int32 {
-	if x != nil {
-		return x.ActivityType
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetStartTime() int64 {
-	if x != nil {
-		return x.StartTime
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetEndTime() int64 {
-	if x != nil {
-		return x.EndTime
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetMinLevel() int32 {
-	if x != nil {
-		return x.MinLevel
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetProgress() int32 {
-	if x != nil {
-		return x.Progress
-	}
-	return 0
-}
-
-func (x *ActivityInfo) GetIsCompleted() bool {
-	if x != nil {
-		return x.IsCompleted
-	}
-	return false
-}
-
-func (x *ActivityInfo) GetIsRewarded() bool {
-	if x != nil {
-		return x.IsRewarded
-	}
-	return false
-}
-
-func (x *ActivityInfo) GetRemainingTime() int32 {
-	if x != nil {
-		return x.RemainingTime
-	}
-	return 0
-}
-
-// 活动列表响应
-type ActivityListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Activities    []*ActivityInfo        `protobuf:"bytes,3,rep,name=activities,proto3" json:"activities,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityListResponse) Reset() {
-	*x = ActivityListResponse{}
-	mi := &file_game_proto_msgTypes[47]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityListResponse) ProtoMessage() {}
-
-func (x *ActivityListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[47]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityListResponse.ProtoReflect.Descriptor instead.
-func (*ActivityListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{47}
-}
-
-func (x *ActivityListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ActivityListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ActivityListResponse) GetActivities() []*ActivityInfo {
-	if x != nil {
-		return x.Activities
-	}
-	return nil
-}
-
-// 活动加入请求
-type ActivityJoinRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActivityId    int32                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityJoinRequest) Reset() {
-	*x = ActivityJoinRequest{}
-	mi := &file_game_proto_msgTypes[48]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityJoinRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityJoinRequest) ProtoMessage() {}
-
-func (x *ActivityJoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[48]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityJoinRequest.ProtoReflect.Descriptor instead.
-func (*ActivityJoinRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{48}
-}
-
-func (x *ActivityJoinRequest) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-// 活动加入响应
-type ActivityJoinResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Activity      *ActivityInfo          `protobuf:"bytes,3,opt,name=activity,proto3" json:"activity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityJoinResponse) Reset() {
-	*x = ActivityJoinResponse{}
-	mi := &file_game_proto_msgTypes[49]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityJoinResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityJoinResponse) ProtoMessage() {}
-
-func (x *ActivityJoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[49]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityJoinResponse.ProtoReflect.Descriptor instead.
-func (*ActivityJoinResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{49}
-}
-
-func (x *ActivityJoinResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ActivityJoinResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ActivityJoinResponse) GetActivity() *ActivityInfo {
-	if x != nil {
-		return x.Activity
-	}
-	return nil
-}
-
-// 活动进度请求
-type ActivityProgressRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActivityId    int32                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	ConditionType string                 `protobuf:"bytes,2,opt,name=condition_type,json=conditionType,proto3" json:"condition_type,omitempty"`
-	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityProgressRequest) Reset() {
-	*x = ActivityProgressRequest{}
-	mi := &file_game_proto_msgTypes[50]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityProgressRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityProgressRequest) ProtoMessage() {}
-
-func (x *ActivityProgressRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[50]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityProgressRequest.ProtoReflect.Descriptor instead.
-func (*ActivityProgressRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{50}
-}
-
-func (x *ActivityProgressRequest) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-func (x *ActivityProgressRequest) GetConditionType() string {
-	if x != nil {
-		return x.ConditionType
-	}
-	return ""
-}
-
-func (x *ActivityProgressRequest) GetCount() int32 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-// 活动进度响应
-type ActivityProgressResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	ActivityId    int32                  `protobuf:"varint,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	ConditionType string                 `protobuf:"bytes,4,opt,name=condition_type,json=conditionType,proto3" json:"condition_type,omitempty"`
-	CurrentCount  int32                  `protobuf:"varint,5,opt,name=current_count,json=currentCount,proto3" json:"current_count,omitempty"`
-	RequiredCount int32                  `protobuf:"varint,6,opt,name=required_count,json=requiredCount,proto3" json:"required_count,omitempty"`
-	IsCompleted   bool                   `protobuf:"varint,7,opt,name=is_completed,json=isCompleted,proto3" json:"is_completed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityProgressResponse) Reset() {
-	*x = ActivityProgressResponse{}
-	mi := &file_game_proto_msgTypes[51]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityProgressResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityProgressResponse) ProtoMessage() {}
-
-func (x *ActivityProgressResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[51]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityProgressResponse.ProtoReflect.Descriptor instead.
-func (*ActivityProgressResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{51}
-}
-
-func (x *ActivityProgressResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ActivityProgressResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ActivityProgressResponse) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-func (x *ActivityProgressResponse) GetConditionType() string {
-	if x != nil {
-		return x.ConditionType
-	}
-	return ""
-}
-
-func (x *ActivityProgressResponse) GetCurrentCount() int32 {
-	if x != nil {
-		return x.CurrentCount
-	}
-	return 0
-}
-
-func (x *ActivityProgressResponse) GetRequiredCount() int32 {
-	if x != nil {
-		return x.RequiredCount
-	}
-	return 0
-}
-
-func (x *ActivityProgressResponse) GetIsCompleted() bool {
-	if x != nil {
-		return x.IsCompleted
-	}
-	return false
-}
-
-// 活动领取奖励请求
-type ActivityClaimRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ActivityId    int32                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityClaimRequest) Reset() {
-	*x = ActivityClaimRequest{}
-	mi := &file_game_proto_msgTypes[52]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityClaimRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityClaimRequest) ProtoMessage() {}
-
-func (x *ActivityClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[52]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityClaimRequest.ProtoReflect.Descriptor instead.
-func (*ActivityClaimRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{52}
-}
-
-func (x *ActivityClaimRequest) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-// 活动领取奖励响应
-type ActivityClaimResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	ActivityId    int32                  `protobuf:"varint,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
-	Rewards       []*ItemInfo            `protobuf:"bytes,4,rep,name=rewards,proto3" json:"rewards,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ActivityClaimResponse) Reset() {
-	*x = ActivityClaimResponse{}
-	mi := &file_game_proto_msgTypes[53]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ActivityClaimResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ActivityClaimResponse) ProtoMessage() {}
-
-func (x *ActivityClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[53]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ActivityClaimResponse.ProtoReflect.Descriptor instead.
-func (*ActivityClaimResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{53}
-}
-
-func (x *ActivityClaimResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ActivityClaimResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ActivityClaimResponse) GetActivityId() int32 {
-	if x != nil {
-		return x.ActivityId
-	}
-	return 0
-}
-
-func (x *ActivityClaimResponse) GetRewards() []*ItemInfo {
-	if x != nil {
-		return x.Rewards
-	}
-	return nil
-}
-
-// Buff移除请求
-type BuffRemoveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	BuffId        int32                  `protobuf:"varint,1,opt,name=buff_id,json=buffId,proto3" json:"buff_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,2,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffRemoveRequest) Reset() {
-	*x = BuffRemoveRequest{}
-	mi := &file_game_proto_msgTypes[54]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffRemoveRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffRemoveRequest) ProtoMessage() {}
-
-func (x *BuffRemoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[54]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffRemoveRequest.ProtoReflect.Descriptor instead.
-func (*BuffRemoveRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{54}
-}
-
-func (x *BuffRemoveRequest) GetBuffId() int32 {
-	if x != nil {
-		return x.BuffId
-	}
-	return 0
-}
-
-func (x *BuffRemoveRequest) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-// Buff移除响应
-type BuffRemoveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffRemoveResponse) Reset() {
-	*x = BuffRemoveResponse{}
-	mi := &file_game_proto_msgTypes[55]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffRemoveResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffRemoveResponse) ProtoMessage() {}
-
-func (x *BuffRemoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[55]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffRemoveResponse.ProtoReflect.Descriptor instead.
-func (*BuffRemoveResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{55}
-}
-
-func (x *BuffRemoveResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *BuffRemoveResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-// Buff驱散请求
-type BuffDispelRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TargetId      int64                  `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	Count         int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	DispelDebuff  bool                   `protobuf:"varint,3,opt,name=dispel_debuff,json=dispelDebuff,proto3" json:"dispel_debuff,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffDispelRequest) Reset() {
-	*x = BuffDispelRequest{}
-	mi := &file_game_proto_msgTypes[56]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffDispelRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffDispelRequest) ProtoMessage() {}
-
-func (x *BuffDispelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[56]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffDispelRequest.ProtoReflect.Descriptor instead.
-func (*BuffDispelRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{56}
-}
-
-func (x *BuffDispelRequest) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-func (x *BuffDispelRequest) GetCount() int32 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-func (x *BuffDispelRequest) GetDispelDebuff() bool {
-	if x != nil {
-		return x.DispelDebuff
-	}
-	return false
-}
-
-// Buff驱散响应
-type BuffDispelResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Dispelled     int32                  `protobuf:"varint,3,opt,name=dispelled,proto3" json:"dispelled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BuffDispelResponse) Reset() {
-	*x = BuffDispelResponse{}
-	mi := &file_game_proto_msgTypes[57]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BuffDispelResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BuffDispelResponse) ProtoMessage() {}
-
-func (x *BuffDispelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[57]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BuffDispelResponse.ProtoReflect.Descriptor instead.
-func (*BuffDispelResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{57}
-}
-
-func (x *BuffDispelResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *BuffDispelResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *BuffDispelResponse) GetDispelled() int32 {
-	if x != nil {
-		return x.Dispelled
-	}
-	return 0
-}
-
-// 掉落物品信息
-type DropItemInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	Count         int32                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
-	IsRare        bool                   `protobuf:"varint,3,opt,name=is_rare,json=isRare,proto3" json:"is_rare,omitempty"`
-	BindType      int32                  `protobuf:"varint,4,opt,name=bind_type,json=bindType,proto3" json:"bind_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DropItemInfo) Reset() {
-	*x = DropItemInfo{}
-	mi := &file_game_proto_msgTypes[58]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DropItemInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DropItemInfo) ProtoMessage() {}
-
-func (x *DropItemInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[58]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DropItemInfo.ProtoReflect.Descriptor instead.
-func (*DropItemInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{58}
-}
-
-func (x *DropItemInfo) GetItemId() int64 {
-	if x != nil {
-		return x.ItemId
-	}
-	return 0
-}
-
-func (x *DropItemInfo) GetCount() int32 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-func (x *DropItemInfo) GetIsRare() bool {
-	if x != nil {
-		return x.IsRare
-	}
-	return false
-}
-
-func (x *DropItemInfo) GetBindType() int32 {
-	if x != nil {
-		return x.BindType
-	}
-	return 0
-}
-
-// 掉落实体信息
-type DropEntityInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EntityId      int64                  `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Items         []*DropItemInfo        `protobuf:"bytes,2,rep,name=items,proto3" json:"items,omitempty"`
-	Gold          int64                  `protobuf:"varint,3,opt,name=gold,proto3" json:"gold,omitempty"`
-	Exp           int64                  `protobuf:"varint,4,opt,name=exp,proto3" json:"exp,omitempty"`
-	OwnerId       int64                  `protobuf:"varint,5,opt,name=owner_id,json=ownerId,proto3" json:"owner_id,omitempty"`
-	IsProtected   bool                   `protobuf:"varint,6,opt,name=is_protected,json=isProtected,proto3" json:"is_protected,omitempty"`
-	ProtectTime   int32                  `protobuf:"varint,7,opt,name=protect_time,json=protectTime,proto3" json:"protect_time,omitempty"`
-	PositionX     float32                `protobuf:"fixed32,8,opt,name=position_x,json=positionX,proto3" json:"position_x,omitempty"`
-	PositionY     float32                `protobuf:"fixed32,9,opt,name=position_y,json=positionY,proto3" json:"position_y,omitempty"`
-	PositionZ     float32                `protobuf:"fixed32,10,opt,name=position_z,json=positionZ,proto3" json:"position_z,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DropEntityInfo) Reset() {
-	*x = DropEntityInfo{}
-	mi := &file_game_proto_msgTypes[59]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DropEntityInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DropEntityInfo) ProtoMessage() {}
-
-func (x *DropEntityInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[59]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DropEntityInfo.ProtoReflect.Descriptor instead.
-func (*DropEntityInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{59}
-}
-
-func (x *DropEntityInfo) GetEntityId() int64 {
-	if x != nil {
-		return x.EntityId
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetItems() []*DropItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *DropEntityInfo) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetOwnerId() int64 {
-	if x != nil {
-		return x.OwnerId
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetIsProtected() bool {
-	if x != nil {
-		return x.IsProtected
-	}
-	return false
-}
-
-func (x *DropEntityInfo) GetProtectTime() int32 {
-	if x != nil {
-		return x.ProtectTime
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetPositionX() float32 {
-	if x != nil {
-		return x.PositionX
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetPositionY() float32 {
-	if x != nil {
-		return x.PositionY
-	}
-	return 0
-}
-
-func (x *DropEntityInfo) GetPositionZ() float32 {
-	if x != nil {
-		return x.PositionZ
-	}
-	return 0
-}
-
-// 掉落拾取响应
-type DropPickupResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Items         []*DropItemInfo        `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	Gold          int64                  `protobuf:"varint,4,opt,name=gold,proto3" json:"gold,omitempty"`
-	Exp           int64                  `protobuf:"varint,5,opt,name=exp,proto3" json:"exp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DropPickupResponse) Reset() {
-	*x = DropPickupResponse{}
-	mi := &file_game_proto_msgTypes[60]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DropPickupResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DropPickupResponse) ProtoMessage() {}
-
-func (x *DropPickupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[60]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DropPickupResponse.ProtoReflect.Descriptor instead.
-func (*DropPickupResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{60}
-}
-
-func (x *DropPickupResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DropPickupResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DropPickupResponse) GetItems() []*DropItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-func (x *DropPickupResponse) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-func (x *DropPickupResponse) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-// 掉落列表响应
-type DropListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Drops         []*DropEntityInfo      `protobuf:"bytes,3,rep,name=drops,proto3" json:"drops,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DropListResponse) Reset() {
-	*x = DropListResponse{}
-	mi := &file_game_proto_msgTypes[61]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DropListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DropListResponse) ProtoMessage() {}
-
-func (x *DropListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[61]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DropListResponse.ProtoReflect.Descriptor instead.
-func (*DropListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{61}
-}
-
-func (x *DropListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DropListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DropListResponse) GetDrops() []*DropEntityInfo {
-	if x != nil {
-		return x.Drops
-	}
-	return nil
-}
-
-// 副本信息
-type DungeonInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DungeonId     int32                  `protobuf:"varint,1,opt,name=dungeon_id,json=dungeonId,proto3" json:"dungeon_id,omitempty"`
-	DungeonName   string                 `protobuf:"bytes,2,opt,name=dungeon_name,json=dungeonName,proto3" json:"dungeon_name,omitempty"`
-	DungeonDesc   string                 `protobuf:"bytes,3,opt,name=dungeon_desc,json=dungeonDesc,proto3" json:"dungeon_desc,omitempty"`
-	DungeonType   int32                  `protobuf:"varint,4,opt,name=dungeon_type,json=dungeonType,proto3" json:"dungeon_type,omitempty"`
-	MinLevel      int32                  `protobuf:"varint,5,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
-	MaxLevel      int32                  `protobuf:"varint,6,opt,name=max_level,json=maxLevel,proto3" json:"max_level,omitempty"`
-	MinPlayers    int32                  `protobuf:"varint,7,opt,name=min_players,json=minPlayers,proto3" json:"min_players,omitempty"`
-	MaxPlayers    int32                  `protobuf:"varint,8,opt,name=max_players,json=maxPlayers,proto3" json:"max_players,omitempty"`
-	TimeLimit     int32                  `protobuf:"varint,9,opt,name=time_limit,json=timeLimit,proto3" json:"time_limit,omitempty"`
-	DailyLimit    int32                  `protobuf:"varint,10,opt,name=daily_limit,json=dailyLimit,proto3" json:"daily_limit,omitempty"`
-	Status        int32                  `protobuf:"varint,11,opt,name=status,proto3" json:"status,omitempty"`
-	Progress      int32                  `protobuf:"varint,12,opt,name=progress,proto3" json:"progress,omitempty"`
-	RemainingTime int32                  `protobuf:"varint,13,opt,name=remaining_time,json=remainingTime,proto3" json:"remaining_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonInfo) Reset() {
-	*x = DungeonInfo{}
-	mi := &file_game_proto_msgTypes[62]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonInfo) ProtoMessage() {}
-
-func (x *DungeonInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[62]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonInfo.ProtoReflect.Descriptor instead.
-func (*DungeonInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{62}
-}
-
-func (x *DungeonInfo) GetDungeonId() int32 {
-	if x != nil {
-		return x.DungeonId
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetDungeonName() string {
-	if x != nil {
-		return x.DungeonName
-	}
-	return ""
-}
-
-func (x *DungeonInfo) GetDungeonDesc() string {
-	if x != nil {
-		return x.DungeonDesc
-	}
-	return ""
-}
-
-func (x *DungeonInfo) GetDungeonType() int32 {
-	if x != nil {
-		return x.DungeonType
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetMinLevel() int32 {
-	if x != nil {
-		return x.MinLevel
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetMaxLevel() int32 {
-	if x != nil {
-		return x.MaxLevel
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetMinPlayers() int32 {
-	if x != nil {
-		return x.MinPlayers
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetMaxPlayers() int32 {
-	if x != nil {
-		return x.MaxPlayers
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetTimeLimit() int32 {
-	if x != nil {
-		return x.TimeLimit
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetDailyLimit() int32 {
-	if x != nil {
-		return x.DailyLimit
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetProgress() int32 {
-	if x != nil {
-		return x.Progress
-	}
-	return 0
-}
-
-func (x *DungeonInfo) GetRemainingTime() int32 {
-	if x != nil {
-		return x.RemainingTime
-	}
-	return 0
-}
-
-// 副本列表响应
-type DungeonListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Dungeons      []*DungeonInfo         `protobuf:"bytes,3,rep,name=dungeons,proto3" json:"dungeons,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonListResponse) Reset() {
-	*x = DungeonListResponse{}
-	mi := &file_game_proto_msgTypes[63]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonListResponse) ProtoMessage() {}
-
-func (x *DungeonListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[63]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonListResponse.ProtoReflect.Descriptor instead.
-func (*DungeonListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{63}
-}
-
-func (x *DungeonListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DungeonListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DungeonListResponse) GetDungeons() []*DungeonInfo {
-	if x != nil {
-		return x.Dungeons
-	}
-	return nil
-}
-
-// 副本进入请求
-type DungeonEnterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DungeonId     int32                  `protobuf:"varint,1,opt,name=dungeon_id,json=dungeonId,proto3" json:"dungeon_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonEnterRequest) Reset() {
-	*x = DungeonEnterRequest{}
-	mi := &file_game_proto_msgTypes[64]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonEnterRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonEnterRequest) ProtoMessage() {}
-
-func (x *DungeonEnterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[64]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonEnterRequest.ProtoReflect.Descriptor instead.
-func (*DungeonEnterRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{64}
-}
-
-func (x *DungeonEnterRequest) GetDungeonId() int32 {
-	if x != nil {
-		return x.DungeonId
-	}
-	return 0
-}
-
-// 副本进入响应
-type DungeonEnterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	InstanceId    int32                  `protobuf:"varint,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,4,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonEnterResponse) Reset() {
-	*x = DungeonEnterResponse{}
-	mi := &file_game_proto_msgTypes[65]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonEnterResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonEnterResponse) ProtoMessage() {}
-
-func (x *DungeonEnterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[65]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonEnterResponse.ProtoReflect.Descriptor instead.
-func (*DungeonEnterResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{65}
-}
-
-func (x *DungeonEnterResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DungeonEnterResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DungeonEnterResponse) GetInstanceId() int32 {
-	if x != nil {
-		return x.InstanceId
-	}
-	return 0
-}
-
-func (x *DungeonEnterResponse) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-// 副本退出响应
-type DungeonExitResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonExitResponse) Reset() {
-	*x = DungeonExitResponse{}
-	mi := &file_game_proto_msgTypes[66]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonExitResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonExitResponse) ProtoMessage() {}
-
-func (x *DungeonExitResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[66]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonExitResponse.ProtoReflect.Descriptor instead.
-func (*DungeonExitResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{66}
-}
-
-func (x *DungeonExitResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DungeonExitResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DungeonExitResponse) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-// 副本状态通知
-type DungeonStatusNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InstanceId    int32                  `protobuf:"varint,1,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Status        int32                  `protobuf:"varint,2,opt,name=status,proto3" json:"status,omitempty"`
-	Progress      int32                  `protobuf:"varint,3,opt,name=progress,proto3" json:"progress,omitempty"`
-	RemainingTime int32                  `protobuf:"varint,4,opt,name=remaining_time,json=remainingTime,proto3" json:"remaining_time,omitempty"`
-	Wave          int32                  `protobuf:"varint,5,opt,name=wave,proto3" json:"wave,omitempty"`
-	KillCount     int32                  `protobuf:"varint,6,opt,name=kill_count,json=killCount,proto3" json:"kill_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonStatusNotify) Reset() {
-	*x = DungeonStatusNotify{}
-	mi := &file_game_proto_msgTypes[67]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonStatusNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonStatusNotify) ProtoMessage() {}
-
-func (x *DungeonStatusNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[67]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonStatusNotify.ProtoReflect.Descriptor instead.
-func (*DungeonStatusNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{67}
-}
-
-func (x *DungeonStatusNotify) GetInstanceId() int32 {
-	if x != nil {
-		return x.InstanceId
-	}
-	return 0
-}
-
-func (x *DungeonStatusNotify) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *DungeonStatusNotify) GetProgress() int32 {
-	if x != nil {
-		return x.Progress
-	}
-	return 0
-}
-
-func (x *DungeonStatusNotify) GetRemainingTime() int32 {
-	if x != nil {
-		return x.RemainingTime
-	}
-	return 0
-}
-
-func (x *DungeonStatusNotify) GetWave() int32 {
-	if x != nil {
-		return x.Wave
-	}
-	return 0
-}
-
-func (x *DungeonStatusNotify) GetKillCount() int32 {
-	if x != nil {
-		return x.KillCount
-	}
-	return 0
-}
-
-// 副本完成响应
-type DungeonCompleteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	InstanceId    int32                  `protobuf:"varint,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	Exp           int64                  `protobuf:"varint,4,opt,name=exp,proto3" json:"exp,omitempty"`
-	Gold          int64                  `protobuf:"varint,5,opt,name=gold,proto3" json:"gold,omitempty"`
-	Rewards       []*ItemInfo            `protobuf:"bytes,6,rep,name=rewards,proto3" json:"rewards,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonCompleteResponse) Reset() {
-	*x = DungeonCompleteResponse{}
-	mi := &file_game_proto_msgTypes[68]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonCompleteResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonCompleteResponse) ProtoMessage() {}
-
-func (x *DungeonCompleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[68]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonCompleteResponse.ProtoReflect.Descriptor instead.
-func (*DungeonCompleteResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{68}
-}
-
-func (x *DungeonCompleteResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DungeonCompleteResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DungeonCompleteResponse) GetInstanceId() int32 {
-	if x != nil {
-		return x.InstanceId
-	}
-	return 0
-}
-
-func (x *DungeonCompleteResponse) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-func (x *DungeonCompleteResponse) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-func (x *DungeonCompleteResponse) GetRewards() []*ItemInfo {
-	if x != nil {
-		return x.Rewards
-	}
-	return nil
-}
-
-// 副本失败响应
-type DungeonFailResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	InstanceId    int32                  `protobuf:"varint,3,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DungeonFailResponse) Reset() {
-	*x = DungeonFailResponse{}
-	mi := &file_game_proto_msgTypes[69]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DungeonFailResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DungeonFailResponse) ProtoMessage() {}
-
-func (x *DungeonFailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[69]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DungeonFailResponse.ProtoReflect.Descriptor instead.
-func (*DungeonFailResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{69}
-}
-
-func (x *DungeonFailResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DungeonFailResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *DungeonFailResponse) GetInstanceId() int32 {
-	if x != nil {
-		return x.InstanceId
-	}
-	return 0
-}
-
-// 商品信息
-type ShopItemInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Icon          string                 `protobuf:"bytes,4,opt,name=icon,proto3" json:"icon,omitempty"`
-	PriceType     int32                  `protobuf:"varint,5,opt,name=price_type,json=priceType,proto3" json:"price_type,omitempty"`
-	Price         int64                  `protobuf:"varint,6,opt,name=price,proto3" json:"price,omitempty"`
-	OriginalPrice int64                  `protobuf:"varint,7,opt,name=original_price,json=originalPrice,proto3" json:"original_price,omitempty"`
-	Category      int32                  `protobuf:"varint,8,opt,name=category,proto3" json:"category,omitempty"`
-	ItemType      int32                  `protobuf:"varint,9,opt,name=item_type,json=itemType,proto3" json:"item_type,omitempty"`
-	ItemCount     int32                  `protobuf:"varint,10,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"`
-	LevelReq      int32                  `protobuf:"varint,11,opt,name=level_req,json=levelReq,proto3" json:"level_req,omitempty"`
-	VipReq        int32                  `protobuf:"varint,12,opt,name=vip_req,json=vipReq,proto3" json:"vip_req,omitempty"`
-	LimitType     int32                  `protobuf:"varint,13,opt,name=limit_type,json=limitType,proto3" json:"limit_type,omitempty"`
-	LimitCount    int32                  `protobuf:"varint,14,opt,name=limit_count,json=limitCount,proto3" json:"limit_count,omitempty"`
-	IsHot         bool                   `protobuf:"varint,15,opt,name=is_hot,json=isHot,proto3" json:"is_hot,omitempty"`
-	IsNew         bool                   `protobuf:"varint,16,opt,name=is_new,json=isNew,proto3" json:"is_new,omitempty"`
-	StartTime     int64                  `protobuf:"varint,17,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       int64                  `protobuf:"varint,18,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopItemInfo) Reset() {
-	*x = ShopItemInfo{}
-	mi := &file_game_proto_msgTypes[70]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopItemInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopItemInfo) ProtoMessage() {}
-
-func (x *ShopItemInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[70]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopItemInfo.ProtoReflect.Descriptor instead.
-func (*ShopItemInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{70}
-}
-
-func (x *ShopItemInfo) GetItemId() int64 {
-	if x != nil {
-		return x.ItemId
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ShopItemInfo) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *ShopItemInfo) GetIcon() string {
-	if x != nil {
-		return x.Icon
-	}
-	return ""
-}
-
-func (x *ShopItemInfo) GetPriceType() int32 {
-	if x != nil {
-		return x.PriceType
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetPrice() int64 {
-	if x != nil {
-		return x.Price
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetOriginalPrice() int64 {
-	if x != nil {
-		return x.OriginalPrice
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetCategory() int32 {
-	if x != nil {
-		return x.Category
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetItemType() int32 {
-	if x != nil {
-		return x.ItemType
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetItemCount() int32 {
-	if x != nil {
-		return x.ItemCount
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetLevelReq() int32 {
-	if x != nil {
-		return x.LevelReq
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetVipReq() int32 {
-	if x != nil {
-		return x.VipReq
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetLimitType() int32 {
-	if x != nil {
-		return x.LimitType
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetLimitCount() int32 {
-	if x != nil {
-		return x.LimitCount
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetIsHot() bool {
-	if x != nil {
-		return x.IsHot
-	}
-	return false
-}
-
-func (x *ShopItemInfo) GetIsNew() bool {
-	if x != nil {
-		return x.IsNew
-	}
-	return false
-}
-
-func (x *ShopItemInfo) GetStartTime() int64 {
-	if x != nil {
-		return x.StartTime
-	}
-	return 0
-}
-
-func (x *ShopItemInfo) GetEndTime() int64 {
-	if x != nil {
-		return x.EndTime
-	}
-	return 0
-}
-
-// 商品列表响应
-type ShopItemListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Items         []*ShopItemInfo        `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopItemListResponse) Reset() {
-	*x = ShopItemListResponse{}
-	mi := &file_game_proto_msgTypes[71]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopItemListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopItemListResponse) ProtoMessage() {}
-
-func (x *ShopItemListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[71]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopItemListResponse.ProtoReflect.Descriptor instead.
-func (*ShopItemListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{71}
-}
-
-func (x *ShopItemListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ShopItemListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ShopItemListResponse) GetItems() []*ShopItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-// 商品分类信息
-type ShopCategoryInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CategoryId    int32                  `protobuf:"varint,1,opt,name=category_id,json=categoryId,proto3" json:"category_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Icon          string                 `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
-	SortOrder     int32                  `protobuf:"varint,4,opt,name=sort_order,json=sortOrder,proto3" json:"sort_order,omitempty"`
-	IsVisible     bool                   `protobuf:"varint,5,opt,name=is_visible,json=isVisible,proto3" json:"is_visible,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopCategoryInfo) Reset() {
-	*x = ShopCategoryInfo{}
-	mi := &file_game_proto_msgTypes[72]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopCategoryInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopCategoryInfo) ProtoMessage() {}
-
-func (x *ShopCategoryInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[72]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopCategoryInfo.ProtoReflect.Descriptor instead.
-func (*ShopCategoryInfo) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{72}
-}
-
-func (x *ShopCategoryInfo) GetCategoryId() int32 {
-	if x != nil {
-		return x.CategoryId
-	}
-	return 0
-}
-
-func (x *ShopCategoryInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ShopCategoryInfo) GetIcon() string {
-	if x != nil {
-		return x.Icon
-	}
-	return ""
-}
-
-func (x *ShopCategoryInfo) GetSortOrder() int32 {
-	if x != nil {
-		return x.SortOrder
-	}
-	return 0
-}
-
-func (x *ShopCategoryInfo) GetIsVisible() bool {
-	if x != nil {
-		return x.IsVisible
-	}
-	return false
-}
-
-// 分类列表响应
-type ShopCategoryListResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Categories    []*ShopCategoryInfo    `protobuf:"bytes,3,rep,name=categories,proto3" json:"categories,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopCategoryListResponse) Reset() {
-	*x = ShopCategoryListResponse{}
-	mi := &file_game_proto_msgTypes[73]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopCategoryListResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopCategoryListResponse) ProtoMessage() {}
-
-func (x *ShopCategoryListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[73]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopCategoryListResponse.ProtoReflect.Descriptor instead.
-func (*ShopCategoryListResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{73}
-}
-
-func (x *ShopCategoryListResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ShopCategoryListResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ShopCategoryListResponse) GetCategories() []*ShopCategoryInfo {
-	if x != nil {
-		return x.Categories
-	}
-	return nil
-}
-
-// 购买响应
-type ShopBuyResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	ItemId        int64                  `protobuf:"varint,3,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	Count         int32                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`
-	TotalPrice    int64                  `protobuf:"varint,5,opt,name=total_price,json=totalPrice,proto3" json:"total_price,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopBuyResponse) Reset() {
-	*x = ShopBuyResponse{}
-	mi := &file_game_proto_msgTypes[74]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopBuyResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopBuyResponse) ProtoMessage() {}
-
-func (x *ShopBuyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[74]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopBuyResponse.ProtoReflect.Descriptor instead.
-func (*ShopBuyResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{74}
-}
-
-func (x *ShopBuyResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ShopBuyResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ShopBuyResponse) GetItemId() int64 {
-	if x != nil {
-		return x.ItemId
-	}
-	return 0
-}
-
-func (x *ShopBuyResponse) GetCount() int32 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-func (x *ShopBuyResponse) GetTotalPrice() int64 {
-	if x != nil {
-		return x.TotalPrice
-	}
-	return 0
-}
-
-// 热销商品响应
-type ShopHotItemsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	Items         []*ShopItemInfo        `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ShopHotItemsResponse) Reset() {
-	*x = ShopHotItemsResponse{}
-	mi := &file_game_proto_msgTypes[75]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ShopHotItemsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ShopHotItemsResponse) ProtoMessage() {}
-
-func (x *ShopHotItemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[75]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ShopHotItemsResponse.ProtoReflect.Descriptor instead.
-func (*ShopHotItemsResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{75}
-}
-
-func (x *ShopHotItemsResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *ShopHotItemsResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *ShopHotItemsResponse) GetItems() []*ShopItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-type MapPathResponse_Point struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	X             float32                `protobuf:"fixed32,1,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,2,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,3,opt,name=z,proto3" json:"z,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapPathResponse_Point) Reset() {
-	*x = MapPathResponse_Point{}
-	mi := &file_game_proto_msgTypes[76]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapPathResponse_Point) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapPathResponse_Point) ProtoMessage() {}
-
-func (x *MapPathResponse_Point) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[76]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapPathResponse_Point.ProtoReflect.Descriptor instead.
-func (*MapPathResponse_Point) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{36, 0}
-}
-
-func (x *MapPathResponse_Point) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapPathResponse_Point) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapPathResponse_Point) GetZ() float32 {
-	if x != nil {
-		return x.Z
+		return x.LastLoginTime
 	}
 	return 0
 }
@@ -6383,622 +3441,414 @@ var File_game_proto protoreflect.FileDescriptor
 const file_game_proto_rawDesc = "" +
 	"\n" +
 	"\n" +
-	"game.proto\x12\bprotocol\"p\n" +
-	"\aMessage\x12\x15\n" +
+	"game.proto\x12\bprotocol\x1a\fcommon.proto\"\xaa\x01\n" +
+	"\rClientMessage\x12\x15\n" +
 	"\x06msg_id\x18\x01 \x01(\rR\x05msgId\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x03 \x01(\x03R\tsessionId\x12\x12\n" +
-	"\x04data\x18\x04 \x01(\fR\x04data\"j\n" +
-	"\bResponse\x12\x15\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x12\x14\n" +
+	"\x05token\x18\x06 \x01(\tR\x05token\"\x8d\x01\n" +
+	"\rServerMessage\x12\x15\n" +
 	"\x06msg_id\x18\x01 \x01(\rR\x05msgId\x12\x16\n" +
 	"\x06result\x18\x02 \x01(\x05R\x06result\x12\x1b\n" +
 	"\terror_msg\x18\x03 \x01(\tR\berrorMsg\x12\x12\n" +
-	"\x04data\x18\x04 \x01(\fR\x04data\"w\n" +
-	"\n" +
-	"PlayerInfo\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\x05R\x05level\x12\x10\n" +
-	"\x03sex\x18\x04 \x01(\x05R\x03sex\x12\x10\n" +
-	"\x03age\x18\x05 \x01(\x05R\x03age\"M\n" +
-	"\x13PlayerCreateRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03sex\x18\x02 \x01(\x05R\x03sex\x12\x10\n" +
-	"\x03age\x18\x03 \x01(\x05R\x03age\"{\n" +
-	"\x14PlayerCreateResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12,\n" +
-	"\x06player\x18\x03 \x01(\v2\x14.protocol.PlayerInfoR\x06player\"1\n" +
-	"\x12PlayerLoginRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"\xa7\x01\n" +
-	"\x13PlayerLoginResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12\x14\n" +
-	"\x05level\x18\x05 \x01(\x05R\x05level\x12\x12\n" +
-	"\x04gold\x18\x06 \x01(\x03R\x04gold\"3\n" +
-	"\x14PlayerGetInfoRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"\x8a\x01\n" +
-	"\x15PlayerGetInfoResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12:\n" +
-	"\vplayer_info\x18\x03 \x01(\v2\x19.protocol.PlayerBasicInfoR\n" +
-	"playerInfo\"2\n" +
-	"\x13PlayerLogoutRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"M\n" +
-	"\x14PlayerLogoutResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"\xd9\x01\n" +
-	"\x0fPlayerBasicInfo\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\x05R\x05level\x12\x10\n" +
-	"\x03exp\x18\x04 \x01(\x03R\x03exp\x12\x12\n" +
-	"\x04gold\x18\x05 \x01(\x03R\x04gold\x12\x1b\n" +
-	"\tvip_level\x18\x06 \x01(\x05R\bvipLevel\x12\x1b\n" +
-	"\tserver_id\x18\a \x01(\x05R\bserverId\x12\x1f\n" +
-	"\vcreate_time\x18\b \x01(\x03R\n" +
-	"createTime\"\xf7\x01\n" +
+	"\x04data\x18\x04 \x01(\fR\x04data\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"3\n" +
+	"\x10HeartbeatRequest\x12\x1f\n" +
+	"\vclient_time\x18\x01 \x01(\x03R\n" +
+	"clientTime\"U\n" +
+	"\x11HeartbeatResponse\x12\x1f\n" +
+	"\vclient_time\x18\x01 \x01(\x03R\n" +
+	"clientTime\x12\x1f\n" +
+	"\vserver_time\x18\x02 \x01(\x03R\n" +
+	"serverTime\"\xf8\x01\n" +
 	"\bItemInfo\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x1b\n" +
-	"\titem_type\x18\x02 \x01(\x05R\bitemType\x12\x1b\n" +
-	"\titem_name\x18\x03 \x01(\tR\bitemName\x12\x1d\n" +
+	"\tconfig_id\x18\x02 \x01(\x05R\bconfigId\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\x12\x14\n" +
+	"\x05level\x18\x04 \x01(\x05R\x05level\x12\x18\n" +
+	"\aquality\x18\x05 \x01(\x05R\aquality\x12\x1b\n" +
+	"\tbind_type\x18\x06 \x01(\x05R\bbindType\x12\x1a\n" +
+	"\bposition\x18\a \x01(\x05R\bposition\x127\n" +
 	"\n" +
-	"item_count\x18\x04 \x01(\x05R\titemCount\x12\x1d\n" +
+	"attributes\x18\b \x03(\v2\x17.protocol.ItemAttributeR\n" +
+	"attributes\"G\n" +
+	"\rItemAttribute\x12\x17\n" +
+	"\aattr_id\x18\x01 \x01(\x05R\x06attrId\x12\x1d\n" +
 	"\n" +
-	"item_level\x18\x05 \x01(\x05R\titemLevel\x12!\n" +
-	"\fitem_quality\x18\x06 \x01(\x05R\vitemQuality\x12\x1b\n" +
-	"\tbind_type\x18\a \x01(\x05R\bbindType\x12\x1a\n" +
-	"\bposition\x18\b \x01(\x05R\bposition\"\xa2\x02\n" +
-	"\bTaskInfo\x12\x17\n" +
-	"\atask_id\x18\x01 \x01(\x03R\x06taskId\x12\x1b\n" +
-	"\ttask_type\x18\x02 \x01(\x05R\btaskType\x12\x1b\n" +
-	"\ttask_name\x18\x03 \x01(\tR\btaskName\x12\x1b\n" +
-	"\ttask_desc\x18\x04 \x01(\tR\btaskDesc\x12\x16\n" +
-	"\x06status\x18\x05 \x01(\x05R\x06status\x12\x1a\n" +
-	"\bprogress\x18\x06 \x03(\x05R\bprogress\x12,\n" +
-	"\arewards\x18\a \x03(\v2\x12.protocol.ItemInfoR\arewards\x12\x1f\n" +
-	"\vaccept_time\x18\b \x01(\x03R\n" +
-	"acceptTime\x12#\n" +
-	"\rcomplete_time\x18\t \x01(\x03R\fcompleteTime\"\xd0\x01\n" +
+	"attr_value\x18\x02 \x01(\x03R\tattrValue\"z\n" +
 	"\tSkillInfo\x12\x19\n" +
-	"\bskill_id\x18\x01 \x01(\x03R\askillId\x12\x1d\n" +
+	"\bskill_id\x18\x01 \x01(\x05R\askillId\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\x05R\x05level\x12\x10\n" +
+	"\x03exp\x18\x03 \x01(\x05R\x03exp\x12*\n" +
+	"\x11cooldown_end_time\x18\x04 \x01(\x03R\x0fcooldownEndTime\"\x9e\x01\n" +
+	"\x10SkillCastRequest\x12\x19\n" +
+	"\bskill_id\x18\x01 \x01(\x05R\askillId\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x121\n" +
 	"\n" +
-	"skill_name\x18\x02 \x01(\tR\tskillName\x12\x1f\n" +
-	"\vskill_level\x18\x03 \x01(\x05R\n" +
-	"skillLevel\x12\x1d\n" +
-	"\n" +
-	"skill_type\x18\x04 \x01(\x05R\tskillType\x12&\n" +
-	"\x0fskill_cool_time\x18\x05 \x01(\x03R\rskillCoolTime\x12!\n" +
-	"\fskill_damage\x18\x06 \x01(\x03R\vskillDamage\"\xb1\x01\n" +
-	"\x0fSkillUseRequest\x12\x19\n" +
-	"\bskill_id\x18\x01 \x01(\x03R\askillId\x12\x1b\n" +
-	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x12\x19\n" +
-	"\btarget_x\x18\x03 \x01(\x02R\atargetX\x12\x19\n" +
-	"\btarget_y\x18\x04 \x01(\x02R\atargetY\x12\x19\n" +
-	"\btarget_z\x18\x05 \x01(\x02R\atargetZ\x12\x15\n" +
-	"\x06map_id\x18\x06 \x01(\x03R\x05mapId\"\xb5\x01\n" +
-	"\x10SkillUseResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x19\n" +
-	"\bskill_id\x18\x03 \x01(\x03R\askillId\x12\x1b\n" +
-	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\x12\x1a\n" +
-	"\bcooldown\x18\x05 \x01(\x03R\bcooldown\x12\x16\n" +
-	"\x06damage\x18\x06 \x01(\x03R\x06damage\"\x84\x01\n" +
-	"\x11SkillCooldownInfo\x12\x19\n" +
-	"\bskill_id\x18\x01 \x01(\x03R\askillId\x12-\n" +
-	"\x12remaining_cooldown\x18\x02 \x01(\x03R\x11remainingCooldown\x12%\n" +
-	"\x0etotal_cooldown\x18\x03 \x01(\x03R\rtotalCooldown\"P\n" +
-	"\x13SkillCooldownNotify\x129\n" +
-	"\tcooldowns\x18\x01 \x03(\v2\x1b.protocol.SkillCooldownInfoR\tcooldowns\"/\n" +
-	"\x10SkillListRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"w\n" +
-	"\x11SkillListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12+\n" +
-	"\x06skills\x18\x03 \x03(\v2\x13.protocol.SkillInfoR\x06skills\"0\n" +
-	"\x13SkillUpgradeRequest\x12\x19\n" +
-	"\bskill_id\x18\x01 \x01(\x03R\askillId\"\xc7\x01\n" +
-	"\x14SkillUpgradeResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x19\n" +
-	"\bskill_id\x18\x03 \x01(\x03R\askillId\x12\x1b\n" +
-	"\tnew_level\x18\x04 \x01(\x05R\bnewLevel\x12\x1d\n" +
-	"\n" +
-	"new_damage\x18\x05 \x01(\x03R\tnewDamage\x12!\n" +
-	"\fnew_cooldown\x18\x06 \x01(\x03R\vnewCooldown\"/\n" +
-	"\x12SkillUnlockRequest\x12\x19\n" +
-	"\bskill_id\x18\x01 \x01(\x03R\askillId\"\x86\x01\n" +
-	"\x13SkillUnlockResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x19\n" +
-	"\bskill_id\x18\x03 \x01(\x03R\askillId\x12\x1d\n" +
-	"\n" +
-	"skill_name\x18\x04 \x01(\tR\tskillName\"\x88\x02\n" +
-	"\x0eSkillUseNotify\x12\x1b\n" +
-	"\tcaster_id\x18\x01 \x01(\x03R\bcasterId\x12\x19\n" +
-	"\bskill_id\x18\x02 \x01(\x03R\askillId\x12\x1b\n" +
-	"\ttarget_id\x18\x03 \x01(\x03R\btargetId\x12\x19\n" +
-	"\btarget_x\x18\x04 \x01(\x02R\atargetX\x12\x19\n" +
-	"\btarget_y\x18\x05 \x01(\x02R\atargetY\x12\x19\n" +
-	"\btarget_z\x18\x06 \x01(\x02R\atargetZ\x12\x15\n" +
-	"\x06map_id\x18\a \x01(\x03R\x05mapId\x12\x1b\n" +
-	"\teffect_id\x18\b \x01(\x05R\beffectId\x12\x1c\n" +
-	"\ttimestamp\x18\t \x01(\x03R\ttimestamp\"\xe7\x02\n" +
-	"\bMailInfo\x12\x17\n" +
-	"\amail_id\x18\x01 \x01(\x03R\x06mailId\x12\x1b\n" +
-	"\tsender_id\x18\x02 \x01(\x03R\bsenderId\x12\x1f\n" +
-	"\vsender_name\x18\x03 \x01(\tR\n" +
-	"senderName\x12\x1f\n" +
-	"\vreceiver_id\x18\x04 \x01(\x03R\n" +
-	"receiverId\x12#\n" +
-	"\rreceiver_name\x18\x05 \x01(\tR\freceiverName\x12\x14\n" +
-	"\x05title\x18\x06 \x01(\tR\x05title\x12\x18\n" +
-	"\acontent\x18\a \x01(\tR\acontent\x12(\n" +
-	"\x05items\x18\b \x03(\v2\x12.protocol.ItemInfoR\x05items\x12\x12\n" +
-	"\x04gold\x18\t \x01(\x03R\x04gold\x12\x16\n" +
-	"\x06status\x18\n" +
-	" \x01(\x05R\x06status\x12\x1b\n" +
-	"\tsend_time\x18\v \x01(\x03R\bsendTime\x12\x1b\n" +
-	"\tread_time\x18\f \x01(\x03R\breadTime\"\xa8\x02\n" +
-	"\tGuildInfo\x12\x19\n" +
-	"\bguild_id\x18\x01 \x01(\x03R\aguildId\x12\x1d\n" +
-	"\n" +
-	"guild_name\x18\x02 \x01(\tR\tguildName\x12\x14\n" +
-	"\x05level\x18\x03 \x01(\x05R\x05level\x12\x10\n" +
-	"\x03exp\x18\x04 \x01(\x03R\x03exp\x12\x1b\n" +
-	"\tleader_id\x18\x05 \x01(\x03R\bleaderId\x12\x1f\n" +
-	"\vleader_name\x18\x06 \x01(\tR\n" +
-	"leaderName\x12!\n" +
-	"\fmember_count\x18\a \x01(\x05R\vmemberCount\x12\x1f\n" +
-	"\vmax_members\x18\b \x01(\x05R\n" +
-	"maxMembers\x12\x16\n" +
-	"\x06notice\x18\t \x01(\tR\x06notice\x12\x1f\n" +
-	"\vcreate_time\x18\n" +
-	" \x01(\x03R\n" +
-	"createTime\"\xd8\x01\n" +
-	"\x0fGuildMemberInfo\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
-	"\bposition\x18\x03 \x01(\x05R\bposition\x12\"\n" +
-	"\fcontribution\x18\x04 \x01(\x03R\fcontribution\x12\x1b\n" +
-	"\tjoin_time\x18\x05 \x01(\x03R\bjoinTime\x12\x16\n" +
-	"\x06online\x18\x06 \x01(\bR\x06online\x12\x1f\n" +
-	"\vlast_online\x18\a \x01(\x03R\n" +
-	"lastOnline\"\xf2\x01\n" +
-	"\x0eGuildApplyInfo\x12\x19\n" +
-	"\bapply_id\x18\x01 \x01(\x03R\aapplyId\x12\x1b\n" +
-	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1f\n" +
-	"\vplayer_name\x18\x03 \x01(\tR\n" +
-	"playerName\x12\x19\n" +
-	"\bguild_id\x18\x04 \x01(\x03R\aguildId\x12\x1d\n" +
-	"\n" +
-	"guild_name\x18\x05 \x01(\tR\tguildName\x12\x1d\n" +
-	"\n" +
-	"apply_time\x18\x06 \x01(\x03R\tapplyTime\x12\x16\n" +
-	"\x06status\x18\a \x01(\x05R\x06status\x12\x16\n" +
-	"\x06remark\x18\b \x01(\tR\x06remark\"\x90\x04\n" +
-	"\x0fAuctionItemInfo\x12\x1d\n" +
-	"\n" +
-	"auction_id\x18\x01 \x01(\x03R\tauctionId\x12\x1b\n" +
-	"\tseller_id\x18\x02 \x01(\x03R\bsellerId\x12\x1f\n" +
-	"\vseller_name\x18\x03 \x01(\tR\n" +
-	"sellerName\x12\x17\n" +
-	"\aitem_id\x18\x04 \x01(\x03R\x06itemId\x12\x1b\n" +
-	"\titem_name\x18\x05 \x01(\tR\bitemName\x12\x1b\n" +
-	"\titem_type\x18\x06 \x01(\x05R\bitemType\x12\x1d\n" +
-	"\n" +
-	"item_count\x18\a \x01(\x05R\titemCount\x12!\n" +
-	"\fauction_type\x18\b \x01(\x05R\vauctionType\x12%\n" +
-	"\x0estarting_price\x18\t \x01(\x03R\rstartingPrice\x12#\n" +
-	"\rcurrent_price\x18\n" +
-	" \x01(\x03R\fcurrentPrice\x12!\n" +
-	"\fbuyout_price\x18\v \x01(\x03R\vbuyoutPrice\x12#\n" +
-	"\rbid_increment\x18\f \x01(\x03R\fbidIncrement\x12\x1d\n" +
-	"\n" +
-	"start_time\x18\r \x01(\x03R\tstartTime\x12\x19\n" +
-	"\bend_time\x18\x0e \x01(\x03R\aendTime\x12\x16\n" +
-	"\x06status\x18\x0f \x01(\x05R\x06status\x12%\n" +
-	"\x0ecurrent_winner\x18\x10 \x01(\x03R\rcurrentWinner\"\xbc\x01\n" +
-	"\x0eAuctionBidInfo\x12\x15\n" +
-	"\x06bid_id\x18\x01 \x01(\x03R\x05bidId\x12\x1b\n" +
-	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1f\n" +
-	"\vplayer_name\x18\x03 \x01(\tR\n" +
-	"playerName\x12\x1d\n" +
-	"\n" +
-	"auction_id\x18\x04 \x01(\x03R\tauctionId\x12\x1b\n" +
-	"\tbid_price\x18\x05 \x01(\x03R\bbidPrice\x12\x19\n" +
-	"\bbid_time\x18\x06 \x01(\x03R\abidTime\"\x84\x02\n" +
-	"\rMapObjectInfo\x12\x1b\n" +
+	"target_pos\x18\x03 \x01(\v2\x12.protocol.PositionR\ttargetPos\x12\x1f\n" +
+	"\vtarget_type\x18\x04 \x01(\x05R\n" +
+	"targetType\"\x92\x01\n" +
+	"\x0fSkillCastResult\x12\x19\n" +
+	"\bskill_id\x18\x01 \x01(\x05R\askillId\x12\x1b\n" +
+	"\tcaster_id\x18\x02 \x01(\x03R\bcasterId\x12\x16\n" +
+	"\x06result\x18\x03 \x01(\x05R\x06result\x12/\n" +
+	"\aeffects\x18\x04 \x03(\v2\x15.protocol.SkillEffectR\aeffects\"\x87\x01\n" +
+	"\vSkillEffect\x12\x1f\n" +
+	"\veffect_type\x18\x01 \x01(\x05R\n" +
+	"effectType\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\x03R\x05value\x12$\n" +
+	"\x03pos\x18\x04 \x01(\v2\x12.protocol.PositionR\x03pos\"\xd8\x01\n" +
+	"\tMapObject\x12\x1b\n" +
 	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12\x1f\n" +
 	"\vobject_type\x18\x02 \x01(\x05R\n" +
-	"objectType\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x06 \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\a \x01(\x02R\vorientation\x12\x1d\n" +
+	"objectType\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12$\n" +
+	"\x03pos\x18\x04 \x01(\v2\x12.protocol.PositionR\x03pos\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\x05R\x05level\x12\x0e\n" +
+	"\x02hp\x18\x06 \x01(\x03R\x02hp\x12\x15\n" +
+	"\x06max_hp\x18\a \x01(\x03R\x05maxHp\x12\x16\n" +
+	"\x06status\x18\b \x01(\x05R\x06status\"\x85\x01\n" +
+	"\vMoveRequest\x121\n" +
 	"\n" +
-	"move_speed\x18\b \x01(\x02R\tmoveSpeed\x12\x1b\n" +
-	"\tis_moving\x18\t \x01(\bR\bisMoving\x12\x16\n" +
-	"\x06status\x18\n" +
-	" \x01(\x05R\x06status\"s\n" +
-	"\x0eMapMoveRequest\x12\x15\n" +
-	"\x06map_id\x18\x01 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x02 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x03 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x04 \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\x05 \x01(\x02R\vorientation\"\xc5\x01\n" +
-	"\x0fMapMoveResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tobject_id\x18\x03 \x01(\x03R\bobjectId\x12\f\n" +
-	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x06 \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\a \x01(\x02R\vorientation\x12\x12\n" +
-	"\x04time\x18\b \x01(\x03R\x04time\"\x83\x01\n" +
-	"\x0eMapPathRequest\x12\x15\n" +
-	"\x06map_id\x18\x01 \x01(\x03R\x05mapId\x12\x17\n" +
-	"\astart_x\x18\x02 \x01(\x02R\x06startX\x12\x17\n" +
-	"\astart_y\x18\x03 \x01(\x02R\x06startY\x12\x13\n" +
-	"\x05end_x\x18\x04 \x01(\x02R\x04endX\x12\x13\n" +
-	"\x05end_y\x18\x05 \x01(\x02R\x04endY\"\xb0\x01\n" +
-	"\x0fMapPathResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x123\n" +
-	"\x04path\x18\x03 \x03(\v2\x1f.protocol.MapPathResponse.PointR\x04path\x1a1\n" +
-	"\x05Point\x12\f\n" +
-	"\x01x\x18\x01 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x02 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x03 \x01(\x02R\x01z\"w\n" +
-	"\x0eMapSyncObjects\x12\x15\n" +
-	"\x06map_id\x18\x01 \x01(\x03R\x05mapId\x121\n" +
-	"\aobjects\x18\x02 \x03(\v2\x17.protocol.MapObjectInfoR\aobjects\x12\x1b\n" +
-	"\tsync_time\x18\x03 \x01(\x03R\bsyncTime\"\xa8\x01\n" +
-	"\rAoiObjectInfo\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12\x1f\n" +
-	"\vobject_type\x18\x02 \x01(\x05R\n" +
-	"objectType\x12\x1b\n" +
-	"\tentity_id\x18\x03 \x01(\x03R\bentityId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12\f\n" +
-	"\x01x\x18\x05 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x06 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\a \x01(\x02R\x01z\"w\n" +
-	"\x0eAoiEnterNotify\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x121\n" +
-	"\aobjects\x18\x03 \x03(\v2\x17.protocol.AoiObjectInfoR\aobjects\"c\n" +
-	"\x0eAoiLeaveNotify\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\x1d\n" +
+	"target_pos\x18\x01 \x01(\v2\x12.protocol.PositionR\ttargetPos\x12\x1b\n" +
+	"\tmove_type\x18\x02 \x01(\x05R\bmoveType\x12&\n" +
+	"\x04path\x18\x03 \x03(\v2\x12.protocol.PositionR\x04path\"\x8a\x01\n" +
 	"\n" +
-	"object_ids\x18\x03 \x03(\x03R\tobjectIds\"\x89\x01\n" +
-	"\vMapMoveSync\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x04 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x05 \x01(\x02R\x01z\x12\x1c\n" +
-	"\ttimestamp\x18\x06 \x01(\x03R\ttimestamp\"\xf1\x02\n" +
+	"MoveNotify\x12\x1b\n" +
+	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12$\n" +
+	"\x03pos\x18\x02 \x01(\v2\x12.protocol.PositionR\x03pos\x12\x1b\n" +
+	"\tmove_type\x18\x03 \x01(\x05R\bmoveType\x12\x1c\n" +
+	"\ttimestamp\x18\x04 \x01(\x03R\ttimestamp\"K\n" +
+	"\x15ClientMapEnterRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\"\x8a\x01\n" +
+	"\x16ClientMapEnterResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x15\n" +
+	"\x06map_id\x18\x03 \x01(\x05R\x05mapId\x12$\n" +
+	"\x03pos\x18\x04 \x01(\v2\x12.protocol.PositionR\x03pos\"p\n" +
+	"\x14ClientMapMoveRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\x12$\n" +
+	"\x03pos\x18\x03 \x01(\v2\x12.protocol.PositionR\x03pos\"U\n" +
+	"\x15ClientMapMoveResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12$\n" +
+	"\x03pos\x18\x02 \x01(\v2\x12.protocol.PositionR\x03pos\"i\n" +
+	"\x16ClientMapAttackRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\x12\x1b\n" +
+	"\ttarget_id\x18\x03 \x01(\x03R\btargetId\"\x83\x01\n" +
+	"\x17ClientMapAttackResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x12\x16\n" +
+	"\x06damage\x18\x03 \x01(\x03R\x06damage\x12\x1b\n" +
+	"\ttarget_hp\x18\x04 \x01(\x03R\btargetHp\"h\n" +
+	"\rAttackRequest\x12\x1b\n" +
+	"\ttarget_id\x18\x01 \x01(\x03R\btargetId\x12\x1f\n" +
+	"\vattack_type\x18\x02 \x01(\x05R\n" +
+	"attackType\x12\x19\n" +
+	"\bskill_id\x18\x03 \x01(\x05R\askillId\"\xbd\x01\n" +
+	"\n" +
+	"DamageInfo\x12\x1f\n" +
+	"\vattacker_id\x18\x01 \x01(\x03R\n" +
+	"attackerId\x12\x1b\n" +
+	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\x12\x16\n" +
+	"\x06damage\x18\x03 \x01(\x03R\x06damage\x12\x1f\n" +
+	"\vdamage_type\x18\x04 \x01(\x05R\n" +
+	"damageType\x12\x1f\n" +
+	"\vis_critical\x18\x05 \x01(\bR\n" +
+	"isCritical\x12\x17\n" +
+	"\ais_miss\x18\x06 \x01(\bR\x06isMiss\"\xad\x01\n" +
 	"\bBuffInfo\x12\x17\n" +
 	"\abuff_id\x18\x01 \x01(\x05R\x06buffId\x12\x1b\n" +
-	"\tbuff_name\x18\x02 \x01(\tR\bbuffName\x12\x1b\n" +
-	"\tbuff_desc\x18\x03 \x01(\tR\bbuffDesc\x12\x1b\n" +
-	"\tbuff_type\x18\x04 \x01(\x05R\bbuffType\x12\x1a\n" +
-	"\bduration\x18\x05 \x01(\x05R\bduration\x12%\n" +
-	"\x0eremaining_time\x18\x06 \x01(\x05R\rremainingTime\x12\x16\n" +
-	"\x06stacks\x18\a \x01(\x05R\x06stacks\x12#\n" +
-	"\ris_beneficial\x18\b \x01(\bR\fisBeneficial\x129\n" +
-	"\aeffects\x18\t \x03(\v2\x1f.protocol.BuffInfo.EffectsEntryR\aeffects\x1a:\n" +
-	"\fEffectsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"s\n" +
-	"\x10BuffListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12(\n" +
-	"\x05buffs\x18\x03 \x03(\v2\x12.protocol.BuffInfoR\x05buffs\"H\n" +
-	"\x10BuffApplyRequest\x12\x17\n" +
-	"\abuff_id\x18\x01 \x01(\x05R\x06buffId\x12\x1b\n" +
-	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\"r\n" +
-	"\x11BuffApplyResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12&\n" +
-	"\x04buff\x18\x03 \x01(\v2\x12.protocol.BuffInfoR\x04buff\"\x94\x03\n" +
-	"\fActivityInfo\x12\x1f\n" +
-	"\vactivity_id\x18\x01 \x01(\x05R\n" +
-	"activityId\x12#\n" +
-	"\ractivity_name\x18\x02 \x01(\tR\factivityName\x12#\n" +
-	"\ractivity_desc\x18\x03 \x01(\tR\factivityDesc\x12#\n" +
-	"\ractivity_type\x18\x04 \x01(\x05R\factivityType\x12\x1d\n" +
+	"\tcaster_id\x18\x02 \x01(\x03R\bcasterId\x12\x1b\n" +
+	"\ttarget_id\x18\x03 \x01(\x03R\btargetId\x12\x1d\n" +
 	"\n" +
-	"start_time\x18\x05 \x01(\x03R\tstartTime\x12\x19\n" +
-	"\bend_time\x18\x06 \x01(\x03R\aendTime\x12\x16\n" +
-	"\x06status\x18\a \x01(\x05R\x06status\x12\x1b\n" +
-	"\tmin_level\x18\b \x01(\x05R\bminLevel\x12\x1a\n" +
-	"\bprogress\x18\t \x01(\x05R\bprogress\x12!\n" +
-	"\fis_completed\x18\n" +
-	" \x01(\bR\visCompleted\x12\x1f\n" +
-	"\vis_rewarded\x18\v \x01(\bR\n" +
-	"isRewarded\x12%\n" +
-	"\x0eremaining_time\x18\f \x01(\x05R\rremainingTime\"\x85\x01\n" +
-	"\x14ActivityListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x126\n" +
-	"\n" +
-	"activities\x18\x03 \x03(\v2\x16.protocol.ActivityInfoR\n" +
-	"activities\"6\n" +
-	"\x13ActivityJoinRequest\x12\x1f\n" +
-	"\vactivity_id\x18\x01 \x01(\x05R\n" +
-	"activityId\"\x81\x01\n" +
-	"\x14ActivityJoinResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x122\n" +
-	"\bactivity\x18\x03 \x01(\v2\x16.protocol.ActivityInfoR\bactivity\"w\n" +
-	"\x17ActivityProgressRequest\x12\x1f\n" +
-	"\vactivity_id\x18\x01 \x01(\x05R\n" +
-	"activityId\x12%\n" +
-	"\x0econdition_type\x18\x02 \x01(\tR\rconditionType\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x05R\x05count\"\x88\x02\n" +
-	"\x18ActivityProgressResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
-	"\vactivity_id\x18\x03 \x01(\x05R\n" +
-	"activityId\x12%\n" +
-	"\x0econdition_type\x18\x04 \x01(\tR\rconditionType\x12#\n" +
-	"\rcurrent_count\x18\x05 \x01(\x05R\fcurrentCount\x12%\n" +
-	"\x0erequired_count\x18\x06 \x01(\x05R\rrequiredCount\x12!\n" +
-	"\fis_completed\x18\a \x01(\bR\visCompleted\"7\n" +
-	"\x14ActivityClaimRequest\x12\x1f\n" +
-	"\vactivity_id\x18\x01 \x01(\x05R\n" +
-	"activityId\"\x9d\x01\n" +
-	"\x15ActivityClaimResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
-	"\vactivity_id\x18\x03 \x01(\x05R\n" +
-	"activityId\x12,\n" +
-	"\arewards\x18\x04 \x03(\v2\x12.protocol.ItemInfoR\arewards\"I\n" +
-	"\x11BuffRemoveRequest\x12\x17\n" +
-	"\abuff_id\x18\x01 \x01(\x05R\x06buffId\x12\x1b\n" +
-	"\ttarget_id\x18\x02 \x01(\x03R\btargetId\"K\n" +
-	"\x12BuffRemoveResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"k\n" +
-	"\x11BuffDispelRequest\x12\x1b\n" +
-	"\ttarget_id\x18\x01 \x01(\x03R\btargetId\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x05R\x05count\x12#\n" +
-	"\rdispel_debuff\x18\x03 \x01(\bR\fdispelDebuff\"i\n" +
-	"\x12BuffDispelResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1c\n" +
-	"\tdispelled\x18\x03 \x01(\x05R\tdispelled\"s\n" +
-	"\fDropItemInfo\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x05R\x05count\x12\x17\n" +
-	"\ais_rare\x18\x03 \x01(\bR\x06isRare\x12\x1b\n" +
-	"\tbind_type\x18\x04 \x01(\x05R\bbindType\"\xbf\x02\n" +
-	"\x0eDropEntityInfo\x12\x1b\n" +
-	"\tentity_id\x18\x01 \x01(\x03R\bentityId\x12,\n" +
-	"\x05items\x18\x02 \x03(\v2\x16.protocol.DropItemInfoR\x05items\x12\x12\n" +
-	"\x04gold\x18\x03 \x01(\x03R\x04gold\x12\x10\n" +
-	"\x03exp\x18\x04 \x01(\x03R\x03exp\x12\x19\n" +
-	"\bowner_id\x18\x05 \x01(\x03R\aownerId\x12!\n" +
-	"\fis_protected\x18\x06 \x01(\bR\visProtected\x12!\n" +
-	"\fprotect_time\x18\a \x01(\x05R\vprotectTime\x12\x1d\n" +
-	"\n" +
-	"position_x\x18\b \x01(\x02R\tpositionX\x12\x1d\n" +
-	"\n" +
-	"position_y\x18\t \x01(\x02R\tpositionY\x12\x1d\n" +
-	"\n" +
-	"position_z\x18\n" +
-	" \x01(\x02R\tpositionZ\"\x9f\x01\n" +
-	"\x12DropPickupResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12,\n" +
-	"\x05items\x18\x03 \x03(\v2\x16.protocol.DropItemInfoR\x05items\x12\x12\n" +
-	"\x04gold\x18\x04 \x01(\x03R\x04gold\x12\x10\n" +
-	"\x03exp\x18\x05 \x01(\x03R\x03exp\"y\n" +
-	"\x10DropListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12.\n" +
-	"\x05drops\x18\x03 \x03(\v2\x18.protocol.DropEntityInfoR\x05drops\"\xac\x03\n" +
-	"\vDungeonInfo\x12\x1d\n" +
-	"\n" +
-	"dungeon_id\x18\x01 \x01(\x05R\tdungeonId\x12!\n" +
-	"\fdungeon_name\x18\x02 \x01(\tR\vdungeonName\x12!\n" +
-	"\fdungeon_desc\x18\x03 \x01(\tR\vdungeonDesc\x12!\n" +
-	"\fdungeon_type\x18\x04 \x01(\x05R\vdungeonType\x12\x1b\n" +
-	"\tmin_level\x18\x05 \x01(\x05R\bminLevel\x12\x1b\n" +
-	"\tmax_level\x18\x06 \x01(\x05R\bmaxLevel\x12\x1f\n" +
-	"\vmin_players\x18\a \x01(\x05R\n" +
-	"minPlayers\x12\x1f\n" +
-	"\vmax_players\x18\b \x01(\x05R\n" +
-	"maxPlayers\x12\x1d\n" +
-	"\n" +
-	"time_limit\x18\t \x01(\x05R\ttimeLimit\x12\x1f\n" +
-	"\vdaily_limit\x18\n" +
-	" \x01(\x05R\n" +
-	"dailyLimit\x12\x16\n" +
-	"\x06status\x18\v \x01(\x05R\x06status\x12\x1a\n" +
-	"\bprogress\x18\f \x01(\x05R\bprogress\x12%\n" +
-	"\x0eremaining_time\x18\r \x01(\x05R\rremainingTime\"\x7f\n" +
-	"\x13DungeonListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x121\n" +
-	"\bdungeons\x18\x03 \x03(\v2\x15.protocol.DungeonInfoR\bdungeons\"4\n" +
-	"\x13DungeonEnterRequest\x12\x1d\n" +
-	"\n" +
-	"dungeon_id\x18\x01 \x01(\x05R\tdungeonId\"\x85\x01\n" +
-	"\x14DungeonEnterResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
-	"\vinstance_id\x18\x03 \x01(\x05R\n" +
-	"instanceId\x12\x15\n" +
-	"\x06map_id\x18\x04 \x01(\x03R\x05mapId\"c\n" +
-	"\x13DungeonExitResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\"\xc4\x01\n" +
-	"\x13DungeonStatusNotify\x12\x1f\n" +
-	"\vinstance_id\x18\x01 \x01(\x05R\n" +
-	"instanceId\x12\x16\n" +
+	"start_time\x18\x04 \x01(\x03R\tstartTime\x12\x19\n" +
+	"\bend_time\x18\x05 \x01(\x03R\aendTime\x12\x14\n" +
+	"\x05layer\x18\x06 \x01(\x05R\x05layer\"\xba\x01\n" +
+	"\vChatMessage\x12\x18\n" +
+	"\achannel\x18\x01 \x01(\x05R\achannel\x12\x1b\n" +
+	"\tsender_id\x18\x02 \x01(\x03R\bsenderId\x12\x1f\n" +
+	"\vsender_name\x18\x03 \x01(\tR\n" +
+	"senderName\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x1c\n" +
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\x12\x1b\n" +
+	"\ttarget_id\x18\x06 \x01(\x03R\btargetId\"b\n" +
+	"\x0fChatSendRequest\x12\x18\n" +
+	"\achannel\x18\x01 \x01(\x05R\achannel\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x1b\n" +
+	"\ttarget_id\x18\x03 \x01(\x03R\btargetId\"\xa4\x02\n" +
+	"\bMailInfo\x12\x17\n" +
+	"\amail_id\x18\x01 \x01(\x03R\x06mailId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\x12\x1b\n" +
+	"\tsender_id\x18\x04 \x01(\x03R\bsenderId\x12\x1f\n" +
+	"\vsender_name\x18\x05 \x01(\tR\n" +
+	"senderName\x12\x1b\n" +
+	"\tsend_time\x18\x06 \x01(\x03R\bsendTime\x12\x17\n" +
+	"\ais_read\x18\a \x01(\bR\x06isRead\x12%\n" +
+	"\x0ehas_attachment\x18\b \x01(\bR\rhasAttachment\x124\n" +
+	"\vattachments\x18\t \x03(\v2\x12.protocol.ItemInfoR\vattachments\"\xf4\x01\n" +
+	"\bTaskInfo\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\x05R\x06taskId\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\x05R\x06status\x12\x1a\n" +
-	"\bprogress\x18\x03 \x01(\x05R\bprogress\x12%\n" +
-	"\x0eremaining_time\x18\x04 \x01(\x05R\rremainingTime\x12\x12\n" +
-	"\x04wave\x18\x05 \x01(\x05R\x04wave\x12\x1d\n" +
-	"\n" +
-	"kill_count\x18\x06 \x01(\x05R\tkillCount\"\xc5\x01\n" +
-	"\x17DungeonCompleteResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
-	"\vinstance_id\x18\x03 \x01(\x05R\n" +
-	"instanceId\x12\x10\n" +
-	"\x03exp\x18\x04 \x01(\x03R\x03exp\x12\x12\n" +
-	"\x04gold\x18\x05 \x01(\x03R\x04gold\x12,\n" +
-	"\arewards\x18\x06 \x03(\v2\x12.protocol.ItemInfoR\arewards\"m\n" +
-	"\x13DungeonFailResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
-	"\vinstance_id\x18\x03 \x01(\x05R\n" +
-	"instanceId\"\x83\x04\n" +
-	"\fShopItemInfo\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x12\n" +
-	"\x04icon\x18\x04 \x01(\tR\x04icon\x12\x1d\n" +
-	"\n" +
-	"price_type\x18\x05 \x01(\x05R\tpriceType\x12\x14\n" +
-	"\x05price\x18\x06 \x01(\x03R\x05price\x12%\n" +
-	"\x0eoriginal_price\x18\a \x01(\x03R\roriginalPrice\x12\x1a\n" +
-	"\bcategory\x18\b \x01(\x05R\bcategory\x12\x1b\n" +
-	"\titem_type\x18\t \x01(\x05R\bitemType\x12\x1d\n" +
-	"\n" +
-	"item_count\x18\n" +
-	" \x01(\x05R\titemCount\x12\x1b\n" +
-	"\tlevel_req\x18\v \x01(\x05R\blevelReq\x12\x17\n" +
-	"\avip_req\x18\f \x01(\x05R\x06vipReq\x12\x1d\n" +
-	"\n" +
-	"limit_type\x18\r \x01(\x05R\tlimitType\x12\x1f\n" +
-	"\vlimit_count\x18\x0e \x01(\x05R\n" +
-	"limitCount\x12\x15\n" +
-	"\x06is_hot\x18\x0f \x01(\bR\x05isHot\x12\x15\n" +
-	"\x06is_new\x18\x10 \x01(\bR\x05isNew\x12\x1d\n" +
-	"\n" +
-	"start_time\x18\x11 \x01(\x03R\tstartTime\x12\x19\n" +
-	"\bend_time\x18\x12 \x01(\x03R\aendTime\"{\n" +
-	"\x14ShopItemListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12,\n" +
-	"\x05items\x18\x03 \x03(\v2\x16.protocol.ShopItemInfoR\x05items\"\x99\x01\n" +
-	"\x10ShopCategoryInfo\x12\x1f\n" +
-	"\vcategory_id\x18\x01 \x01(\x05R\n" +
-	"categoryId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04icon\x18\x03 \x01(\tR\x04icon\x12\x1d\n" +
-	"\n" +
-	"sort_order\x18\x04 \x01(\x05R\tsortOrder\x12\x1d\n" +
-	"\n" +
-	"is_visible\x18\x05 \x01(\bR\tisVisible\"\x8d\x01\n" +
-	"\x18ShopCategoryListResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12:\n" +
-	"\n" +
-	"categories\x18\x03 \x03(\v2\x1a.protocol.ShopCategoryInfoR\n" +
-	"categories\"\x98\x01\n" +
-	"\x0fShopBuyResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x17\n" +
-	"\aitem_id\x18\x03 \x01(\x03R\x06itemId\x12\x14\n" +
-	"\x05count\x18\x04 \x01(\x05R\x05count\x12\x1f\n" +
-	"\vtotal_price\x18\x05 \x01(\x03R\n" +
-	"totalPrice\"{\n" +
-	"\x14ShopHotItemsResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12,\n" +
-	"\x05items\x18\x03 \x03(\v2\x16.protocol.ShopItemInfoR\x05items*\x8d\x01\n" +
-	"\vMessageType\x12\x14\n" +
-	"\x10MSG_TYPE_INVALID\x10\x00\x12\x13\n" +
-	"\x0fMSG_TYPE_SYSTEM\x10\x01\x12\x14\n" +
-	"\x0fMSG_TYPE_PLAYER\x10\xe8\a\x12\x13\n" +
-	"\x0eMSG_TYPE_GUILD\x10\xd0\x0f\x12\x15\n" +
-	"\x10MSG_TYPE_AUCTION\x10\xb8\x17\x12\x11\n" +
-	"\fMSG_TYPE_MAP\x10\xa0\x1f*%\n" +
+	"\bprogress\x18\x03 \x01(\x05R\bprogress\x12'\n" +
+	"\x0ftarget_progress\x18\x04 \x01(\x05R\x0etargetProgress\x12\x1f\n" +
+	"\vaccept_time\x18\x05 \x01(\x03R\n" +
+	"acceptTime\x12#\n" +
+	"\rcomplete_time\x18\x06 \x01(\x03R\fcompleteTime\x12,\n" +
+	"\arewards\x18\a \x03(\v2\x12.protocol.ItemInfoR\arewards\"\x94\x02\n" +
+	"\tGuildInfo\x12\x19\n" +
+	"\bguild_id\x18\x01 \x01(\x03R\aguildId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1b\n" +
+	"\tleader_id\x18\x03 \x01(\x03R\bleaderId\x12\x1f\n" +
+	"\vleader_name\x18\x04 \x01(\tR\n" +
+	"leaderName\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\x05R\x05level\x12!\n" +
+	"\fmember_count\x18\x06 \x01(\x05R\vmemberCount\x12(\n" +
+	"\x10max_member_count\x18\a \x01(\x05R\x0emaxMemberCount\x12\x16\n" +
+	"\x06notice\x18\b \x01(\tR\x06notice\x12\x1f\n" +
+	"\vcreate_time\x18\t \x01(\x03R\n" +
+	"createTime\"\xb5\x01\n" +
+	"\vGuildMember\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05level\x18\x03 \x01(\x05R\x05level\x12\x1a\n" +
+	"\bposition\x18\x04 \x01(\x05R\bposition\x12\x1b\n" +
+	"\tjoin_time\x18\x05 \x01(\x03R\bjoinTime\x12&\n" +
+	"\x0flast_login_time\x18\x06 \x01(\x03R\rlastLoginTime*\x9a\x01\n" +
 	"\vSystemMsgId\x12\x16\n" +
-	"\x12MSG_SYSTEM_INVALID\x10\x00*\x80\t\n" +
+	"\x12MSG_SYSTEM_INVALID\x10\x00\x12\x18\n" +
+	"\x14MSG_SYSTEM_HEARTBEAT\x10\x01\x12\x13\n" +
+	"\x0fMSG_SYSTEM_PING\x10\x02\x12\x13\n" +
+	"\x0fMSG_SYSTEM_PONG\x10\x03\x12\x13\n" +
+	"\x0fMSG_SYSTEM_KICK\x10\x04\x12\x1a\n" +
+	"\x16MSG_SYSTEM_MAINTENANCE\x10\x05*\x83\x01\n" +
+	"\tAuthMsgId\x12\x14\n" +
+	"\x10MSG_AUTH_INVALID\x10\x00\x12\x12\n" +
+	"\x0eMSG_AUTH_LOGIN\x10d\x12\x1b\n" +
+	"\x17MSG_AUTH_LOGIN_RESPONSE\x10e\x12\x13\n" +
+	"\x0fMSG_AUTH_LOGOUT\x10f\x12\x1a\n" +
+	"\x16MSG_AUTH_TOKEN_REFRESH\x10g*\xf2\x01\n" +
 	"\vPlayerMsgId\x12\x16\n" +
-	"\x12MSG_PLAYER_INVALID\x10\x00\x12\x1e\n" +
-	"\x19MSG_PLAYER_ACCOUNT_CREATE\x10\xe9\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_ACCOUNT_LOGIN\x10\xea\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_PLAYER_CREATE\x10\xeb\a\x12\x1c\n" +
-	"\x17MSG_PLAYER_PLAYER_LOGIN\x10\xec\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_PLAYER_LOGOUT\x10\xed\a\x12\x18\n" +
-	"\x13MSG_PLAYER_GET_INFO\x10\xee\a\x12\x1b\n" +
-	"\x16MSG_PLAYER_UPDATE_INFO\x10\xef\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_INVENTORY_GET\x10\xf2\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_INVENTORY_ADD\x10\xf3\a\x12 \n" +
-	"\x1bMSG_PLAYER_INVENTORY_REMOVE\x10\xf4\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_INVENTORY_USE\x10\xf5\a\x12\x1e\n" +
-	"\x19MSG_PLAYER_INVENTORY_SORT\x10\xf6\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_EQUIPMENT_GET\x10\xfc\a\x12\x1f\n" +
-	"\x1aMSG_PLAYER_EQUIPMENT_EQUIP\x10\xfd\a\x12!\n" +
-	"\x1cMSG_PLAYER_EQUIPMENT_UNEQUIP\x10\xfe\a\x12!\n" +
-	"\x1cMSG_PLAYER_EQUIPMENT_UPGRADE\x10\xff\a\x12\x1d\n" +
-	"\x18MSG_PLAYER_MAIL_GET_LIST\x10\x86\b\x12\x1f\n" +
-	"\x1aMSG_PLAYER_MAIL_GET_DETAIL\x10\x87\b\x12\x19\n" +
-	"\x14MSG_PLAYER_MAIL_SEND\x10\x88\b\x12\x1b\n" +
-	"\x16MSG_PLAYER_MAIL_DELETE\x10\x89\b\x12\x1c\n" +
-	"\x17MSG_PLAYER_MAIL_RECEIVE\x10\x8a\b\x12\x1d\n" +
-	"\x18MSG_PLAYER_TASK_GET_LIST\x10\x90\b\x12\x1f\n" +
-	"\x1aMSG_PLAYER_TASK_GET_DETAIL\x10\x91\b\x12\x1b\n" +
-	"\x16MSG_PLAYER_TASK_ACCEPT\x10\x92\b\x12\x1b\n" +
-	"\x16MSG_PLAYER_TASK_SUBMIT\x10\x93\b\x12\x1b\n" +
-	"\x16MSG_PLAYER_TASK_CANCEL\x10\x94\b\x12\x1e\n" +
-	"\x19MSG_PLAYER_SKILL_GET_LIST\x10\x9a\b\x12\x1b\n" +
-	"\x16MSG_PLAYER_SKILL_LEARN\x10\x9b\b\x12\x1d\n" +
-	"\x18MSG_PLAYER_SKILL_UPGRADE\x10\x9c\b\x12\x19\n" +
-	"\x14MSG_PLAYER_SKILL_USE\x10\x9d\b\x12\x1d\n" +
-	"\x18MSG_PLAYER_BUFF_GET_LIST\x10\xa4\b\x12\x1a\n" +
-	"\x15MSG_PLAYER_BUFF_APPLY\x10\xa5\b\x12!\n" +
-	"\x1cMSG_PLAYER_ACTIVITY_GET_LIST\x10\xae\b\x12\x1d\n" +
-	"\x18MSG_PLAYER_ACTIVITY_JOIN\x10\xaf\b\x12!\n" +
-	"\x1cMSG_PLAYER_ACTIVITY_PROGRESS\x10\xb0\b\x12\x1e\n" +
-	"\x19MSG_PLAYER_ACTIVITY_CLAIM\x10\xb1\b*\xbf\x02\n" +
+	"\x12MSG_PLAYER_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_PLAYER_CREATE\x10\xc8\x01\x12\x1f\n" +
+	"\x1aMSG_PLAYER_CREATE_RESPONSE\x10\xc9\x01\x12\x1a\n" +
+	"\x15MSG_PLAYER_ENTER_GAME\x10\xca\x01\x12#\n" +
+	"\x1eMSG_PLAYER_ENTER_GAME_RESPONSE\x10\xcb\x01\x12\x1a\n" +
+	"\x15MSG_PLAYER_LEAVE_GAME\x10\xcc\x01\x12\x1b\n" +
+	"\x16MSG_PLAYER_INFO_UPDATE\x10\xcd\x01\x12\x18\n" +
+	"\x13MSG_PLAYER_LEVEL_UP\x10\xce\x01*\x82\x02\n" +
+	"\bBagMsgId\x12\x13\n" +
+	"\x0fMSG_BAG_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_BAG_GET_ITEMS\x10\xac\x02\x12\x1f\n" +
+	"\x1aMSG_BAG_GET_ITEMS_RESPONSE\x10\xad\x02\x12\x15\n" +
+	"\x10MSG_BAG_USE_ITEM\x10\xae\x02\x12\x1e\n" +
+	"\x19MSG_BAG_USE_ITEM_RESPONSE\x10\xaf\x02\x12\x15\n" +
+	"\x10MSG_BAG_ADD_ITEM\x10\xb0\x02\x12\x18\n" +
+	"\x13MSG_BAG_REMOVE_ITEM\x10\xb1\x02\x12\x18\n" +
+	"\x13MSG_BAG_ITEM_UPDATE\x10\xb2\x02\x12\x11\n" +
+	"\fMSG_BAG_SORT\x10\xb3\x02\x12\x13\n" +
+	"\x0eMSG_BAG_EXPAND\x10\xb4\x02*\xc8\x02\n" +
+	"\n" +
+	"EquipMsgId\x12\x15\n" +
+	"\x11MSG_EQUIP_INVALID\x10\x00\x12\x17\n" +
+	"\x12MSG_EQUIP_GET_LIST\x10\x90\x03\x12 \n" +
+	"\x1bMSG_EQUIP_GET_LIST_RESPONSE\x10\x91\x03\x12\x15\n" +
+	"\x10MSG_EQUIP_PUT_ON\x10\x92\x03\x12\x1e\n" +
+	"\x19MSG_EQUIP_PUT_ON_RESPONSE\x10\x93\x03\x12\x17\n" +
+	"\x12MSG_EQUIP_TAKE_OFF\x10\x94\x03\x12 \n" +
+	"\x1bMSG_EQUIP_TAKE_OFF_RESPONSE\x10\x95\x03\x12\x19\n" +
+	"\x14MSG_EQUIP_STRENGTHEN\x10\x96\x03\x12\"\n" +
+	"\x1dMSG_EQUIP_STRENGTHEN_RESPONSE\x10\x97\x03\x12\x16\n" +
+	"\x11MSG_EQUIP_UPGRADE\x10\x98\x03\x12\x1f\n" +
+	"\x1aMSG_EQUIP_UPGRADE_RESPONSE\x10\x99\x03*\xc7\x02\n" +
+	"\n" +
+	"SkillMsgId\x12\x15\n" +
+	"\x11MSG_SKILL_INVALID\x10\x00\x12\x17\n" +
+	"\x12MSG_SKILL_GET_LIST\x10\xf4\x03\x12 \n" +
+	"\x1bMSG_SKILL_GET_LIST_RESPONSE\x10\xf5\x03\x12\x14\n" +
+	"\x0fMSG_SKILL_LEARN\x10\xf6\x03\x12\x1d\n" +
+	"\x18MSG_SKILL_LEARN_RESPONSE\x10\xf7\x03\x12\x16\n" +
+	"\x11MSG_SKILL_UPGRADE\x10\xf8\x03\x12\x1f\n" +
+	"\x1aMSG_SKILL_UPGRADE_RESPONSE\x10\xf9\x03\x12\x12\n" +
+	"\rMSG_SKILL_USE\x10\xfa\x03\x12\x1b\n" +
+	"\x16MSG_SKILL_USE_RESPONSE\x10\xfb\x03\x12\x13\n" +
+	"\x0eMSG_SKILL_CAST\x10\xfc\x03\x12\x1a\n" +
+	"\x15MSG_SKILL_CAST_RESULT\x10\xfd\x03\x12\x17\n" +
+	"\x12MSG_SKILL_COOLDOWN\x10\xfe\x03*\xb0\x02\n" +
+	"\tTaskMsgId\x12\x14\n" +
+	"\x10MSG_TASK_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_TASK_GET_LIST\x10\xd8\x04\x12\x1f\n" +
+	"\x1aMSG_TASK_GET_LIST_RESPONSE\x10\xd9\x04\x12\x14\n" +
+	"\x0fMSG_TASK_ACCEPT\x10\xda\x04\x12\x1d\n" +
+	"\x18MSG_TASK_ACCEPT_RESPONSE\x10\xdb\x04\x12\x14\n" +
+	"\x0fMSG_TASK_SUBMIT\x10\xdc\x04\x12\x1d\n" +
+	"\x18MSG_TASK_SUBMIT_RESPONSE\x10\xdd\x04\x12\x15\n" +
+	"\x10MSG_TASK_GIVE_UP\x10\xde\x04\x12\x1e\n" +
+	"\x19MSG_TASK_GIVE_UP_RESPONSE\x10\xdf\x04\x12\x14\n" +
+	"\x0fMSG_TASK_UPDATE\x10\xe0\x04\x12\x1d\n" +
+	"\x18MSG_TASK_COMPLETE_NOTIFY\x10\xe1\x04*\x9f\x02\n" +
+	"\tMailMsgId\x12\x14\n" +
+	"\x10MSG_MAIL_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_MAIL_GET_LIST\x10\xbc\x05\x12\x1f\n" +
+	"\x1aMSG_MAIL_GET_LIST_RESPONSE\x10\xbd\x05\x12\x12\n" +
+	"\rMSG_MAIL_READ\x10\xbe\x05\x12\x1b\n" +
+	"\x16MSG_MAIL_READ_RESPONSE\x10\xbf\x05\x12\x1c\n" +
+	"\x17MSG_MAIL_GET_ATTACHMENT\x10\xc0\x05\x12%\n" +
+	" MSG_MAIL_GET_ATTACHMENT_RESPONSE\x10\xc1\x05\x12\x14\n" +
+	"\x0fMSG_MAIL_DELETE\x10\xc2\x05\x12\x1d\n" +
+	"\x18MSG_MAIL_DELETE_RESPONSE\x10\xc3\x05\x12\x18\n" +
+	"\x13MSG_MAIL_NEW_NOTIFY\x10\xc4\x05*\xa0\x01\n" +
+	"\tChatMsgId\x12\x14\n" +
+	"\x10MSG_CHAT_INVALID\x10\x00\x12\x12\n" +
+	"\rMSG_CHAT_SEND\x10\xa0\x06\x12\x1b\n" +
+	"\x16MSG_CHAT_SEND_RESPONSE\x10\xa1\x06\x12\x15\n" +
+	"\x10MSG_CHAT_RECEIVE\x10\xa2\x06\x12\x15\n" +
+	"\x10MSG_CHAT_HISTORY\x10\xa3\x06\x12\x1e\n" +
+	"\x19MSG_CHAT_HISTORY_RESPONSE\x10\xa4\x06*\x9c\x03\n" +
 	"\n" +
 	"GuildMsgId\x12\x15\n" +
-	"\x11MSG_GUILD_INVALID\x10\x00\x12\x15\n" +
-	"\x10MSG_GUILD_CREATE\x10\xd1\x0f\x12\x13\n" +
-	"\x0eMSG_GUILD_JOIN\x10\xd2\x0f\x12\x14\n" +
-	"\x0fMSG_GUILD_LEAVE\x10\xd3\x0f\x12\x16\n" +
-	"\x11MSG_GUILD_DISBAND\x10\xd4\x0f\x12\x17\n" +
-	"\x12MSG_GUILD_GET_INFO\x10\xd5\x0f\x12\x1a\n" +
-	"\x15MSG_GUILD_GET_MEMBERS\x10\xd6\x0f\x12\x14\n" +
-	"\x0fMSG_GUILD_APPLY\x10\xd7\x0f\x12\x1c\n" +
-	"\x17MSG_GUILD_PROCESS_APPLY\x10\xd8\x0f\x12\x1c\n" +
-	"\x17MSG_GUILD_UPDATE_NOTICE\x10\xd9\x0f\x12\x1d\n" +
-	"\x18MSG_GUILD_PROMOTE_MEMBER\x10\xda\x0f\x12\x1a\n" +
-	"\x15MSG_GUILD_KICK_MEMBER\x10\xdb\x0f*\xe8\x01\n" +
-	"\fAuctionMsgId\x12\x17\n" +
-	"\x13MSG_AUCTION_INVALID\x10\x00\x12\x17\n" +
-	"\x12MSG_AUCTION_CREATE\x10\xb9\x17\x12\x1a\n" +
-	"\x15MSG_AUCTION_PLACE_BID\x10\xba\x17\x12\x17\n" +
-	"\x12MSG_AUCTION_BUYOUT\x10\xbb\x17\x12\x17\n" +
-	"\x12MSG_AUCTION_CANCEL\x10\xbc\x17\x12\x19\n" +
-	"\x14MSG_AUCTION_GET_LIST\x10\xbd\x17\x12\x1b\n" +
-	"\x16MSG_AUCTION_GET_DETAIL\x10\xbe\x17\x12 \n" +
-	"\x1bMSG_AUCTION_GET_MY_AUCTIONS\x10\xbf\x17*\xee\x01\n" +
+	"\x11MSG_GUILD_INVALID\x10\x00\x12\x17\n" +
+	"\x12MSG_GUILD_GET_LIST\x10\x84\a\x12 \n" +
+	"\x1bMSG_GUILD_GET_LIST_RESPONSE\x10\x85\a\x12\x15\n" +
+	"\x10MSG_GUILD_CREATE\x10\x86\a\x12\x1e\n" +
+	"\x19MSG_GUILD_CREATE_RESPONSE\x10\x87\a\x12\x13\n" +
+	"\x0eMSG_GUILD_JOIN\x10\x88\a\x12\x1c\n" +
+	"\x17MSG_GUILD_JOIN_RESPONSE\x10\x89\a\x12\x14\n" +
+	"\x0fMSG_GUILD_LEAVE\x10\x8a\a\x12\x1d\n" +
+	"\x18MSG_GUILD_LEAVE_RESPONSE\x10\x8b\a\x12\x13\n" +
+	"\x0eMSG_GUILD_INFO\x10\x8c\a\x12\x1c\n" +
+	"\x17MSG_GUILD_INFO_RESPONSE\x10\x8d\a\x12\x16\n" +
+	"\x11MSG_GUILD_MEMBERS\x10\x8e\a\x12\x1f\n" +
+	"\x1aMSG_GUILD_MEMBERS_RESPONSE\x10\x8f\a\x12\x13\n" +
+	"\x0eMSG_GUILD_KICK\x10\x90\a\x12\x1c\n" +
+	"\x17MSG_GUILD_KICK_RESPONSE\x10\x91\a*\xc2\x01\n" +
+	"\tShopMsgId\x12\x14\n" +
+	"\x10MSG_SHOP_INVALID\x10\x00\x12\x17\n" +
+	"\x12MSG_SHOP_GET_ITEMS\x10\xe8\a\x12 \n" +
+	"\x1bMSG_SHOP_GET_ITEMS_RESPONSE\x10\xe9\a\x12\x11\n" +
+	"\fMSG_SHOP_BUY\x10\xea\a\x12\x1a\n" +
+	"\x15MSG_SHOP_BUY_RESPONSE\x10\xeb\a\x12\x15\n" +
+	"\x10MSG_SHOP_REFRESH\x10\xec\a\x12\x1e\n" +
+	"\x19MSG_SHOP_REFRESH_RESPONSE\x10\xed\a*\xac\x02\n" +
+	"\fDungeonMsgId\x12\x17\n" +
+	"\x13MSG_DUNGEON_INVALID\x10\x00\x12\x19\n" +
+	"\x14MSG_DUNGEON_GET_LIST\x10\xcc\b\x12\"\n" +
+	"\x1dMSG_DUNGEON_GET_LIST_RESPONSE\x10\xcd\b\x12\x16\n" +
+	"\x11MSG_DUNGEON_ENTER\x10\xce\b\x12\x1f\n" +
+	"\x1aMSG_DUNGEON_ENTER_RESPONSE\x10\xcf\b\x12\x15\n" +
+	"\x10MSG_DUNGEON_EXIT\x10\xd0\b\x12\x1e\n" +
+	"\x19MSG_DUNGEON_EXIT_RESPONSE\x10\xd1\b\x12\x19\n" +
+	"\x14MSG_DUNGEON_COMPLETE\x10\xd2\b\x12\"\n" +
+	"\x1dMSG_DUNGEON_COMPLETE_RESPONSE\x10\xd3\b\x12\x15\n" +
+	"\x10MSG_DUNGEON_FAIL\x10\xd4\b*\x86\x03\n" +
 	"\bMapMsgId\x12\x13\n" +
 	"\x0fMSG_MAP_INVALID\x10\x00\x12\x12\n" +
-	"\rMSG_MAP_ENTER\x10\xa1\x1f\x12\x12\n" +
-	"\rMSG_MAP_LEAVE\x10\xa2\x1f\x12\x11\n" +
-	"\fMSG_MAP_MOVE\x10\xa3\x1f\x12\x15\n" +
-	"\x10MSG_MAP_GET_PATH\x10\xa4\x1f\x12\x18\n" +
-	"\x13MSG_MAP_GET_OBJECTS\x10\xa5\x1f\x12\x19\n" +
-	"\x14MSG_MAP_SYNC_OBJECTS\x10\xa6\x1f\x12\x16\n" +
-	"\x11MSG_MAP_AOI_ENTER\x10\xa7\x1f\x12\x16\n" +
-	"\x11MSG_MAP_AOI_LEAVE\x10\xa8\x1f\x12\x16\n" +
-	"\x11MSG_MAP_MOVE_SYNC\x10\xa9\x1fB\rZ\v./;protocolb\x06proto3"
+	"\rMSG_MAP_ENTER\x10\xb0\t\x12\x1b\n" +
+	"\x16MSG_MAP_ENTER_RESPONSE\x10\xb1\t\x12\x12\n" +
+	"\rMSG_MAP_LEAVE\x10\xb2\t\x12\x1b\n" +
+	"\x16MSG_MAP_LEAVE_RESPONSE\x10\xb3\t\x12\x11\n" +
+	"\fMSG_MAP_MOVE\x10\xb4\t\x12\x1a\n" +
+	"\x15MSG_MAP_MOVE_RESPONSE\x10\xb5\t\x12\x13\n" +
+	"\x0eMSG_MAP_ATTACK\x10\xb6\t\x12\x1c\n" +
+	"\x17MSG_MAP_ATTACK_RESPONSE\x10\xb7\t\x12\x11\n" +
+	"\fMSG_MAP_SYNC\x10\xb8\t\x12\x1a\n" +
+	"\x15MSG_MAP_SYNC_RESPONSE\x10\xb9\t\x12\x15\n" +
+	"\x10MSG_MAP_TELEPORT\x10\xba\t\x12\x1e\n" +
+	"\x19MSG_MAP_TELEPORT_RESPONSE\x10\xbb\t\x12\x18\n" +
+	"\x13MSG_MAP_GET_OBJECTS\x10\xbc\t\x12!\n" +
+	"\x1cMSG_MAP_GET_OBJECTS_RESPONSE\x10\xbd\t*o\n" +
+	"\bAoiMsgId\x12\x13\n" +
+	"\x0fMSG_AOI_INVALID\x10\x00\x12\x12\n" +
+	"\rMSG_AOI_ENTER\x10\x94\n" +
+	"\x12\x12\n" +
+	"\rMSG_AOI_LEAVE\x10\x95\n" +
+	"\x12\x11\n" +
+	"\fMSG_AOI_MOVE\x10\x96\n" +
+	"\x12\x13\n" +
+	"\x0eMSG_AOI_UPDATE\x10\x97\n" +
+	"*\xf4\x01\n" +
+	"\vCombatMsgId\x12\x16\n" +
+	"\x12MSG_COMBAT_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_COMBAT_ATTACK\x10\xf8\n" +
+	"\x12\x1f\n" +
+	"\x1aMSG_COMBAT_ATTACK_RESPONSE\x10\xf9\n" +
+	"\x12\x16\n" +
+	"\x11MSG_COMBAT_DAMAGE\x10\xfa\n" +
+	"\x12\x14\n" +
+	"\x0fMSG_COMBAT_HEAL\x10\xfb\n" +
+	"\x12\x1a\n" +
+	"\x15MSG_COMBAT_BUFF_APPLY\x10\xfc\n" +
+	"\x12\x1b\n" +
+	"\x16MSG_COMBAT_BUFF_REMOVE\x10\xfd\n" +
+	"\x12\x15\n" +
+	"\x10MSG_COMBAT_DEATH\x10\xfe\n" +
+	"\x12\x16\n" +
+	"\x11MSG_COMBAT_REVIVE\x10\xff\n" +
+	"*\xa9\x02\n" +
+	"\rActivityMsgId\x12\x18\n" +
+	"\x14MSG_ACTIVITY_INVALID\x10\x00\x12\x1a\n" +
+	"\x15MSG_ACTIVITY_GET_LIST\x10\xdc\v\x12#\n" +
+	"\x1eMSG_ACTIVITY_GET_LIST_RESPONSE\x10\xdd\v\x12\x16\n" +
+	"\x11MSG_ACTIVITY_JOIN\x10\xde\v\x12\x1f\n" +
+	"\x1aMSG_ACTIVITY_JOIN_RESPONSE\x10\xdf\v\x12\x1a\n" +
+	"\x15MSG_ACTIVITY_PROGRESS\x10\xe0\v\x12#\n" +
+	"\x1eMSG_ACTIVITY_PROGRESS_RESPONSE\x10\xe1\v\x12\x1c\n" +
+	"\x17MSG_ACTIVITY_GET_REWARD\x10\xe2\v\x12%\n" +
+	" MSG_ACTIVITY_GET_REWARD_RESPONSE\x10\xe3\v*\xed\x03\n" +
+	"\n" +
+	"TradeMsgId\x12\x15\n" +
+	"\x11MSG_TRADE_INVALID\x10\x00\x12\x16\n" +
+	"\x11MSG_TRADE_REQUEST\x10\xc0\f\x12\x1f\n" +
+	"\x1aMSG_TRADE_REQUEST_RESPONSE\x10\xc1\f\x12\x15\n" +
+	"\x10MSG_TRADE_ACCEPT\x10\xc2\f\x12\x1e\n" +
+	"\x19MSG_TRADE_ACCEPT_RESPONSE\x10\xc3\f\x12\x17\n" +
+	"\x12MSG_TRADE_PUT_ITEM\x10\xc4\f\x12 \n" +
+	"\x1bMSG_TRADE_PUT_ITEM_RESPONSE\x10\xc5\f\x12\x16\n" +
+	"\x11MSG_TRADE_CONFIRM\x10\xc6\f\x12\x1f\n" +
+	"\x1aMSG_TRADE_CONFIRM_RESPONSE\x10\xc7\f\x12\x15\n" +
+	"\x10MSG_TRADE_CANCEL\x10\xc8\f\x12\x1e\n" +
+	"\x19MSG_TRADE_CANCEL_RESPONSE\x10\xc9\f\x12\x19\n" +
+	"\x14MSG_AUCTION_GET_LIST\x10\xca\f\x12\"\n" +
+	"\x1dMSG_AUCTION_GET_LIST_RESPONSE\x10\xcb\f\x12\x17\n" +
+	"\x12MSG_AUCTION_CREATE\x10\xcc\f\x12 \n" +
+	"\x1bMSG_AUCTION_CREATE_RESPONSE\x10\xcd\f\x12\x14\n" +
+	"\x0fMSG_AUCTION_BID\x10\xce\f\x12\x1d\n" +
+	"\x18MSG_AUCTION_BID_RESPONSE\x10\xcf\f*\x88\x03\n" +
+	"\tTeamMsgId\x12\x14\n" +
+	"\x10MSG_TEAM_INVALID\x10\x00\x12\x14\n" +
+	"\x0fMSG_TEAM_CREATE\x10\xa4\r\x12\x1d\n" +
+	"\x18MSG_TEAM_CREATE_RESPONSE\x10\xa5\r\x12\x14\n" +
+	"\x0fMSG_TEAM_INVITE\x10\xa6\r\x12\x1d\n" +
+	"\x18MSG_TEAM_INVITE_RESPONSE\x10\xa7\r\x12\x12\n" +
+	"\rMSG_TEAM_JOIN\x10\xa8\r\x12\x1b\n" +
+	"\x16MSG_TEAM_JOIN_RESPONSE\x10\xa9\r\x12\x13\n" +
+	"\x0eMSG_TEAM_LEAVE\x10\xaa\r\x12\x1c\n" +
+	"\x17MSG_TEAM_LEAVE_RESPONSE\x10\xab\r\x12\x12\n" +
+	"\rMSG_TEAM_KICK\x10\xac\r\x12\x1b\n" +
+	"\x16MSG_TEAM_KICK_RESPONSE\x10\xad\r\x12\x15\n" +
+	"\x10MSG_TEAM_DISBAND\x10\xae\r\x12\x1e\n" +
+	"\x19MSG_TEAM_DISBAND_RESPONSE\x10\xaf\r\x12\x12\n" +
+	"\rMSG_TEAM_INFO\x10\xb0\r\x12\x1b\n" +
+	"\x16MSG_TEAM_INFO_RESPONSE\x10\xb1\r*\xbe\x02\n" +
+	"\vFriendMsgId\x12\x16\n" +
+	"\x12MSG_FRIEND_INVALID\x10\x00\x12\x18\n" +
+	"\x13MSG_FRIEND_GET_LIST\x10\x88\x0e\x12!\n" +
+	"\x1cMSG_FRIEND_GET_LIST_RESPONSE\x10\x89\x0e\x12\x13\n" +
+	"\x0eMSG_FRIEND_ADD\x10\x8a\x0e\x12\x1c\n" +
+	"\x17MSG_FRIEND_ADD_RESPONSE\x10\x8b\x0e\x12\x16\n" +
+	"\x11MSG_FRIEND_REMOVE\x10\x8c\x0e\x12\x1f\n" +
+	"\x1aMSG_FRIEND_REMOVE_RESPONSE\x10\x8d\x0e\x12\x15\n" +
+	"\x10MSG_FRIEND_APPLY\x10\x8e\x0e\x12\x1e\n" +
+	"\x19MSG_FRIEND_APPLY_RESPONSE\x10\x8f\x0e\x12\x16\n" +
+	"\x11MSG_FRIEND_SEARCH\x10\x90\x0e\x12\x1f\n" +
+	"\x1aMSG_FRIEND_SEARCH_RESPONSE\x10\x91\x0eB\rZ\v./;protocolb\x06proto3"
 
 var (
 	file_game_proto_rawDescOnce sync.Once
@@ -7012,123 +3862,77 @@ func file_game_proto_rawDescGZIP() []byte {
 	return file_game_proto_rawDescData
 }
 
-var file_game_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 78)
+var file_game_proto_enumTypes = make([]protoimpl.EnumInfo, 19)
+var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_game_proto_goTypes = []any{
-	(MessageType)(0),                 // 0: protocol.MessageType
-	(SystemMsgId)(0),                 // 1: protocol.SystemMsgId
-	(PlayerMsgId)(0),                 // 2: protocol.PlayerMsgId
-	(GuildMsgId)(0),                  // 3: protocol.GuildMsgId
-	(AuctionMsgId)(0),                // 4: protocol.AuctionMsgId
-	(MapMsgId)(0),                    // 5: protocol.MapMsgId
-	(*Message)(nil),                  // 6: protocol.Message
-	(*Response)(nil),                 // 7: protocol.Response
-	(*PlayerInfo)(nil),               // 8: protocol.PlayerInfo
-	(*PlayerCreateRequest)(nil),      // 9: protocol.PlayerCreateRequest
-	(*PlayerCreateResponse)(nil),     // 10: protocol.PlayerCreateResponse
-	(*PlayerLoginRequest)(nil),       // 11: protocol.PlayerLoginRequest
-	(*PlayerLoginResponse)(nil),      // 12: protocol.PlayerLoginResponse
-	(*PlayerGetInfoRequest)(nil),     // 13: protocol.PlayerGetInfoRequest
-	(*PlayerGetInfoResponse)(nil),    // 14: protocol.PlayerGetInfoResponse
-	(*PlayerLogoutRequest)(nil),      // 15: protocol.PlayerLogoutRequest
-	(*PlayerLogoutResponse)(nil),     // 16: protocol.PlayerLogoutResponse
-	(*PlayerBasicInfo)(nil),          // 17: protocol.PlayerBasicInfo
-	(*ItemInfo)(nil),                 // 18: protocol.ItemInfo
-	(*TaskInfo)(nil),                 // 19: protocol.TaskInfo
-	(*SkillInfo)(nil),                // 20: protocol.SkillInfo
-	(*SkillUseRequest)(nil),          // 21: protocol.SkillUseRequest
-	(*SkillUseResponse)(nil),         // 22: protocol.SkillUseResponse
-	(*SkillCooldownInfo)(nil),        // 23: protocol.SkillCooldownInfo
-	(*SkillCooldownNotify)(nil),      // 24: protocol.SkillCooldownNotify
-	(*SkillListRequest)(nil),         // 25: protocol.SkillListRequest
-	(*SkillListResponse)(nil),        // 26: protocol.SkillListResponse
-	(*SkillUpgradeRequest)(nil),      // 27: protocol.SkillUpgradeRequest
-	(*SkillUpgradeResponse)(nil),     // 28: protocol.SkillUpgradeResponse
-	(*SkillUnlockRequest)(nil),       // 29: protocol.SkillUnlockRequest
-	(*SkillUnlockResponse)(nil),      // 30: protocol.SkillUnlockResponse
-	(*SkillUseNotify)(nil),           // 31: protocol.SkillUseNotify
-	(*MailInfo)(nil),                 // 32: protocol.MailInfo
-	(*GuildInfo)(nil),                // 33: protocol.GuildInfo
-	(*GuildMemberInfo)(nil),          // 34: protocol.GuildMemberInfo
-	(*GuildApplyInfo)(nil),           // 35: protocol.GuildApplyInfo
-	(*AuctionItemInfo)(nil),          // 36: protocol.AuctionItemInfo
-	(*AuctionBidInfo)(nil),           // 37: protocol.AuctionBidInfo
-	(*MapObjectInfo)(nil),            // 38: protocol.MapObjectInfo
-	(*MapMoveRequest)(nil),           // 39: protocol.MapMoveRequest
-	(*MapMoveResponse)(nil),          // 40: protocol.MapMoveResponse
-	(*MapPathRequest)(nil),           // 41: protocol.MapPathRequest
-	(*MapPathResponse)(nil),          // 42: protocol.MapPathResponse
-	(*MapSyncObjects)(nil),           // 43: protocol.MapSyncObjects
-	(*AoiObjectInfo)(nil),            // 44: protocol.AoiObjectInfo
-	(*AoiEnterNotify)(nil),           // 45: protocol.AoiEnterNotify
-	(*AoiLeaveNotify)(nil),           // 46: protocol.AoiLeaveNotify
-	(*MapMoveSync)(nil),              // 47: protocol.MapMoveSync
-	(*BuffInfo)(nil),                 // 48: protocol.BuffInfo
-	(*BuffListResponse)(nil),         // 49: protocol.BuffListResponse
-	(*BuffApplyRequest)(nil),         // 50: protocol.BuffApplyRequest
-	(*BuffApplyResponse)(nil),        // 51: protocol.BuffApplyResponse
-	(*ActivityInfo)(nil),             // 52: protocol.ActivityInfo
-	(*ActivityListResponse)(nil),     // 53: protocol.ActivityListResponse
-	(*ActivityJoinRequest)(nil),      // 54: protocol.ActivityJoinRequest
-	(*ActivityJoinResponse)(nil),     // 55: protocol.ActivityJoinResponse
-	(*ActivityProgressRequest)(nil),  // 56: protocol.ActivityProgressRequest
-	(*ActivityProgressResponse)(nil), // 57: protocol.ActivityProgressResponse
-	(*ActivityClaimRequest)(nil),     // 58: protocol.ActivityClaimRequest
-	(*ActivityClaimResponse)(nil),    // 59: protocol.ActivityClaimResponse
-	(*BuffRemoveRequest)(nil),        // 60: protocol.BuffRemoveRequest
-	(*BuffRemoveResponse)(nil),       // 61: protocol.BuffRemoveResponse
-	(*BuffDispelRequest)(nil),        // 62: protocol.BuffDispelRequest
-	(*BuffDispelResponse)(nil),       // 63: protocol.BuffDispelResponse
-	(*DropItemInfo)(nil),             // 64: protocol.DropItemInfo
-	(*DropEntityInfo)(nil),           // 65: protocol.DropEntityInfo
-	(*DropPickupResponse)(nil),       // 66: protocol.DropPickupResponse
-	(*DropListResponse)(nil),         // 67: protocol.DropListResponse
-	(*DungeonInfo)(nil),              // 68: protocol.DungeonInfo
-	(*DungeonListResponse)(nil),      // 69: protocol.DungeonListResponse
-	(*DungeonEnterRequest)(nil),      // 70: protocol.DungeonEnterRequest
-	(*DungeonEnterResponse)(nil),     // 71: protocol.DungeonEnterResponse
-	(*DungeonExitResponse)(nil),      // 72: protocol.DungeonExitResponse
-	(*DungeonStatusNotify)(nil),      // 73: protocol.DungeonStatusNotify
-	(*DungeonCompleteResponse)(nil),  // 74: protocol.DungeonCompleteResponse
-	(*DungeonFailResponse)(nil),      // 75: protocol.DungeonFailResponse
-	(*ShopItemInfo)(nil),             // 76: protocol.ShopItemInfo
-	(*ShopItemListResponse)(nil),     // 77: protocol.ShopItemListResponse
-	(*ShopCategoryInfo)(nil),         // 78: protocol.ShopCategoryInfo
-	(*ShopCategoryListResponse)(nil), // 79: protocol.ShopCategoryListResponse
-	(*ShopBuyResponse)(nil),          // 80: protocol.ShopBuyResponse
-	(*ShopHotItemsResponse)(nil),     // 81: protocol.ShopHotItemsResponse
-	(*MapPathResponse_Point)(nil),    // 82: protocol.MapPathResponse.Point
-	nil,                              // 83: protocol.BuffInfo.EffectsEntry
+	(SystemMsgId)(0),                // 0: protocol.SystemMsgId
+	(AuthMsgId)(0),                  // 1: protocol.AuthMsgId
+	(PlayerMsgId)(0),                // 2: protocol.PlayerMsgId
+	(BagMsgId)(0),                   // 3: protocol.BagMsgId
+	(EquipMsgId)(0),                 // 4: protocol.EquipMsgId
+	(SkillMsgId)(0),                 // 5: protocol.SkillMsgId
+	(TaskMsgId)(0),                  // 6: protocol.TaskMsgId
+	(MailMsgId)(0),                  // 7: protocol.MailMsgId
+	(ChatMsgId)(0),                  // 8: protocol.ChatMsgId
+	(GuildMsgId)(0),                 // 9: protocol.GuildMsgId
+	(ShopMsgId)(0),                  // 10: protocol.ShopMsgId
+	(DungeonMsgId)(0),               // 11: protocol.DungeonMsgId
+	(MapMsgId)(0),                   // 12: protocol.MapMsgId
+	(AoiMsgId)(0),                   // 13: protocol.AoiMsgId
+	(CombatMsgId)(0),                // 14: protocol.CombatMsgId
+	(ActivityMsgId)(0),              // 15: protocol.ActivityMsgId
+	(TradeMsgId)(0),                 // 16: protocol.TradeMsgId
+	(TeamMsgId)(0),                  // 17: protocol.TeamMsgId
+	(FriendMsgId)(0),                // 18: protocol.FriendMsgId
+	(*ClientMessage)(nil),           // 19: protocol.ClientMessage
+	(*ServerMessage)(nil),           // 20: protocol.ServerMessage
+	(*HeartbeatRequest)(nil),        // 21: protocol.HeartbeatRequest
+	(*HeartbeatResponse)(nil),       // 22: protocol.HeartbeatResponse
+	(*ItemInfo)(nil),                // 23: protocol.ItemInfo
+	(*ItemAttribute)(nil),           // 24: protocol.ItemAttribute
+	(*SkillInfo)(nil),               // 25: protocol.SkillInfo
+	(*SkillCastRequest)(nil),        // 26: protocol.SkillCastRequest
+	(*SkillCastResult)(nil),         // 27: protocol.SkillCastResult
+	(*SkillEffect)(nil),             // 28: protocol.SkillEffect
+	(*MapObject)(nil),               // 29: protocol.MapObject
+	(*MoveRequest)(nil),             // 30: protocol.MoveRequest
+	(*MoveNotify)(nil),              // 31: protocol.MoveNotify
+	(*ClientMapEnterRequest)(nil),   // 32: protocol.ClientMapEnterRequest
+	(*ClientMapEnterResponse)(nil),  // 33: protocol.ClientMapEnterResponse
+	(*ClientMapMoveRequest)(nil),    // 34: protocol.ClientMapMoveRequest
+	(*ClientMapMoveResponse)(nil),   // 35: protocol.ClientMapMoveResponse
+	(*ClientMapAttackRequest)(nil),  // 36: protocol.ClientMapAttackRequest
+	(*ClientMapAttackResponse)(nil), // 37: protocol.ClientMapAttackResponse
+	(*AttackRequest)(nil),           // 38: protocol.AttackRequest
+	(*DamageInfo)(nil),              // 39: protocol.DamageInfo
+	(*BuffInfo)(nil),                // 40: protocol.BuffInfo
+	(*ChatMessage)(nil),             // 41: protocol.ChatMessage
+	(*ChatSendRequest)(nil),         // 42: protocol.ChatSendRequest
+	(*MailInfo)(nil),                // 43: protocol.MailInfo
+	(*TaskInfo)(nil),                // 44: protocol.TaskInfo
+	(*GuildInfo)(nil),               // 45: protocol.GuildInfo
+	(*GuildMember)(nil),             // 46: protocol.GuildMember
+	(*Position)(nil),                // 47: protocol.Position
 }
 var file_game_proto_depIdxs = []int32{
-	8,  // 0: protocol.PlayerCreateResponse.player:type_name -> protocol.PlayerInfo
-	17, // 1: protocol.PlayerGetInfoResponse.player_info:type_name -> protocol.PlayerBasicInfo
-	18, // 2: protocol.TaskInfo.rewards:type_name -> protocol.ItemInfo
-	23, // 3: protocol.SkillCooldownNotify.cooldowns:type_name -> protocol.SkillCooldownInfo
-	20, // 4: protocol.SkillListResponse.skills:type_name -> protocol.SkillInfo
-	18, // 5: protocol.MailInfo.items:type_name -> protocol.ItemInfo
-	82, // 6: protocol.MapPathResponse.path:type_name -> protocol.MapPathResponse.Point
-	38, // 7: protocol.MapSyncObjects.objects:type_name -> protocol.MapObjectInfo
-	44, // 8: protocol.AoiEnterNotify.objects:type_name -> protocol.AoiObjectInfo
-	83, // 9: protocol.BuffInfo.effects:type_name -> protocol.BuffInfo.EffectsEntry
-	48, // 10: protocol.BuffListResponse.buffs:type_name -> protocol.BuffInfo
-	48, // 11: protocol.BuffApplyResponse.buff:type_name -> protocol.BuffInfo
-	52, // 12: protocol.ActivityListResponse.activities:type_name -> protocol.ActivityInfo
-	52, // 13: protocol.ActivityJoinResponse.activity:type_name -> protocol.ActivityInfo
-	18, // 14: protocol.ActivityClaimResponse.rewards:type_name -> protocol.ItemInfo
-	64, // 15: protocol.DropEntityInfo.items:type_name -> protocol.DropItemInfo
-	64, // 16: protocol.DropPickupResponse.items:type_name -> protocol.DropItemInfo
-	65, // 17: protocol.DropListResponse.drops:type_name -> protocol.DropEntityInfo
-	68, // 18: protocol.DungeonListResponse.dungeons:type_name -> protocol.DungeonInfo
-	18, // 19: protocol.DungeonCompleteResponse.rewards:type_name -> protocol.ItemInfo
-	76, // 20: protocol.ShopItemListResponse.items:type_name -> protocol.ShopItemInfo
-	78, // 21: protocol.ShopCategoryListResponse.categories:type_name -> protocol.ShopCategoryInfo
-	76, // 22: protocol.ShopHotItemsResponse.items:type_name -> protocol.ShopItemInfo
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	24, // 0: protocol.ItemInfo.attributes:type_name -> protocol.ItemAttribute
+	47, // 1: protocol.SkillCastRequest.target_pos:type_name -> protocol.Position
+	28, // 2: protocol.SkillCastResult.effects:type_name -> protocol.SkillEffect
+	47, // 3: protocol.SkillEffect.pos:type_name -> protocol.Position
+	47, // 4: protocol.MapObject.pos:type_name -> protocol.Position
+	47, // 5: protocol.MoveRequest.target_pos:type_name -> protocol.Position
+	47, // 6: protocol.MoveRequest.path:type_name -> protocol.Position
+	47, // 7: protocol.MoveNotify.pos:type_name -> protocol.Position
+	47, // 8: protocol.ClientMapEnterResponse.pos:type_name -> protocol.Position
+	47, // 9: protocol.ClientMapMoveRequest.pos:type_name -> protocol.Position
+	47, // 10: protocol.ClientMapMoveResponse.pos:type_name -> protocol.Position
+	23, // 11: protocol.MailInfo.attachments:type_name -> protocol.ItemInfo
+	23, // 12: protocol.TaskInfo.rewards:type_name -> protocol.ItemInfo
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_game_proto_init() }
@@ -7136,13 +3940,14 @@ func file_game_proto_init() {
 	if File_game_proto != nil {
 		return
 	}
+	file_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_proto_rawDesc), len(file_game_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   78,
+			NumEnums:      19,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

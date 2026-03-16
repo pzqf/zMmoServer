@@ -3,40 +3,24 @@ package maps
 import (
 	"github.com/pzqf/zMmoServer/MapServer/config"
 	"github.com/pzqf/zMmoServer/MapServer/connection"
-	"github.com/pzqf/zMmoServer/MapServer/server"
 )
 
 // BaseServer 地图服基础服务器
 type BaseServer struct {
-	*sharedserver.BaseServer
 	Config            *config.Config
-	MapServer         *server.MapServer
 	ConnectionManager *connection.ConnectionManager
+	MapManager        *MapManager
 }
 
 // NewBaseServer 创建地图服基础服务器
 func NewBaseServer() *BaseServer {
-	baseServer := sharedserver.NewBaseServer(
-		sharedserver.ServerTypeMap,
-		"map-1",
-		"Map Server",
-		"1.0.0",
-	)
+	s := &BaseServer{}
 
-	server := &BaseServer{
-		BaseServer: baseServer,
-	}
-
-	// 设置生命周期钩子
-	server.BaseServer.onBeforeStartFunc = server.onBeforeStart
-	server.BaseServer.onAfterStartFunc = server.onAfterStart
-	server.BaseServer.onBeforeStopFunc = server.onBeforeStop
-
-	return server
+	return s
 }
 
-// onBeforeStart 启动前的准备工作
-func (s *BaseServer) onBeforeStart() error {
+// Start 启动服务器
+func (s *BaseServer) Start() error {
 	// 加载配置
 	cfg, err := config.LoadConfig("config.ini")
 	if err != nil {
@@ -45,38 +29,35 @@ func (s *BaseServer) onBeforeStart() error {
 	s.Config = cfg
 
 	// 初始化连接管理器
-	connManager := connection.NewConnectionManager()
+	connManager := connection.NewConnectionManager(cfg)
 	s.ConnectionManager = connManager
 
-	// 初始化地图服务器
-	mapServer, err := server.NewMapServer(cfg, connManager)
-	if err != nil {
-		return err
+	// 初始化地图管理器
+	mapManager := NewMapManager()
+	s.MapManager = mapManager
+
+	// 启动连接管理器
+	if err := s.ConnectionManager.ConnectToGameServer("game1", cfg.GameServer.GameServerAddr); err != nil {
+		// 记录警告，继续启动
 	}
-	s.MapServer = mapServer
 
-	// 注册组件
-	s.RegisterComponent("Config", cfg)
-	s.RegisterComponent("MapServer", mapServer)
-	s.RegisterComponent("ConnectionManager", connManager)
-
-	return nil
-}
-
-// onAfterStart 启动后的工作
-func (s *BaseServer) onAfterStart() error {
-	// 启动地图服务器
-	if err := s.MapServer.Start(); err != nil {
+	// 启动地图管理器
+	if err := s.MapManager.Start(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// onBeforeStop 停止前的工作
-func (s *BaseServer) onBeforeStop() {
-	// 停止地图服务器
-	if s.MapServer != nil {
-		s.MapServer.Stop()
+// Stop 停止服务器
+func (s *BaseServer) Stop() {
+	// 停止连接管理器
+	if s.ConnectionManager != nil {
+		s.ConnectionManager.DisconnectFromGameServer("game1")
+	}
+
+	// 停止地图管理器
+	if s.MapManager != nil {
+		s.MapManager.Stop()
 	}
 }

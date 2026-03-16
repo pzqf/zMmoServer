@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+import "common.proto";
+
+// ============================================
+// 玩家相关协议
+// 消息ID范围: 1100-1199
+// ============================================
+
+// 玩家基础信息
+message PlayerBasicInfo {
+  int64 player_id = 1;
+  string name = 2;
+  int32 level = 3;
+  int64 exp = 4;
+  int64 gold = 5;
+  int32 vip_level = 6;
+  int32 server_id = 7;
+  int64 create_time = 8;
+  int64 last_login_time = 9;
+}
+
+// 玩家创建
+message PlayerCreateRequest {
+  string name = 1;
+  int32 sex = 2;
+  int32 age = 3;
+  int32 profession = 4;
+}
+
+message PlayerCreateResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  PlayerBasicInfo player_info = 3;
+}
+
+// 玩家登录
+message PlayerLoginRequest {
+  int64 player_id = 1;
+  string token = 2;
+}
+
+message PlayerLoginResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  PlayerBasicInfo player_info = 3;
+}
+
+// 玩家登出
+message PlayerLogoutRequest {
+  int64 player_id = 1;
+}
+
+message PlayerLogoutResponse {
+  int32 result = 1;
+  string error_msg = 2;
+}
+
+// 获取玩家信息
+message PlayerGetInfoRequest {
+  int64 player_id = 1;
+}
+
+message PlayerGetInfoResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  PlayerBasicInfo player_info = 3;
+}
+
+// 更新玩家信息
+message PlayerUpdateInfoRequest {
+  int64 player_id = 1;
+  string name = 2;
+  int32 head_icon = 3;
+  string signature = 4;
+}
+
+message PlayerUpdateInfoResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  PlayerBasicInfo player_info = 3;
+}

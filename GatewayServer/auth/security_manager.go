@@ -11,11 +11,11 @@ import (
 
 // SecurityManager 安全管理器
 type SecurityManager struct {
-	config            *config.Config
-	loginAttempts     map[string]int           // IP -> 尝试次数
-	banList           map[string]time.Time     // IP -> 封禁时间
+	config             *config.Config
+	loginAttempts      map[string]int       // IP -> 尝试次数
+	banList            map[string]time.Time // IP -> 封禁时间
 	loginAttemptsMutex sync.RWMutex
-	banListMutex     sync.RWMutex
+	banListMutex       sync.RWMutex
 }
 
 // NewSecurityManager 创建安全管理器

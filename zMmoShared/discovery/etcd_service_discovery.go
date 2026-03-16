@@ -50,7 +50,7 @@ func (s *EtcdServiceDiscovery) Register(ctx context.Context, service *ServiceInf
 	s.lease = leaseResp.ID
 
 	// 服务路径
-	servicePath := filepath.Join("services", service.Name, service.ID)
+	servicePath := filepath.Join("services", service.Name, service.GroupID, service.ID)
 
 	// 服务信息序列化
 	serviceData, err := json.Marshal(service)
@@ -80,7 +80,7 @@ func (s *EtcdServiceDiscovery) Register(ctx context.Context, service *ServiceInf
 }
 
 // Unregister 注销服务
-func (s *EtcdServiceDiscovery) Unregister(ctx context.Context, serviceID string) error {
+func (s *EtcdServiceDiscovery) Unregister(ctx context.Context, serviceName, groupID, serviceID string) error {
 	// 取消租约
 	if s.lease != 0 {
 		_, err := s.client.Revoke(ctx, s.lease)
@@ -89,13 +89,25 @@ func (s *EtcdServiceDiscovery) Unregister(ctx context.Context, serviceID string)
 		}
 	}
 
+	// 删除服务注册
+	servicePath := filepath.Join("services", serviceName, groupID, serviceID)
+	_, err := s.client.Delete(ctx, servicePath)
+	if err != nil {
+		return fmt.Errorf("failed to delete service registration: %w", err)
+	}
+
 	return nil
 }
 
 // Discover 发现服务
-func (s *EtcdServiceDiscovery) Discover(ctx context.Context, serviceName string) ([]*ServiceInfo, error) {
+func (s *EtcdServiceDiscovery) Discover(ctx context.Context, serviceName, groupID string) ([]*ServiceInfo, error) {
 	// 服务前缀
-	servicePrefix := filepath.Join("services", serviceName)
+	var servicePrefix string
+	if groupID != "" {
+		servicePrefix = filepath.Join("services", serviceName, groupID)
+	} else {
+		servicePrefix = filepath.Join("services", serviceName)
+	}
 
 	// 列出所有服务
 	resp, err := s.client.Get(ctx, servicePrefix, clientv3.WithPrefix())
@@ -117,9 +129,14 @@ func (s *EtcdServiceDiscovery) Discover(ctx context.Context, serviceName string)
 }
 
 // Watch 监听服务变化
-func (s *EtcdServiceDiscovery) Watch(ctx context.Context, serviceName string, callback func([]*ServiceInfo)) error {
+func (s *EtcdServiceDiscovery) Watch(ctx context.Context, serviceName, groupID string, callback func([]*ServiceInfo)) error {
 	// 服务前缀
-	servicePrefix := filepath.Join("services", serviceName)
+	var servicePrefix string
+	if groupID != "" {
+		servicePrefix = filepath.Join("services", serviceName, groupID)
+	} else {
+		servicePrefix = filepath.Join("services", serviceName)
+	}
 
 	// 创建监听器
 	watcher := s.client.Watch(ctx, servicePrefix, clientv3.WithPrefix())
@@ -132,13 +149,13 @@ func (s *EtcdServiceDiscovery) Watch(ctx context.Context, serviceName string, ca
 				return
 			case <-s.ctx.Done():
 				return
-			case resp, ok := <-watcher:
+			case _, ok := <-watcher:
 				if !ok {
 					return
 				}
 
 				// 重新发现服务
-				services, err := s.Discover(ctx, serviceName)
+				services, err := s.Discover(ctx, serviceName, groupID)
 				if err == nil {
 					callback(services)
 				}

@@ -89,7 +89,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			ConnMaxLifetime: getConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
 		},
 		GameServer: GameServerConfig{
-			GameServerAddr:           getConfigString(zcfg, "GameServer.GameServerAddr", "127.0.0.1:9001"),
+			GameServerAddr:           getConfigString(zcfg, "GameServer.GameServerAddr", "127.0.0.1:20002"),
 			GameServerConnectTimeout: getConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
 		},
 		Log: LogConfig{
