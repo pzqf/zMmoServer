@@ -5,10 +5,17 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/consistency"
+	"github.com/pzqf/zCommon/crossserver"
+	"github.com/pzqf/zCommon/message"
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zMmoServer/GameServer/config"
@@ -20,29 +27,27 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
 	"github.com/pzqf/zMmoServer/GameServer/service"
 	"github.com/pzqf/zMmoServer/GameServer/session"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/protocol"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 // TCPService TCP服务
 type TCPService struct {
-	config         *config.Config
-	connManager    *connection.ConnectionManager
-	sessionManager *session.SessionManager
-	playerManager  *player.PlayerManager
-	playerService  *service.PlayerService
-	playerHandler  *handler.PlayerHandler
-	mapService     *maps.MapService
-	protocol       protolayer.Protocol
-	tcpServer      *zNet.TcpServer
+	config            *config.Config
+	connManager       *connection.ConnectionManager
+	sessionManager    *session.SessionManager
+	playerManager     *player.PlayerManager
+	playerService     *service.PlayerService
+	playerHandler     *handler.PlayerHandler
+	mapService        *maps.MapService
+	protocol          protolayer.Protocol
+	tcpServer         *zNet.TcpServer
 	mapServerListener net.Listener
-	isRunning      bool
-	wg             sync.WaitGroup
-	// MapServer连接管理
-	mapServerConn  net.Conn
-	mapServerMu    sync.RWMutex
+	isRunning         bool
+	wg                sync.WaitGroup
+	gatewayInbox      consistency.InboxStore
+	dedupeHits        atomic.Uint64
+	onDedupeHit       func(total uint64)
 }
 
 func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *service.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, protocol protolayer.Protocol) *TCPService {
@@ -56,11 +61,17 @@ func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager
 		mapService:     mapService,
 		protocol:       protocol,
 		isRunning:      false,
+		gatewayInbox:   consistency.NewMemoryInbox(),
 	}
 }
 
 func (ts *TCPService) Name() string {
 	return "TCPService"
+}
+
+// SetOnGatewayDedupeHit 设置Gateway去重命中回调（用于实时指标上报）
+func (ts *TCPService) SetOnGatewayDedupeHit(cb func(total uint64)) {
+	ts.onDedupeHit = cb
 }
 
 func (ts *TCPService) Start(ctx context.Context) error {
@@ -85,6 +96,7 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		HeartbeatDuration: 30,
 		MaxPacketDataSize: 1024 * 1024,
 		UseWorkerPool:     false,
+		DisableEncryption: true, // 服务器之间禁用加密，提高响应速度
 	}
 
 	// 创建zNet.TcpServer（用于Gateway连接）
@@ -93,7 +105,7 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	// 注册消息处理器
 	ts.tcpServer.RegisterDispatcher(ts.handleConnectionMessage)
 
-	// 启动服务器
+	// 启动服务
 	err := ts.tcpServer.Start()
 	if err != nil {
 		return fmt.Errorf("failed to start TCP service: %v", err)
@@ -208,7 +220,7 @@ func (ts *TCPService) processMapServerData(conn net.Conn, pendingData *[]byte) {
 
 		// 解析zNet格式的消息头
 		// zNet消息格式：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-		_ = int(binary.BigEndian.Uint32((*pendingData)[:4])) // protoId
+		_ = int(binary.BigEndian.Uint32((*pendingData)[:4]))  // protoId
 		_ = int(binary.BigEndian.Uint32((*pendingData)[4:8])) // version
 		dataLen := int(binary.BigEndian.Uint32((*pendingData)[8:12]))
 		_ = int(binary.BigEndian.Uint32((*pendingData)[12:16])) // isCompressed
@@ -264,8 +276,20 @@ func (ts *TCPService) handleMapServerMessage(conn net.Conn, data []byte) {
 		return
 	}
 
-	// 提取数据部分
-	_ = data[16:totalLen] // payload
+	// 提取数据部分并解析跨服信封（兼容未包裹旧格式）
+	rawPayload := data[16:totalLen]
+	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(rawPayload)
+	if unwrapErr != nil {
+		zLog.Error("Invalid cross-server envelope from MapServer", zap.Error(unwrapErr))
+		return
+	}
+	if wrapped {
+		zLog.Debug("Received cross-server envelope from MapServer",
+			zap.Uint64("trace_id", meta.TraceID),
+			zap.Uint64("request_id", meta.RequestID),
+			zap.Int("proto_id", protoId),
+			zap.Int("server_id", ts.config.Server.ServerID))
+	}
 
 	// 根据消息类型处理
 	switch protoId {
@@ -276,8 +300,28 @@ func (ts *TCPService) handleMapServerMessage(conn net.Conn, data []byte) {
 		// 处理地图移动响应
 		zLog.Info("Received map move response from MapServer")
 	case 407: // MSG_INTERNAL_MAP_ATTACK_RESPONSE
-		// 处理地图攻击响应
-		zLog.Info("Received map attack response from MapServer")
+		var resp protocol.MapAttackResponse
+		if err := proto.Unmarshal(payload, &resp); err != nil {
+			zLog.Error("Failed to unmarshal map attack response", zap.Error(err))
+			return
+		}
+		if ts.mapService != nil {
+			ts.mapService.HandleMapAttackResponse(
+				meta.RequestID,
+				id.PlayerIdType(resp.PlayerId),
+				id.ObjectIdType(resp.TargetId),
+				resp.Damage,
+				resp.TargetHp,
+				resp.Success,
+				resp.ErrorMsg,
+			)
+		}
+		zLog.Info("Received map attack response from MapServer",
+			zap.Int64("player_id", resp.PlayerId),
+			zap.Int64("target_id", resp.TargetId),
+			zap.Bool("success", resp.Success),
+			zap.Int64("damage", resp.Damage),
+			zap.Int64("target_hp", resp.TargetHp))
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Int("proto_id", protoId))
 	}
@@ -298,9 +342,34 @@ func (ts *TCPService) handleConnectionMessage(session zNet.Session, packet *zNet
 
 // isGatewayConnection 检查是否是Gateway连接
 func (ts *TCPService) isGatewayConnection(addr string) bool {
-	// 这里简单通过配置的Gateway地址判断
-	// 实际项目中应该使用更可靠的认证机制
-	// 只比较IP地址部分，忽略端口
+	// 检查是否在Kubernetes环境中
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		// 在Kubernetes环境中，由于网络策略隔离，所有内部连接都是可信的
+		// 或者通过Gateway服务名称验证
+		gatewayService := os.Getenv("GATEWAY_SERVICE_NAME")
+		if gatewayService != "" {
+			// 通过DNS解析服务名称获取IP列表
+			addrs, err := net.LookupHost(gatewayService)
+			if err == nil {
+				// 提取客户端IP
+				clientIP := addr
+				if idx := strings.LastIndex(addr, ":"); idx != -1 {
+					clientIP = addr[:idx]
+				}
+				// 检查客户端IP是否在服务IP列表中
+				for _, serviceAddr := range addrs {
+					if serviceAddr == clientIP {
+						return true
+					}
+				}
+			}
+		}
+		// 如果服务名称验证失败或未配置，在Kubernetes环境中默认允许所有连接
+		// 实际生产环境应该结合网络策略使用
+		return true
+	}
+
+	// 在非Kubernetes环境中，使用传统的IP地址验证
 	clientIP := addr
 	if idx := strings.LastIndex(addr, ":"); idx != -1 {
 		clientIP = addr[:idx]
@@ -310,16 +379,43 @@ func (ts *TCPService) isGatewayConnection(addr string) bool {
 
 // handleGatewayMessage 处理Gateway消息
 func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, data []byte) {
-	// 解析数据部分
-	if len(data) < 4 {
-		zLog.Error("Invalid message format from Gateway", zap.Int("size", len(data)))
+	meta, envelopePayload, wrapped, unwrapErr := crossserver.Unwrap(data)
+	if unwrapErr != nil {
+		zLog.Error("Invalid cross-server envelope from Gateway", zap.Error(unwrapErr))
+		return
+	}
+	if envelopePayload != nil {
+		data = envelopePayload
+	}
+	if wrapped {
+		zLog.Debug("Received cross-server envelope from Gateway",
+			zap.Uint64("trace_id", meta.TraceID),
+			zap.Uint64("request_id", meta.RequestID),
+			zap.Int32("proto_id", protoId),
+			zap.Int("server_id", ts.config.Server.ServerID))
+		if shouldDeduplicateGatewayProto(protoId) && !ts.gatewayInbox.TryAccept(meta.RequestID) {
+			total := ts.dedupeHits.Add(1)
+			if ts.onDedupeHit != nil {
+				ts.onDedupeHit(total)
+			}
+			zLog.Warn("Duplicate gateway request ignored",
+				zap.Uint64("request_id", meta.RequestID),
+				zap.Int32("proto_id", protoId))
+			return
+		}
+	}
+
+	// 使用message包解码消息
+	msg, err := message.Decode(data)
+	if err != nil {
+		zLog.Error("Failed to decode message from Gateway", zap.Error(err))
 		return
 	}
 
-	// 解析数据部分
-	payload := data
-
 	zLog.Info("Received message from Gateway", zap.Int32("proto_id", protoId), zap.Int("data_size", len(data)))
+
+	// 提取数据部分
+	payload := msg.Data
 
 	// 根据消息类型处理
 	switch protoId {
@@ -366,11 +462,11 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			PlayerInfo: &protocol.PlayerBasicInfo{
 				PlayerId:      int64(player.GetPlayerID()),
 				Name:          player.GetName(),
-				Level:         1, // 默认等级为1
+				Level:         1, // 默认等级
 				Exp:           0,
 				Gold:          0,
 				VipLevel:      0,
-				ServerId:      1, // 默认服务器ID为1
+				ServerId:      int32(ts.config.Server.ServerID),
 				CreateTime:    time.Now().Unix(),
 				LastLoginTime: time.Now().Unix(),
 			},
@@ -407,8 +503,8 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			zLog.Error("PlayerManager is nil")
 			return
 		}
-		// 假设账号ID为123，实际应该从请求中获取
-		accountID := id.AccountIdType(123)
+		// 当前协议未透传 account_id，使用 session_id 作为临时账号标识，避免硬编码常量
+		accountID := id.AccountIdType(session.GetSid())
 		// 创建角色并写入数据库
 		playerID, err := ts.playerService.CreatePlayer(accountID, req.Name, req.Sex, req.Age)
 		if err != nil {
@@ -458,11 +554,11 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			PlayerInfo: &protocol.PlayerBasicInfo{
 				PlayerId:      int64(player.GetPlayerID()),
 				Name:          player.GetName(),
-				Level:         1, // 默认等级为1
+				Level:         1, // 默认等级
 				Exp:           0,
 				Gold:          1000, // 初始金币
 				VipLevel:      0,
-				ServerId:      1, // 默认服务器ID为1
+				ServerId:      int32(ts.config.Server.ServerID),
 				CreateTime:    time.Now().Unix(),
 				LastLoginTime: time.Now().Unix(),
 			},
@@ -491,9 +587,11 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 		}
 		zLog.Info("Map enter request", zap.Int64("player_id", req.PlayerId), zap.Int32("map_id", req.MapId))
 
-		// 进入新手村地图
-		mapID := id.MapIdType(1001)                 // 新手村地图ID
-		pos := common.Vector3{X: 250, Y: 250, Z: 0} // 新手村出生点
+		mapID := id.MapIdType(req.MapId)
+		if mapID <= 0 {
+			mapID = ts.mapService.GetDefaultMapID()
+		}
+		pos := common.Vector3{X: 250, Y: 250, Z: 0}
 
 		if ts.mapService != nil {
 			err := ts.mapService.HandlePlayerEnterMap(id.PlayerIdType(req.PlayerId), mapID, pos)
@@ -599,21 +697,35 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			zap.Int64("target_id", req.TargetId))
 
 		// 处理玩家攻击
+		damage := int64(0)
+		targetHP := int64(0)
 		if ts.mapService != nil {
-			damage, targetHP, err := ts.mapService.HandlePlayerAttack(id.PlayerIdType(req.PlayerId), id.MapIdType(req.MapId), id.ObjectIdType(req.TargetId))
+			damage, targetHP, err = ts.mapService.HandlePlayerAttack(id.PlayerIdType(req.PlayerId), id.MapIdType(req.MapId), id.ObjectIdType(req.TargetId))
 			if err != nil {
 				zLog.Error("Failed to handle player attack", zap.Error(err))
+				resp := &protocol.ClientMapAttackResponse{
+					Result:   1,
+					TargetId: req.TargetId,
+				}
+				respData, marshalErr := proto.Marshal(resp)
+				if marshalErr != nil {
+					zLog.Error("Failed to marshal map attack error response", zap.Error(marshalErr))
+					return
+				}
+				if sendErr := session.Send(int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData); sendErr != nil {
+					zLog.Error("Failed to send map attack error response to Gateway", zap.Error(sendErr))
+				}
+				return
 			}
-			// 使用damage和targetHP
 			zLog.Info("Player attack handled", zap.Int64("damage", damage), zap.Int64("target_hp", targetHP))
 		}
 
-		// 发送攻击成功的响应
+		// 发送攻击成功的响应（由 mapService 返回真实处理结果）
 		resp := &protocol.ClientMapAttackResponse{
 			Result:   0,
 			TargetId: req.TargetId,
-			Damage:   10, // 模拟伤害
-			TargetHp: 40, // 模拟目标剩余血量
+			Damage:   damage,
+			TargetHp: targetHP,
 		}
 		respData, err := proto.Marshal(resp)
 		if err != nil {
@@ -635,24 +747,42 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 	}
 }
 
+// GetGatewayDedupeHits 返回Gateway重复请求去重命中次数
+func (ts *TCPService) GetGatewayDedupeHits() uint64 {
+	return ts.dedupeHits.Load()
+}
+
+func shouldDeduplicateGatewayProto(protoId int32) bool {
+	switch protoId {
+	case int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME),
+		int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE),
+		int32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME),
+		int32(protocol.MapMsgId_MSG_MAP_ENTER),
+		int32(protocol.MapMsgId_MSG_MAP_MOVE),
+		int32(protocol.MapMsgId_MSG_MAP_ATTACK):
+		return true
+	default:
+		return false
+	}
+}
+
 // handlePlayerLoginFromGateway 处理从Gateway来的玩家登录消息
-func (ts *TCPService) handlePlayerLoginFromGateway(msg protocol.ClientMessage) {
+func (ts *TCPService) handlePlayerLoginFromGateway(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player login from Gateway", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登录逻辑
 }
 
 // handlePlayerLogoutFromGateway 处理从Gateway来的玩家登出消息
-func (ts *TCPService) handlePlayerLogoutFromGateway(msg protocol.ClientMessage) {
+func (ts *TCPService) handlePlayerLogoutFromGateway(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player logout from Gateway", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登出逻辑
 }
 
 // handlePlayerMoveFromGateway 处理从Gateway来的玩家移动消息
-func (ts *TCPService) handlePlayerMoveFromGateway(msg protocol.ClientMessage) {
+func (ts *TCPService) handlePlayerMoveFromGateway(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player move from Gateway", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家移动逻辑
 }
-
 
 func (ts *TCPService) handleMessage(sessionID string, conn net.Conn, data []byte) {
 	session, exists := ts.sessionManager.GetSession(sessionID)
@@ -803,7 +933,8 @@ func (ts *TCPService) SendResponse(conn net.Conn, msgID uint32, msg proto.Messag
 		return err
 	}
 
-	packet, err := ts.protocol.Encode(msgID, data)
+	// 使用message包编码消息
+	packet, err := message.Encode(msgID, data)
 	if err != nil {
 		zLog.Error("Failed to encode response", zap.Error(err))
 		return err

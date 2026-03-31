@@ -2,25 +2,23 @@ package object
 
 import (
 	"errors"
-	"sync"
 
-	"github.com/pzqf/zUtil/zMap"
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zUtil/zMap"
 )
 
 // ObjectManager 游戏对象管理器
 type ObjectManager struct {
-	objects    *zMap.Map
-	objectsMu  sync.RWMutex
-	objectsByType map[common.GameObjectType]map[id.ObjectIdType]common.IGameObject
+	objects       *zMap.Map
+	objectsByType *zMap.TypedMap[common.GameObjectType, *zMap.TypedMap[id.ObjectIdType, common.IGameObject]]
 }
 
 // NewObjectManager 创建对象管理器
 func NewObjectManager() *ObjectManager {
 	return &ObjectManager{
 		objects:       zMap.NewMap(),
-		objectsByType: make(map[common.GameObjectType]map[id.ObjectIdType]common.IGameObject),
+		objectsByType: zMap.NewTypedMap[common.GameObjectType, *zMap.TypedMap[id.ObjectIdType, common.IGameObject]](),
 	}
 }
 
@@ -35,9 +33,6 @@ func (om *ObjectManager) AddObject(obj common.IGameObject) error {
 		return errors.New("object id can't be 0")
 	}
 
-	om.objectsMu.Lock()
-	defer om.objectsMu.Unlock()
-
 	_, exists := om.objects.Load(objectID)
 	if exists {
 		return errors.New("object already exists")
@@ -46,10 +41,12 @@ func (om *ObjectManager) AddObject(obj common.IGameObject) error {
 	om.objects.Store(objectID, obj)
 
 	objectType := obj.GetType()
-	if om.objectsByType[objectType] == nil {
-		om.objectsByType[objectType] = make(map[id.ObjectIdType]common.IGameObject)
+	typeMap, ok := om.objectsByType.Load(objectType)
+	if !ok {
+		typeMap = zMap.NewTypedMap[id.ObjectIdType, common.IGameObject]()
+		om.objectsByType.Store(objectType, typeMap)
 	}
-	om.objectsByType[objectType][objectID] = obj
+	typeMap.Store(objectID, obj)
 
 	return nil
 }
@@ -65,9 +62,6 @@ func (om *ObjectManager) GetObject(objectID id.ObjectIdType) (common.IGameObject
 
 // RemoveObject 移除对象
 func (om *ObjectManager) RemoveObject(objectID id.ObjectIdType) error {
-	om.objectsMu.Lock()
-	defer om.objectsMu.Unlock()
-
 	v, ok := om.objects.Load(objectID)
 	if !ok {
 		return errors.New("object not found")
@@ -78,8 +72,8 @@ func (om *ObjectManager) RemoveObject(objectID id.ObjectIdType) error {
 
 	om.objects.Delete(objectID)
 
-	if om.objectsByType[objectType] != nil {
-		delete(om.objectsByType[objectType], objectID)
+	if typeMap, ok := om.objectsByType.Load(objectType); ok {
+		typeMap.Delete(objectID)
 	}
 
 	return nil
@@ -87,18 +81,16 @@ func (om *ObjectManager) RemoveObject(objectID id.ObjectIdType) error {
 
 // GetObjectsByType 获取指定类型的所有对象
 func (om *ObjectManager) GetObjectsByType(objectType common.GameObjectType) []common.IGameObject {
-	om.objectsMu.RLock()
-	defer om.objectsMu.RUnlock()
-
-	objects, exists := om.objectsByType[objectType]
-	if !exists {
+	typeMap, ok := om.objectsByType.Load(objectType)
+	if !ok {
 		return nil
 	}
 
-	result := make([]common.IGameObject, 0, len(objects))
-	for _, obj := range objects {
-		result = append(result, obj)
-	}
+	result := make([]common.IGameObject, 0)
+	typeMap.Range(func(key id.ObjectIdType, value common.IGameObject) bool {
+		result = append(result, value)
+		return true
+	})
 	return result
 }
 
@@ -119,14 +111,17 @@ func (om *ObjectManager) GetObjectCount() int64 {
 
 // GetObjectCountByType 获取指定类型的对象数量
 func (om *ObjectManager) GetObjectCountByType(objectType common.GameObjectType) int {
-	om.objectsMu.RLock()
-	defer om.objectsMu.RUnlock()
-
-	objects, exists := om.objectsByType[objectType]
-	if !exists {
+	typeMap, ok := om.objectsByType.Load(objectType)
+	if !ok {
 		return 0
 	}
-	return len(objects)
+
+	count := 0
+	typeMap.Range(func(key id.ObjectIdType, value common.IGameObject) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // UpdateAll 更新所有对象
@@ -142,9 +137,6 @@ func (om *ObjectManager) UpdateAll(deltaTime float64) {
 
 // ClearAll 清除所有对象
 func (om *ObjectManager) ClearAll() {
-	om.objectsMu.Lock()
-	defer om.objectsMu.Unlock()
-
 	om.objects.Range(func(key, value interface{}) bool {
 		obj := value.(common.IGameObject)
 		obj.Destroy()
@@ -152,7 +144,7 @@ func (om *ObjectManager) ClearAll() {
 	})
 
 	om.objects.Clear()
-	om.objectsByType = make(map[common.GameObjectType]map[id.ObjectIdType]common.IGameObject)
+	om.objectsByType.Clear()
 }
 
 // Range 遍历所有对象

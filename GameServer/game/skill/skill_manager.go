@@ -4,9 +4,9 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
-	"github.com/pzqf/zMmoShared/common/id"
 	"go.uber.org/zap"
 )
 
@@ -39,7 +39,7 @@ func (sm *SkillManager) GetSkillCount() int32 {
 	return int32(len(sm.skills))
 }
 
-// GetMaxCount 获取最大技能数量
+// GetMaxCount 获取最大技能数
 func (sm *SkillManager) GetMaxCount() int32 {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -309,7 +309,7 @@ func (sm *SkillManager) GetTotalSkillLevel() int32 {
 	return total
 }
 
-// GetSkillPower 获取技能总战力
+// GetSkillPower 获取技能总战斗力
 func (sm *SkillManager) GetSkillPower() float64 {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()

@@ -29,10 +29,6 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleRemoveItem(msg)
 	case MsgUseItem:
 		p.handleUseItem(msg)
-	case MsgAddFriend:
-		p.handleAddFriend(msg)
-	case MsgRemoveFriend:
-		p.handleRemoveFriend(msg)
 	default:
 		zLog.Warn("Unknown message type",
 			zap.Int64("player_id", int64(p.GetPlayerID())),
@@ -176,44 +172,6 @@ func (p *Player) handleUseItem(msg *PlayerMessage) {
 		response := &ItemResponse{
 			BaseResponse: BaseResponse{Success: true},
 			ItemID:       req.ItemID,
-		}
-		msg.Callback <- response
-	}
-}
-
-// handleAddFriend 处理添加好友消息
-func (p *Player) handleAddFriend(msg *PlayerMessage) {
-	req, ok := msg.Data.(*AddFriendRequest)
-	if !ok {
-		p.sendErrorResponse(msg, "invalid request data")
-		return
-	}
-
-	p.AddFriend(req.FriendID)
-
-	if msg.Callback != nil {
-		response := &FriendResponse{
-			BaseResponse: BaseResponse{Success: true},
-			FriendID:     req.FriendID,
-		}
-		msg.Callback <- response
-	}
-}
-
-// handleRemoveFriend 处理移除好友消息
-func (p *Player) handleRemoveFriend(msg *PlayerMessage) {
-	req, ok := msg.Data.(*RemoveFriendRequest)
-	if !ok {
-		p.sendErrorResponse(msg, "invalid request data")
-		return
-	}
-
-	p.RemoveFriend(req.FriendID)
-
-	if msg.Callback != nil {
-		response := &FriendResponse{
-			BaseResponse: BaseResponse{Success: true},
-			FriendID:     req.FriendID,
 		}
 		msg.Callback <- response
 	}

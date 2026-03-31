@@ -1,9 +1,8 @@
 package item
 
 import (
-	"sync"
-
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 
 	"github.com/pzqf/zEngine/zLog"
@@ -18,22 +17,22 @@ type InventoryItem struct {
 
 // Inventory 玩家背包
 type Inventory struct {
-	PlayerID id.PlayerIdType    `json:"player_id"`
-	Items    []*InventoryItem   `json:"items"`
-	MaxSlots int32              `json:"max_slots"`
+	PlayerID id.PlayerIdType  `json:"player_id"`
+	Items    []*InventoryItem `json:"items"`
+	MaxSlots int32            `json:"max_slots"`
 }
 
 // InventoryManager 背包管理器
+
 type InventoryManager struct {
-	mu         sync.RWMutex
-	inventories map[id.PlayerIdType]*Inventory
+	inventories   *zMap.TypedMap[id.PlayerIdType, *Inventory]
 	configManager *ItemConfigManager
 }
 
 // NewInventoryManager 创建背包管理器
 func NewInventoryManager() *InventoryManager {
 	return &InventoryManager{
-		inventories:   make(map[id.PlayerIdType]*Inventory),
+		inventories:   zMap.NewTypedMap[id.PlayerIdType, *Inventory](),
 		configManager: NewItemConfigManager(),
 	}
 }
@@ -50,10 +49,7 @@ func (im *InventoryManager) GetItemConfig(itemID int32) *ItemConfig {
 
 // GetInventory 获取玩家背包
 func (im *InventoryManager) GetInventory(playerID id.PlayerIdType) *Inventory {
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		// 创建新背包
 		inventory = &Inventory{
@@ -61,7 +57,7 @@ func (im *InventoryManager) GetInventory(playerID id.PlayerIdType) *Inventory {
 			Items:    make([]*InventoryItem, 0),
 			MaxSlots: 20, // 默认20个槽位
 		}
-		im.inventories[playerID] = inventory
+		im.inventories.Store(playerID, inventory)
 	}
 
 	return inventory
@@ -69,9 +65,6 @@ func (im *InventoryManager) GetInventory(playerID id.PlayerIdType) *Inventory {
 
 // AddItem 添加物品到背包
 func (im *InventoryManager) AddItem(playerID id.PlayerIdType, itemID int32, count int32) error {
-	im.mu.Lock()
-	defer im.mu.Unlock()
-
 	// 获取物品配置
 	itemConfig := im.configManager.GetConfig(itemID)
 	if itemConfig == nil {
@@ -79,14 +72,14 @@ func (im *InventoryManager) AddItem(playerID id.PlayerIdType, itemID int32, coun
 	}
 
 	// 获取或创建背包
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		inventory = &Inventory{
 			PlayerID: playerID,
 			Items:    make([]*InventoryItem, 0),
 			MaxSlots: 20,
 		}
-		im.inventories[playerID] = inventory
+		im.inventories.Store(playerID, inventory)
 	}
 
 	// 检查背包是否已满
@@ -145,11 +138,8 @@ func (im *InventoryManager) AddItem(playerID id.PlayerIdType, itemID int32, coun
 
 // RemoveItem 从背包中移除物品
 func (im *InventoryManager) RemoveItem(playerID id.PlayerIdType, itemID int32, count int32) error {
-	im.mu.Lock()
-	defer im.mu.Unlock()
-
 	// 获取背包
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		return nil
 	}
@@ -184,9 +174,6 @@ func (im *InventoryManager) RemoveItem(playerID id.PlayerIdType, itemID int32, c
 
 // UseItem 使用物品
 func (im *InventoryManager) UseItem(playerID id.PlayerIdType, itemID int32) error {
-	im.mu.Lock()
-	defer im.mu.Unlock()
-
 	// 获取物品配置
 	itemConfig := im.configManager.GetConfig(itemID)
 	if itemConfig == nil {
@@ -194,7 +181,7 @@ func (im *InventoryManager) UseItem(playerID id.PlayerIdType, itemID int32) erro
 	}
 
 	// 获取背包
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		return nil
 	}
@@ -222,11 +209,8 @@ func (im *InventoryManager) UseItem(playerID id.PlayerIdType, itemID int32) erro
 
 // GetItemCount 获取物品数量
 func (im *InventoryManager) GetItemCount(playerID id.PlayerIdType, itemID int32) int32 {
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-
 	// 获取背包
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		return 0
 	}
@@ -244,11 +228,8 @@ func (im *InventoryManager) GetItemCount(playerID id.PlayerIdType, itemID int32)
 
 // GetInventoryItems 获取背包物品列表
 func (im *InventoryManager) GetInventoryItems(playerID id.PlayerIdType) []*InventoryItem {
-	im.mu.RLock()
-	defer im.mu.RUnlock()
-
 	// 获取背包
-	inventory, exists := im.inventories[playerID]
+	inventory, exists := im.inventories.Load(playerID)
 	if !exists {
 		return []*InventoryItem{}
 	}

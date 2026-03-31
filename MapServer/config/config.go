@@ -2,23 +2,42 @@ package config
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
+	"github.com/pzqf/zCommon/discovery"
+)
+
+const (
+	MapModeSingleServer = "single_server"
+	MapModeMirror       = "mirror"
+	MapModeCrossGroup   = "cross_group"
 )
 
 // Config MapServer 配置
 type Config struct {
-	Server     ServerConfig     `ini:"Server"`
-	Database   DatabaseConfig   `ini:"Database"`
-	GameServer GameServerConfig `ini:"GameServer"`
-	Log        LogConfig        `ini:"Log"`
+	Server     ServerConfig         `ini:"Server"`
+	Database   DatabaseConfig       `ini:"Database"`
+	GameServer GameServerConfig     `ini:"GameServer"`
+	Etcd       discovery.EtcdConfig `ini:"Etcd"`
+	Log        LogConfig            `ini:"Log"`
+	Maps       MapsConfig           `ini:"Maps"`
+}
+
+// MapsConfig 地图配置
+type MapsConfig struct {
+	Mode   string `ini:"Mode"`
+	MapIDs []int `ini:"MapIDs"`
 }
 
 // ServerConfig 服务器基本配置
 type ServerConfig struct {
 	ServerID          int    `ini:"ServerID"`
 	ServerName        string `ini:"ServerName"`
+	GroupID           int    `ini:"GroupID"`
 	ListenAddr        string `ini:"ListenAddr"`
 	MaxConnections    int    `ini:"MaxConnections"`
 	HeartbeatInterval int    `ini:"HeartbeatInterval"`
@@ -62,6 +81,8 @@ type LogConfig struct {
 	AsyncFlushInterval int    `ini:"async-flush-interval"`
 }
 
+
+
 // LoadConfig 加载配置文件
 func LoadConfig(configPath string) (*Config, error) {
 	zcfg := zConfig.NewConfig()
@@ -73,6 +94,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		Server: ServerConfig{
 			ServerID:          getConfigInt(zcfg, "Server.ServerID", 1),
 			ServerName:        getConfigString(zcfg, "Server.ServerName", "MapServer"),
+			GroupID:           getConfigInt(zcfg, "Server.GroupID", 1),
 			ListenAddr:        getConfigString(zcfg, "Server.ListenAddr", "0.0.0.0:9002"),
 			MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
 			HeartbeatInterval: getConfigInt(zcfg, "Server.HeartbeatInterval", 30),
@@ -109,6 +131,18 @@ func LoadConfig(configPath string) (*Config, error) {
 			AsyncBufferSize:    getConfigInt(zcfg, "Log.async-buffer-size", 2048),
 			AsyncFlushInterval: getConfigInt(zcfg, "Log.async-flush-interval", 50),
 		},
+		Etcd: discovery.EtcdConfig{
+			Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
+			Username:       getConfigString(zcfg, "Etcd.Username", ""),
+			Password:       getConfigString(zcfg, "Etcd.Password", ""),
+			CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+			ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+			ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
+		},
+		Maps: MapsConfig{
+			Mode:   strings.ToLower(getConfigString(zcfg, "Maps.Mode", MapModeSingleServer)),
+			MapIDs: getConfigIntSlice(zcfg, "Maps.MapIDs", []int{1001}),
+		},
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -120,11 +154,27 @@ func LoadConfig(configPath string) (*Config, error) {
 
 // Validate 验证配置
 func (c *Config) Validate() error {
-	if c.Server.ServerID <= 0 {
-		return fmt.Errorf("ServerID must be greater than 0")
+	if _, err := id.ParseServerIDInt(int32(c.Server.ServerID)); err != nil {
+		return fmt.Errorf("invalid ServerID %d: %w", c.Server.ServerID, err)
 	}
 	if c.Server.ListenAddr == "" {
 		return fmt.Errorf("Server.ListenAddr is required")
+	}
+	switch strings.ToLower(c.Maps.Mode) {
+	case MapModeSingleServer, MapModeMirror, MapModeCrossGroup:
+	default:
+		return fmt.Errorf(
+			"invalid Maps.Mode %q, allowed values: %s, %s, %s",
+			c.Maps.Mode,
+			MapModeSingleServer,
+			MapModeMirror,
+			MapModeCrossGroup,
+		)
+	}
+	c.Maps.Mode = strings.ToLower(c.Maps.Mode)
+
+	if len(c.Maps.MapIDs) == 0 {
+		return fmt.Errorf("Maps.MapIDs must not be empty")
 	}
 	return nil
 }
@@ -173,6 +223,26 @@ func getConfigInt(cfg *zConfig.Config, key string, defaultValue int) int {
 func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
 	if value, err := cfg.GetBool(key); err == nil {
 		return value
+	}
+	return defaultValue
+}
+
+func getConfigIntSlice(cfg *zConfig.Config, key string, defaultValue []int) []int {
+	if value, err := cfg.GetString(key); err == nil {
+		// 解析逗号分隔的字符串
+		strs := strings.Split(value, ",")
+		ints := make([]int, 0, len(strs))
+		for _, str := range strs {
+			str = strings.TrimSpace(str)
+			if str != "" {
+				if i, err := strconv.Atoi(str); err == nil {
+					ints = append(ints, i)
+				}
+			}
+		}
+		if len(ints) > 0 {
+			return ints
+		}
 	}
 	return defaultValue
 }

@@ -3,7 +3,7 @@ package dungeon
 import (
 	"time"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // Dungeon 副本结构
@@ -68,22 +68,22 @@ type PlayerDungeonRecord struct {
 	PlayerID      id.PlayerIdType  // 玩家ID
 	DungeonID     id.DungeonIdType // 副本ID
 	CompleteCount int              // 完成次数
-	BestTime      int              // 最佳通关时间（秒）
+	BestTime      int              // 最佳通关时间（秒�?
 	LastEnterTime time.Time        // 上次进入时间
 	DailyCount    int              // 今日次数
 	WeeklyCount   int              // 本周次数
 }
 
-// InstanceStatus 副本实例状态常量
+// InstanceStatus 副本实例状态常�?
 const (
-	InstanceStatusWaiting   = 0 // 等待中
-	InstanceStatusRunning   = 1 // 进行中
+	InstanceStatusWaiting   = 0 // 等待�?
+	InstanceStatusRunning   = 1 // 进行�?
 	InstanceStatusPaused    = 2 // 暂停
-	InstanceStatusCompleted = 3 // 已完成
+	InstanceStatusCompleted = 3 // 已完�?
 	InstanceStatusFailed    = 4 // 失败
 )
 
-// NewDungeon 创建新副本
+// NewDungeon 创建新副�?
 func NewDungeon(dungeonID id.DungeonIdType, name, description string, dungeonType int) *Dungeon {
 	return &Dungeon{
 		DungeonID:   dungeonID,
@@ -122,7 +122,7 @@ func NewDungeonInstance(instanceID id.InstanceIdType, dungeonID id.DungeonIdType
 
 // AddPlayer 添加玩家
 func (di *DungeonInstance) AddPlayer(playerID id.PlayerIdType, playerName string, level, class int) bool {
-	if len(di.Players) >= 5 { // 假设最大5人
+	if len(di.Players) >= 5 { // 假设最�?�?
 		return false
 	}
 
@@ -145,7 +145,7 @@ func (di *DungeonInstance) RemovePlayer(playerID id.PlayerIdType) {
 	delete(di.Players, playerID)
 }
 
-// Start 开始副本
+// Start 开始副�?
 func (di *DungeonInstance) Start() {
 	di.Status = InstanceStatusRunning
 	di.StartTime = time.Now()
@@ -164,12 +164,12 @@ func (di *DungeonInstance) Fail() {
 	di.EndTime = time.Now()
 }
 
-// IsRunning 是否进行中
+// IsRunning 是否进行�?
 func (di *DungeonInstance) IsRunning() bool {
 	return di.Status == InstanceStatusRunning
 }
 
-// GetDuration 获取副本持续时间（秒）
+// GetDuration 获取副本持续时间（秒�?
 func (di *DungeonInstance) GetDuration() int {
 	if di.StartTime.IsZero() {
 		return 0
@@ -181,7 +181,7 @@ func (di *DungeonInstance) GetDuration() int {
 	return int(endTime.Sub(di.StartTime).Seconds())
 }
 
-// CanEnter 检查玩家是否可以进入副本
+// CanEnter 检查玩家是否可以进入副�?
 func (d *Dungeon) CanEnter(playerLevel int, dailyCount int) bool {
 	if !d.IsOpen {
 		return false
@@ -202,3 +202,4 @@ func (d *Dungeon) CanEnter(playerLevel int, dailyCount int) bool {
 
 	return true
 }
+

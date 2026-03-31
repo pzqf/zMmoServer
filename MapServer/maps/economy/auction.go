@@ -4,8 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
@@ -20,40 +21,37 @@ const (
 
 // Auction 拍卖
 type Auction struct {
-	AuctionID    int64          `json:"auction_id"`
-	SellerID     id.PlayerIdType `json:"seller_id"`
-	ItemID       int32           `json:"item_id"`
-	ItemCount    int32           `json:"item_count"`
-	StartingPrice int64          `json:"starting_price"`
-	CurrentPrice  int64          `json:"current_price"`
-	BuyerID      id.PlayerIdType `json:"buyer_id"`
-	EndTime      time.Time       `json:"end_time"`
-	Status       AuctionStatus   `json:"status"`
-	CurrencyType CurrencyType    `json:"currency_type"`
-	CreatedAt    time.Time       `json:"created_at"`
-	UpdatedAt    time.Time       `json:"updated_at"`
+	AuctionID     int64           `json:"auction_id"`
+	SellerID      id.PlayerIdType `json:"seller_id"`
+	ItemID        int32           `json:"item_id"`
+	ItemCount     int32           `json:"item_count"`
+	StartingPrice int64           `json:"starting_price"`
+	CurrentPrice  int64           `json:"current_price"`
+	BuyerID       id.PlayerIdType `json:"buyer_id"`
+	EndTime       time.Time       `json:"end_time"`
+	Status        AuctionStatus   `json:"status"`
+	CurrencyType  CurrencyType    `json:"currency_type"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
 }
 
 // AuctionManager 拍卖行管理器
 type AuctionManager struct {
-	mu       sync.RWMutex
-	auctions map[int64]*Auction
+	auctions       *zMap.TypedMap[int64, *Auction]
 	activeAuctions []*Auction
+	activeMu       sync.RWMutex // 用于保护activeAuctions切片
 }
 
 // NewAuctionManager 创建拍卖行管理器
 func NewAuctionManager() *AuctionManager {
 	return &AuctionManager{
-		auctions:       make(map[int64]*Auction),
+		auctions:       zMap.NewTypedMap[int64, *Auction](),
 		activeAuctions: make([]*Auction, 0),
 	}
 }
 
 // CreateAuction 创建拍卖
 func (am *AuctionManager) CreateAuction(sellerID id.PlayerIdType, itemID, itemCount int32, startingPrice int64, duration time.Duration, currencyType CurrencyType) (*Auction, error) {
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
 	// 生成拍卖ID
 	auctionID := time.Now().UnixNano()
 
@@ -74,8 +72,12 @@ func (am *AuctionManager) CreateAuction(sellerID id.PlayerIdType, itemID, itemCo
 	}
 
 	// 保存拍卖
-	am.auctions[auctionID] = auction
+	am.auctions.Store(auctionID, auction)
+
+	// 保护activeAuctions切片
+	am.activeMu.Lock()
 	am.activeAuctions = append(am.activeAuctions, auction)
+	am.activeMu.Unlock()
 
 	zLog.Debug("Auction created",
 		zap.Int64("auction_id", auctionID),
@@ -89,11 +91,8 @@ func (am *AuctionManager) CreateAuction(sellerID id.PlayerIdType, itemID, itemCo
 
 // PlaceBid 出价
 func (am *AuctionManager) PlaceBid(auctionID int64, buyerID id.PlayerIdType, bidPrice int64) error {
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
 	// 检查拍卖是否存在
-	auction, exists := am.auctions[auctionID]
+	auction, exists := am.auctions.Load(auctionID)
 	if !exists {
 		return nil
 	}
@@ -129,11 +128,8 @@ func (am *AuctionManager) PlaceBid(auctionID int64, buyerID id.PlayerIdType, bid
 
 // CancelAuction 取消拍卖
 func (am *AuctionManager) CancelAuction(auctionID int64, sellerID id.PlayerIdType) error {
-	am.mu.Lock()
-	defer am.mu.Unlock()
-
 	// 检查拍卖是否存在
-	auction, exists := am.auctions[auctionID]
+	auction, exists := am.auctions.Load(auctionID)
 	if !exists {
 		return nil
 	}
@@ -164,16 +160,14 @@ func (am *AuctionManager) CancelAuction(auctionID int64, sellerID id.PlayerIdTyp
 
 // GetAuction 获取拍卖信息
 func (am *AuctionManager) GetAuction(auctionID int64) *Auction {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
-
-	return am.auctions[auctionID]
+	auction, _ := am.auctions.Load(auctionID)
+	return auction
 }
 
 // GetActiveAuctions 获取活跃拍卖列表
 func (am *AuctionManager) GetActiveAuctions() []*Auction {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
+	am.activeMu.RLock()
+	defer am.activeMu.RUnlock()
 
 	// 复制活跃拍卖列表
 	auctions := make([]*Auction, len(am.activeAuctions))
@@ -184,8 +178,8 @@ func (am *AuctionManager) GetActiveAuctions() []*Auction {
 
 // GetAuctionsByItemID 根据物品ID获取拍卖列表
 func (am *AuctionManager) GetAuctionsByItemID(itemID int32) []*Auction {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
+	am.activeMu.RLock()
+	defer am.activeMu.RUnlock()
 
 	actions := make([]*Auction, 0)
 	for _, auction := range am.activeAuctions {
@@ -199,38 +193,34 @@ func (am *AuctionManager) GetAuctionsByItemID(itemID int32) []*Auction {
 
 // GetAuctionsBySeller 获取卖家的拍卖列表
 func (am *AuctionManager) GetAuctionsBySeller(sellerID id.PlayerIdType) []*Auction {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
-
 	actions := make([]*Auction, 0)
-	for _, auction := range am.auctions {
+	am.auctions.Range(func(_ int64, auction *Auction) bool {
 		if auction.SellerID == sellerID {
 			actions = append(actions, auction)
 		}
-	}
+		return true
+	})
 
 	return actions
 }
 
 // GetAuctionsByBuyer 获取买家的拍卖列表
 func (am *AuctionManager) GetAuctionsByBuyer(buyerID id.PlayerIdType) []*Auction {
-	am.mu.RLock()
-	defer am.mu.RUnlock()
-
 	actions := make([]*Auction, 0)
-	for _, auction := range am.auctions {
+	am.auctions.Range(func(_ int64, auction *Auction) bool {
 		if auction.BuyerID == buyerID && auction.Status == AuctionStatusCompleted {
 			actions = append(actions, auction)
 		}
-	}
+		return true
+	})
 
 	return actions
 }
 
 // UpdateAuctions 更新拍卖状态
 func (am *AuctionManager) UpdateAuctions() {
-	am.mu.Lock()
-	defer am.mu.Unlock()
+	am.activeMu.Lock()
+	defer am.activeMu.Unlock()
 
 	now := time.Now()
 	completedAuctions := make([]*Auction, 0)

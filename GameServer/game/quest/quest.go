@@ -3,44 +3,44 @@ package quest
 import (
 	"sync"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // QuestType 任务类型
 type QuestType int32
 
 const (
-	QuestTypeMain      QuestType = 1 // 主线任务
-	QuestTypeSide      QuestType = 2 // 支线任务
-	QuestTypeDaily     QuestType = 3 // 日常任务
-	QuestTypeWeekly    QuestType = 4 // 周常任务
+	QuestTypeMain        QuestType = 1 // 主线任务
+	QuestTypeSide        QuestType = 2 // 支线任务
+	QuestTypeDaily       QuestType = 3 // 日常任务
+	QuestTypeWeekly      QuestType = 4 // 周常任务
 	QuestTypeAchievement QuestType = 5 // 成就任务
-	QuestTypeGuild     QuestType = 6 // 公会任务
+	QuestTypeGuild       QuestType = 6 // 公会任务
 )
 
 // QuestStatus 任务状态
 type QuestStatus int32
 
 const (
-	QuestStatusNotAccepted QuestStatus = 0 // 未接取
-	QuestStatusInProgress QuestStatus = 1 // 进行中
-	QuestStatusCompleted  QuestStatus = 2 // 已完成
-	QuestStatusSubmitted  QuestStatus = 3 // 已提交
-	QuestStatusFailed     QuestStatus = 4 // 已失败
+	QuestStatusNotAccepted QuestStatus = 0 // 未接任务
+	QuestStatusInProgress  QuestStatus = 1 // 进行中
+	QuestStatusCompleted   QuestStatus = 2 // 已完成
+	QuestStatusSubmitted   QuestStatus = 3 // 已提交
+	QuestStatusFailed      QuestStatus = 4 // 已失败
 )
 
 // QuestTargetType 任务目标类型
 type QuestTargetType int32
 
 const (
-	QuestTargetTypeKill      QuestTargetType = 1 // 杀怪
-	QuestTargetTypeCollect   QuestTargetType = 2 // 收集物品
-	QuestTargetTypeTalk     QuestTargetType = 3 // 对话
-	QuestTargetTypeReach     QuestTargetType = 4 // 到达地点
-	QuestTargetTypeLevel     QuestTargetType = 5 // 达到等级
-	QuestTargetTypeUseItem   QuestTargetType = 6 // 使用物品
-	QuestTargetTypeSkill     QuestTargetType = 7 // 学习技能
-	QuestTargetTypeExplore   QuestTargetType = 8 // 探索
+	QuestTargetTypeKill    QuestTargetType = 1 // 击杀目标
+	QuestTargetTypeCollect QuestTargetType = 2 // 收集物品
+	QuestTargetTypeTalk    QuestTargetType = 3 // 对话
+	QuestTargetTypeReach   QuestTargetType = 4 // 到达地点
+	QuestTargetTypeLevel   QuestTargetType = 5 // 达到等级
+	QuestTargetTypeUseItem QuestTargetType = 6 // 使用物品
+	QuestTargetTypeSkill   QuestTargetType = 7 // 学习技能
+	QuestTargetTypeExplore QuestTargetType = 8 // 探索
 )
 
 // QuestTarget 任务目标
@@ -62,9 +62,9 @@ type QuestReward struct {
 
 // QuestCondition 任务条件
 type QuestCondition struct {
-	RequireLevel    int32
-	RequireQuestID  int32
-	RequireGuildID  id.GuildIdType
+	RequireLevel   int32
+	RequireQuestID int32
+	RequireGuildID id.GuildIdType
 	MaxLevel       int32
 	TimeLimit      int64 // 毫秒
 }
@@ -84,7 +84,7 @@ type Quest struct {
 	acceptTime    int64
 	completeTime  int64
 	submitTime    int64
-	refreshTime   int64 // 刷新时间（日常/周常）
+	refreshTime   int64 // 刷新时间（日常和周常任务）
 }
 
 // NewQuest 创建新任务
@@ -95,7 +95,7 @@ func NewQuest(questConfigID int32, name string, questType QuestType) *Quest {
 		questType:     questType,
 		status:        QuestStatusNotAccepted,
 		targets:       make([]*QuestTarget, 0),
-		rewards:       &QuestReward{
+		rewards: &QuestReward{
 			Items: make(map[int32]int32),
 		},
 		conditions: &QuestCondition{},
@@ -230,7 +230,7 @@ func (q *Quest) SetRefreshTime(refreshTime int64) {
 	q.refreshTime = refreshTime
 }
 
-// CanAccept 检查是否可以接取
+// CanAccept 检查是否可以接取任务
 func (q *Quest) CanAccept(playerLevel int32, completedQuestIDs map[int32]bool) bool {
 	q.mu.RLock()
 	defer q.mu.RUnlock()
@@ -429,7 +429,7 @@ func (q *Quest) NeedRefresh(currentTime int64) bool {
 	return currentTime >= q.refreshTime
 }
 
-// Reset 重置任务（用于日常/周常）
+// Reset 重置任务（用于日常和周常任务）
 func (q *Quest) Reset() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -444,7 +444,7 @@ func (q *Quest) Reset() {
 	}
 }
 
-// isAllTargetsCompleted 检查所有目标是否完成
+// isAllTargetsCompleted 检查所有目标是否已完成
 func (q *Quest) isAllTargetsCompleted() bool {
 	for _, target := range q.targets {
 		if target.Current < target.Count {
@@ -476,8 +476,8 @@ func (q *Quest) Clone() *Quest {
 			RequireLevel:   q.conditions.RequireLevel,
 			RequireQuestID: q.conditions.RequireQuestID,
 			RequireGuildID: q.conditions.RequireGuildID,
-			MaxLevel:      q.conditions.MaxLevel,
-			TimeLimit:     q.conditions.TimeLimit,
+			MaxLevel:       q.conditions.MaxLevel,
+			TimeLimit:      q.conditions.TimeLimit,
 		},
 		acceptTime:   q.acceptTime,
 		completeTime: q.completeTime,

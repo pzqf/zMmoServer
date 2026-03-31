@@ -17,6 +17,7 @@ require (
 
 replace github.com/pzqf/zEngine => ../../zEngine
 
-replace github.com/pzqf/zMmoShared => ../zMmoShared
+replace github.com/pzqf/zCommon => ../zCommon
 
 replace github.com/pzqf/zUtil => ../../zUtil
+

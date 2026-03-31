@@ -6,7 +6,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 	"go.uber.org/zap"
 )
 
@@ -135,3 +135,4 @@ func (mm *MapManager) Range(f func(mapID id.MapIdType, m *Map) bool) {
 		}
 	}
 }
+

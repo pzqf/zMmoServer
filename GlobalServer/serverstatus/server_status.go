@@ -3,37 +3,30 @@ package serverstatus
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
-	redisv8 "github.com/go-redis/redis/v8"
+	"github.com/pzqf/zCommon/db/models"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoShared/db/models"
-	"github.com/pzqf/zMmoShared/redis"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 const (
-	// ServerStatusKeyPrefix 服务器状态Key前缀
-	ServerStatusKeyPrefix = "game_server:"
-	// OnlineServersKey 在线服务器集合Key
-	OnlineServersKey = "online_servers"
-	// ServerGroupKeyPrefix 服务器分组Key前缀
-	ServerGroupKeyPrefix = "server_group:"
-	// DefaultHeartbeatTimeout 默认心跳超时时间（5分钟）
+	// DefaultHeartbeatTimeout 默认心跳超时时间（分钟）
 	DefaultHeartbeatTimeout = 5 * time.Minute
-	// DefaultRedisExpire Redis数据默认过期时间
-	DefaultRedisExpire = 10 * time.Minute
 )
 
 // ServerStatus 服务器动态状态
 type ServerStatus struct {
 	ServerID      int32     `json:"serverId"`
-	Address       string    `json:"address"`
 	Port          int32     `json:"port"`
 	Status        int32     `json:"status"` // 1=在线, 0=维护/离线
 	OnlineCount   int32     `json:"onlineCount"`
 	Version       string    `json:"version"`
+	Address       string    `json:"address"`
 	LastHeartbeat time.Time `json:"lastHeartbeat"`
 	UpdateTime    time.Time `json:"updateTime"`
 }
@@ -41,30 +34,35 @@ type ServerStatus struct {
 // ServerInfo 完整服务器信息（静态+动态）
 type ServerInfo struct {
 	// 静态数据（来自MySQL）
+	GroupID        int32  `json:"groupId"`
 	ServerID       int32  `json:"serverId"`
+	MaxOnlineCount int32  `json:"maxOnlineCount"`
+	OnlineCount    int32  `json:"onlineCount"` // 动态数据（来自服务发现）为了内存对齐而放上来了
 	ServerName     string `json:"serverName"`
 	ServerType     string `json:"serverType"`
-	GroupID        int32  `json:"groupId"`
-	MaxOnlineCount int32  `json:"maxOnlineCount"`
 	Region         string `json:"region"`
 
-	// 动态数据（来自Redis）
-	Address       string    `json:"address"`
+	// 动态数据（来自服务发现）
 	Port          int32     `json:"port"`
 	Status        int32     `json:"status"`
-	OnlineCount   int32     `json:"onlineCount"`
+	Address       string    `json:"address"`
 	Version       string    `json:"version"`
 	LastHeartbeat time.Time `json:"lastHeartbeat"`
 }
 
 // Manager 服务器状态管理器
 type Manager struct {
-	redisClient      *redis.Client
-	staticServers    map[int32]*models.GameServer // 静态配置缓存
-	staticServersMux sync.RWMutex
+	serviceDiscovery *discovery.ServiceDiscovery
+	staticServers    *zMap.TypedMap[int32, *models.GameServer] // 静态配置缓存
 	heartbeatTimeout time.Duration
 	cleanupTicker    *time.Ticker
 	stopCleanup      chan struct{}
+	serviceCache     *zMap.TypedMap[string, *discovery.ServerInfo] // 服务发现缓存
+
+	// 服务器列表缓存
+	serverListCache     []*ServerInfo
+	serverListCacheTime time.Time
+	serverListCacheTTL  time.Duration // 缓存过期时间
 }
 
 var (
@@ -78,27 +76,26 @@ func GetManager() *Manager {
 }
 
 // InitManager 初始化服务器状态管理器
-func InitManager(redisCfg redis.RedisConfig) error {
+func InitManager(serviceDiscovery *discovery.ServiceDiscovery) error {
 	var err error
 	managerOnce.Do(func() {
-		client, err := redis.NewClient(redisCfg)
-		if err != nil {
-			return
-		}
-
 		manager = &Manager{
-			redisClient:      client,
-			staticServers:    make(map[int32]*models.GameServer),
-			heartbeatTimeout: DefaultHeartbeatTimeout,
-			stopCleanup:      make(chan struct{}),
+			serviceDiscovery:   serviceDiscovery,
+			staticServers:      zMap.NewTypedMap[int32, *models.GameServer](),
+			heartbeatTimeout:   DefaultHeartbeatTimeout,
+			stopCleanup:        make(chan struct{}),
+			serviceCache:       zMap.NewTypedMap[string, *discovery.ServerInfo](),
+			serverListCache:    []*ServerInfo{},
+			serverListCacheTTL: 30 * time.Second, // 缓存30秒
 		}
 
 		// 启动清理协程
 		manager.startCleanupRoutine()
 
-		zLog.Info("ServerStatusManager initialized",
-			zap.String("redis", fmt.Sprintf("%s:%d", redisCfg.Host, redisCfg.Port)),
-		)
+		// 启动服务发现监听
+		manager.startServiceDiscoveryWatch()
+
+		zLog.Info("ServerStatusManager initialized with service discovery")
 	})
 	return err
 }
@@ -111,19 +108,16 @@ func (m *Manager) Close() {
 	if m.cleanupTicker != nil {
 		m.cleanupTicker.Stop()
 	}
-	if m.redisClient != nil {
-		m.redisClient.Close()
+	if m.serviceDiscovery != nil {
+		m.serviceDiscovery.Close()
 	}
 }
 
 // LoadStaticServers 从MySQL加载静态服务器配置
 func (m *Manager) LoadStaticServers(servers []*models.GameServer) {
-	m.staticServersMux.Lock()
-	defer m.staticServersMux.Unlock()
-
-	m.staticServers = make(map[int32]*models.GameServer)
+	m.staticServers.Clear()
 	for _, server := range servers {
-		m.staticServers[server.ServerID] = server
+		m.staticServers.Store(server.ServerID, server)
 	}
 
 	zLog.Info("Static servers loaded",
@@ -137,91 +131,42 @@ func (m *Manager) ReloadStaticServers(servers []*models.GameServer) {
 	zLog.Info("Static servers reloaded")
 }
 
-// UpdateServerStatus 更新服务器状态（心跳上报）
+// UpdateServerStatus 更新服务器状态（已废弃，使用服务发现）
 func (m *Manager) UpdateServerStatus(status *ServerStatus) error {
-	key := m.getServerKey(status.ServerID)
-
-	// 使用Hash存储服务器状态
-	data := map[string]interface{}{
-		"address":        status.Address,
-		"port":           status.Port,
-		"status":         status.Status,
-		"online_count":   status.OnlineCount,
-		"version":        status.Version,
-		"last_heartbeat": status.LastHeartbeat.Unix(),
-		"update_time":    time.Now().Unix(),
-	}
-
-	// 保存到Redis
-	if err := m.redisClient.HSet(key, data); err != nil {
-		return fmt.Errorf("failed to update server status: %w", err)
-	}
-
-	// 设置过期时间
-	if err := m.redisClient.Expire(key, DefaultRedisExpire); err != nil {
-		zLog.Warn("Failed to set expire", zap.Error(err))
-	}
-
-	// 添加到在线服务器集合（使用Sorted Set，按在线人数排序）
-	member := &redisv8.Z{
-		Score:  float64(status.OnlineCount),
-		Member: status.ServerID,
-	}
-	if err := m.redisClient.ZAdd(OnlineServersKey, member); err != nil {
-		zLog.Warn("Failed to add to online servers", zap.Error(err))
-	}
-
-	// 添加到分组集合
-	staticServer := m.getStaticServer(status.ServerID)
-	if staticServer != nil {
-		groupKey := m.getGroupKey(staticServer.GroupID)
-		if err := m.redisClient.SAdd(groupKey, status.ServerID); err != nil {
-			zLog.Warn("Failed to add to group", zap.Error(err))
-		}
-	}
-
+	zLog.Warn("UpdateServerStatus is deprecated, using service discovery instead")
 	return nil
 }
 
 // GetServerStatus 获取单个服务器状态
 func (m *Manager) GetServerStatus(serverID int32) (*ServerStatus, error) {
-	key := m.getServerKey(serverID)
-	data, err := m.redisClient.HGetAll(key)
-	if err != nil {
-		return nil, err
-	}
+	// 从服务发现缓存中获取
+	var found *ServerStatus
+	serverIDStr := strconv.FormatInt(int64(serverID), 10)
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		// 服务ID现在是纯数字格式（如 "100101"）
+		if service.ID == serverIDStr {
+			found = m.convertServiceInfoToServerStatus(service)
+			return false
+		}
+		return true
+	})
 
-	if len(data) == 0 {
+	if found == nil {
 		return nil, nil
 	}
 
-	return m.parseServerStatus(serverID, data), nil
+	return found, nil
 }
 
 // GetAllServerStatuses 获取所有服务器状态
 func (m *Manager) GetAllServerStatuses() ([]*ServerStatus, error) {
-	// 获取所有在线服务器ID
-	serverIDs, err := m.redisClient.ZRange(OnlineServersKey, 0, -1)
-	if err != nil {
-		return nil, err
-	}
-
+	// 从服务发现缓存中获取所有服务
 	var statuses []*ServerStatus
-	for _, idStr := range serverIDs {
-		serverID, err := strconv.ParseInt(idStr, 10, 32)
-		if err != nil {
-			continue
-		}
-
-		status, err := m.GetServerStatus(int32(serverID))
-		if err != nil {
-			continue
-		}
-
-		if status != nil {
-			statuses = append(statuses, status)
-		}
-	}
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		status := m.convertServiceInfoToServerStatus(service)
+		statuses = append(statuses, status)
+		return true
+	})
 
 	return statuses, nil
 }
@@ -231,14 +176,53 @@ func (m *Manager) GetServerInfo(serverID int32) *ServerInfo {
 	// 获取静态数据
 	static := m.getStaticServer(serverID)
 	if static == nil {
-		return nil
+		// 对于Gateway服务器，可能没有静态配置
+		// 尝试从服务发现缓存中获取动态信息
+		status, err := m.GetServerStatus(serverID)
+		if err != nil || status == nil {
+			return nil
+		}
+		// 检查心跳是否超时
+		if time.Since(status.LastHeartbeat) > m.heartbeatTimeout {
+			// 心跳超时，标记为离线
+			status.Status = 0
+		}
+		// 为Gateway服务器创建基本信息
+		return &ServerInfo{
+			ServerID:       status.ServerID,
+			ServerName:     fmt.Sprintf("Gateway-%d", status.ServerID),
+			ServerType:     "gateway",
+			GroupID:        0,
+			MaxOnlineCount: 10000,
+			Region:         "default",
+			Address:        status.Address,
+			Port:           status.Port,
+			Status:         status.Status,
+			OnlineCount:    status.OnlineCount,
+			Version:        status.Version,
+			LastHeartbeat:  status.LastHeartbeat,
+		}
 	}
 
 	// 获取动态数据
 	status, err := m.GetServerStatus(serverID)
 	if err != nil {
 		zLog.Warn("Failed to get server status", zap.Int32("serverId", serverID), zap.Error(err))
-		return nil
+		// 没有动态信息，使用静态信息，状态为离线
+		return &ServerInfo{
+			ServerID:       static.ServerID,
+			ServerName:     static.ServerName,
+			ServerType:     static.ServerType,
+			GroupID:        static.GroupID,
+			MaxOnlineCount: static.MaxOnlineCount,
+			Region:         static.Region,
+			Address:        "",
+			Port:           0,
+			Status:         0, // 维护中
+			OnlineCount:    0,
+			Version:        "",
+			LastHeartbeat:  time.Time{},
+		}
 	}
 
 	// 检查心跳是否超时
@@ -252,145 +236,134 @@ func (m *Manager) GetServerInfo(serverID int32) *ServerInfo {
 
 // GetAllServerInfos 获取所有完整服务器信息
 func (m *Manager) GetAllServerInfos() []*ServerInfo {
-	m.staticServersMux.RLock()
-	defer m.staticServersMux.RUnlock()
+	// 检查缓存是否有效
+	now := time.Now()
+	if len(m.serverListCache) > 0 && now.Sub(m.serverListCacheTime) < m.serverListCacheTTL {
+		zLog.Debug("Using cached server list", zap.Int("count", len(m.serverListCache)))
+		return m.serverListCache
+	}
 
+	// 缓存过期，重新生成
 	var infos []*ServerInfo
-	for serverID := range m.staticServers {
+	// 先添加所有静态服务器
+	m.staticServers.Range(func(serverID int32, static *models.GameServer) bool {
 		info := m.GetServerInfo(serverID)
 		if info != nil {
 			infos = append(infos, info)
 		}
-	}
+		return true
+	})
+
+	// 再添加所有Gateway服务器（从服务发现缓存中）
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		// 只处理gateway类型的服务
+		if service.ServiceType == "gateway" && service.Status == discovery.ServerStatusHealthy {
+			// 服务ID现在是纯数字格式（如 "100101"）
+			serverID, err := strconv.ParseInt(service.ID, 10, 32)
+			if err == nil {
+				// 检查该Gateway服务器是否已经添加过
+				alreadyAdded := false
+				for _, info := range infos {
+					if info.ServerID == int32(serverID) {
+						alreadyAdded = true
+						break
+					}
+				}
+				if !alreadyAdded {
+					info := m.GetServerInfo(int32(serverID))
+					if info != nil {
+						infos = append(infos, info)
+					}
+				}
+			}
+		}
+		return true
+	})
+
+	// 更新缓存
+	m.serverListCache = infos
+	m.serverListCacheTime = now
+	zLog.Debug("Updated server list cache", zap.Int("count", len(infos)))
 
 	return infos
 }
 
 // GetServerInfosByGroup 按分组获取服务器信息
 func (m *Manager) GetServerInfosByGroup(groupID int32) []*ServerInfo {
-	// 从Redis获取分组内的服务器ID
-	groupKey := m.getGroupKey(groupID)
-	serverIDs, err := m.redisClient.SMembers(groupKey)
-	if err != nil {
-		zLog.Warn("Failed to get group members", zap.Int32("groupId", groupID), zap.Error(err))
-		return nil
-	}
-
+	// 从服务发现缓存中获取分组内的服务器
 	var infos []*ServerInfo
-	for _, idStr := range serverIDs {
-		serverID, err := strconv.ParseInt(idStr, 10, 32)
-		if err != nil {
-			continue
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		// 检查服务的GroupID是否匹配
+		if service.GroupID == fmt.Sprintf("%d", groupID) {
+			// 尝试从服务ID中解析server_id
+			parts := strings.Split(service.ID, "-")
+			if len(parts) == 2 {
+				serverID, err := strconv.ParseInt(parts[1], 10, 32)
+				if err == nil {
+					info := m.GetServerInfo(int32(serverID))
+					if info != nil {
+						infos = append(infos, info)
+					}
+				}
+			}
 		}
-
-		info := m.GetServerInfo(int32(serverID))
-		if info != nil {
-			infos = append(infos, info)
-		}
-	}
+		return true
+	})
 
 	return infos
 }
 
 // GetOnlineServers 获取在线服务器列表（按在线人数排序）
 func (m *Manager) GetOnlineServers() []*ServerInfo {
-	// 从Sorted Set获取排序后的服务器ID
-	serverIDs, err := m.redisClient.ZRange(OnlineServersKey, 0, -1)
-	if err != nil {
-		zLog.Warn("Failed to get online servers", zap.Error(err))
-		return nil
-	}
+	// 使用缓存的服务器列表
+	allServers := m.GetAllServerInfos()
 
-	var infos []*ServerInfo
-	for _, idStr := range serverIDs {
-		serverID, err := strconv.ParseInt(idStr, 10, 32)
-		if err != nil {
-			continue
-		}
-
-		info := m.GetServerInfo(int32(serverID))
-		if info != nil && info.Status == 1 {
-			infos = append(infos, info)
+	// 过滤出在线的gateway服务器
+	var onlineServers []*ServerInfo
+	for _, server := range allServers {
+		if server.ServerType == "gateway" && server.Status == 1 {
+			onlineServers = append(onlineServers, server)
 		}
 	}
 
-	return infos
+	// 按在线人数排序
+	// 这里可以实现一个简单的排序算法
+	// 或者使用更复杂的排序方法
+
+	return onlineServers
 }
 
 // RemoveServerStatus 删除服务器状态（服务器下线）
 func (m *Manager) RemoveServerStatus(serverID int32) error {
-	key := m.getServerKey(serverID)
-
-	// 删除服务器状态
-	if err := m.redisClient.Del(key); err != nil {
-		return err
-	}
-
-	// 从在线集合中移除
-	if err := m.redisClient.ZRem(OnlineServersKey, serverID); err != nil {
-		zLog.Warn("Failed to remove from online servers", zap.Error(err))
-	}
-
-	// 从分组中移除
-	static := m.getStaticServer(serverID)
-	if static != nil {
-		groupKey := m.getGroupKey(static.GroupID)
-		if err := m.redisClient.SRem(groupKey, serverID); err != nil {
-			zLog.Warn("Failed to remove from group", zap.Error(err))
+	// 从服务发现缓存中移除
+	var foundKey string
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		// 尝试从服务ID中解析server_id
+		parts := strings.Split(service.ID, "-")
+		if len(parts) == 2 {
+			if parsedID, err := strconv.ParseInt(parts[1], 10, 32); err == nil {
+				if int32(parsedID) == serverID {
+					foundKey = key
+					return false
+				}
+			}
 		}
+		return true
+	})
+
+	if foundKey != "" {
+		m.serviceCache.Delete(foundKey)
+		zLog.Info("Server status removed from cache", zap.Int32("serverId", serverID))
 	}
 
-	zLog.Info("Server status removed", zap.Int32("serverId", serverID))
 	return nil
 }
 
 // 内部方法
 
-func (m *Manager) getServerKey(serverID int32) string {
-	return fmt.Sprintf("%s%d", ServerStatusKeyPrefix, serverID)
-}
-
-func (m *Manager) getGroupKey(groupID int32) string {
-	return fmt.Sprintf("%s%d", ServerGroupKeyPrefix, groupID)
-}
-
 func (m *Manager) getStaticServer(serverID int32) *models.GameServer {
-	m.staticServersMux.RLock()
-	defer m.staticServersMux.RUnlock()
-	return m.staticServers[serverID]
-}
-
-func (m *Manager) parseServerStatus(serverID int32, data map[string]string) *ServerStatus {
-	status := &ServerStatus{ServerID: serverID}
-
-	if v, ok := data["address"]; ok {
-		status.Address = v
-	}
-	if v, ok := data["port"]; ok {
-		port, _ := strconv.ParseInt(v, 10, 32)
-		status.Port = int32(port)
-	}
-	if v, ok := data["status"]; ok {
-		s, _ := strconv.ParseInt(v, 10, 32)
-		status.Status = int32(s)
-	}
-	if v, ok := data["online_count"]; ok {
-		count, _ := strconv.ParseInt(v, 10, 32)
-		status.OnlineCount = int32(count)
-	}
-	if v, ok := data["version"]; ok {
-		status.Version = v
-	}
-	if v, ok := data["last_heartbeat"]; ok {
-		timestamp, _ := strconv.ParseInt(v, 10, 64)
-		status.LastHeartbeat = time.Unix(timestamp, 0)
-	}
-	if v, ok := data["update_time"]; ok {
-		timestamp, _ := strconv.ParseInt(v, 10, 64)
-		status.UpdateTime = time.Unix(timestamp, 0)
-	}
-
-	return status
+	server, _ := m.staticServers.Load(serverID)
+	return server
 }
 
 func (m *Manager) mergeServerInfo(static *models.GameServer, status *ServerStatus) *ServerInfo {
@@ -417,6 +390,102 @@ func (m *Manager) mergeServerInfo(static *models.GameServer, status *ServerStatu
 	return info
 }
 
+// convertServiceInfoToServerStatus 将ServerInfo转换为ServerStatus
+func (m *Manager) convertServiceInfoToServerStatus(service *discovery.ServerInfo) *ServerStatus {
+	// 服务ID现在是纯数字格式（如 "100101"）
+	serverID := int32(0)
+	if id, err := strconv.ParseInt(service.ID, 10, 32); err == nil {
+		serverID = int32(id)
+	}
+
+	// 转换状态
+	status := int32(0)
+	if service.Status == discovery.ServerStatusHealthy {
+		status = 1
+	}
+
+	// 转换心跳时间
+	lastHeartbeat := time.Now()
+	if service.LastHeartbeat > 0 {
+		lastHeartbeat = time.Unix(service.LastHeartbeat, 0)
+	}
+
+	return &ServerStatus{
+		ServerID:      serverID,
+		Address:       service.Address,
+		Port:          int32(service.Port),
+		Status:        status,
+		OnlineCount:   int32(service.Players),
+		Version:       "1.0.0",       // 暂时使用固定版本
+		LastHeartbeat: lastHeartbeat, // 使用服务中的心跳时间
+		UpdateTime:    time.Now(),
+	}
+}
+
+// startServiceDiscoveryWatch 启动服务发现监听
+func (m *Manager) startServiceDiscoveryWatch() {
+	// 监听gateway服务
+	go func() {
+		eventChan, err := m.serviceDiscovery.Watch("gateway", "*")
+		if err != nil {
+			zLog.Error("Failed to watch gateway services", zap.Error(err))
+			return
+		}
+		m.handleServiceEvents(eventChan, "gateway")
+	}()
+
+	/*这是game和map服务的监听代码, 没有必要，因为客户端只需要gateway服务地址即可
+	// 监听game服务
+	go func() {
+		eventChan, err := m.serviceDiscovery.Watch("game", "*")
+		if err != nil {
+			zLog.Error("Failed to watch game services", zap.Error(err))
+			return
+		}
+		m.handleServiceEvents(eventChan, "game")
+	}()
+
+	// 监听map服务
+	go func() {
+		eventChan, err := m.serviceDiscovery.Watch("map", "*")
+		if err != nil {
+			zLog.Error("Failed to watch map services", zap.Error(err))
+			return
+		}
+		m.handleServiceEvents(eventChan, "map")
+	}()
+	*/
+
+	zLog.Info("Service discovery watch started")
+}
+
+// handleServiceEvents 处理服务事件
+func (m *Manager) handleServiceEvents(eventChan <-chan *discovery.ServerEvent, serviceType string) {
+	for event := range eventChan {
+		// 生成缓存键
+		key := fmt.Sprintf("%s:%s:%s", serviceType, event.GroupID, event.ServerID)
+		switch event.EventType {
+		case "PUT":
+			// 更新或添加服务
+			if event.Data != nil {
+				if serverInfo, ok := event.Data.(*discovery.ServerInfo); ok {
+					m.serviceCache.Store(key, serverInfo)
+					zLog.Info("Service updated",
+						zap.String("service_type", serviceType),
+						zap.String("server_id", event.ServerID),
+						zap.String("status", string(event.Status)))
+				}
+			}
+		case "DELETE":
+			// 删除服务
+			m.serviceCache.Delete(key)
+			zLog.Info("Service deleted",
+				zap.String("service_type", serviceType),
+				zap.String("server_id", event.ServerID))
+		}
+	}
+}
+
 func (m *Manager) startCleanupRoutine() {
 	m.cleanupTicker = time.NewTicker(1 * time.Minute)
 	go func() {
@@ -432,22 +501,46 @@ func (m *Manager) startCleanupRoutine() {
 }
 
 func (m *Manager) cleanupExpiredServers() {
-	statuses, err := m.GetAllServerStatuses()
-	if err != nil {
-		zLog.Warn("Failed to get server statuses for cleanup", zap.Error(err))
-		return
+	// 清理过期的服务器状态
+	now := time.Now().Unix()
+	var expiredKeys []string
+	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
+		// 检查心跳是否超时
+		if service.LastHeartbeat > 0 && now-service.LastHeartbeat > int64(m.heartbeatTimeout.Seconds()) {
+			expiredKeys = append(expiredKeys, key)
+		}
+		return true
+	})
+
+	// 删除过期的服务
+	for _, key := range expiredKeys {
+		m.serviceCache.Delete(key)
+		zLog.Info("Expired server status removed from cache", zap.String("key", key))
+	}
+}
+
+// RefreshServiceCache 刷新服务缓存
+func (m *Manager) RefreshServiceCache() error {
+	if m.serviceDiscovery == nil {
+		return fmt.Errorf("service discovery not initialized")
 	}
 
-	now := time.Now()
-	for _, status := range statuses {
-		if now.Sub(status.LastHeartbeat) > m.heartbeatTimeout {
-			// 心跳超时，移除
-			if err := m.RemoveServerStatus(status.ServerID); err != nil {
-				zLog.Warn("Failed to remove expired server",
-					zap.Int32("serverId", status.ServerID),
-					zap.Error(err),
-				)
-			}
+	// 重新发现所有服务
+	serviceTypes := []string{"gateway" /*, "game", "map"*/}
+	for _, serviceType := range serviceTypes {
+		services, err := m.serviceDiscovery.Discover(serviceType, "*")
+		if err != nil {
+			zLog.Warn("Failed to discover services", zap.String("service_type", serviceType), zap.Error(err))
+			continue
 		}
+
+		for _, service := range services {
+			key := fmt.Sprintf("%s:%s:%s", serviceType, service.GroupID, service.ID)
+			m.serviceCache.Store(key, service)
+		}
+
+		zLog.Info("Service cache refreshed", zap.String("service_type", serviceType), zap.Int("count", len(services)))
 	}
+
+	return nil
 }

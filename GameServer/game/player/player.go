@@ -3,11 +3,11 @@ package player
 import (
 	"sync"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/object"
-	"github.com/pzqf/zMmoShared/common/id"
 	"go.uber.org/zap"
 )
 
@@ -15,21 +15,12 @@ import (
 type Player struct {
 	*zActor.BaseActor
 	*object.LivingObject
-	mu         sync.RWMutex
-	accountID  id.AccountIdType
-	gold       int64
-	diamond    int64
-	vipLevel   int32
-	vipExp     int32
-	guildID    id.GuildIdType
-	teamID     id.TeamIdType
-	friendList []id.PlayerIdType
-
-	// 组件
-	teamComp        *PlayerTeam        // 队伍组件
-	petComp         *PlayerPet         // 宠物组件
-	mountComp       *PlayerMount       // 坐骑组件
-	achievementComp *PlayerAchievement // 成就组件
+	mu        sync.RWMutex
+	accountID id.AccountIdType
+	gold      int64
+	diamond   int64
+	vipLevel  int32
+	vipExp    int32
 }
 
 // NewPlayer 创建新的玩家对象
@@ -43,36 +34,8 @@ func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string
 		diamond:      0,
 		vipLevel:     0,
 		vipExp:       0,
-		guildID:      0,
-		teamID:       0,
-		friendList:   make([]id.PlayerIdType, 0),
-		// 初始化组件
-		teamComp:        NewPlayerTeam(playerID),
-		petComp:         NewPlayerPet(playerID),
-		mountComp:       NewPlayerMount(playerID),
-		achievementComp: NewPlayerAchievement(playerID),
 	}
 	return p
-}
-
-// GetTeamComponent 获取队伍组件
-func (p *Player) GetTeamComponent() *PlayerTeam {
-	return p.teamComp
-}
-
-// GetPetComponent 获取宠物组件
-func (p *Player) GetPetComponent() *PlayerPet {
-	return p.petComp
-}
-
-// GetMountComponent 获取坐骑组件
-func (p *Player) GetMountComponent() *PlayerMount {
-	return p.mountComp
-}
-
-// GetAchievementComponent 获取成就组件
-func (p *Player) GetAchievementComponent() *PlayerAchievement {
-	return p.achievementComp
 }
 
 // Start 启动玩家Actor
@@ -110,14 +73,5 @@ func (p *Player) update() {
 	// 更新组件（暂时注释，组件还未实现Update方法）
 	// if p.teamComp != nil {
 	// 	p.teamComp.Update()
-	// }
-	// if p.petComp != nil {
-	// 	p.petComp.Update()
-	// }
-	// if p.mountComp != nil {
-	// 	p.mountComp.Update()
-	// }
-	// if p.achievementComp != nil {
-	// 	p.achievementComp.Update()
 	// }
 }

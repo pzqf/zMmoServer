@@ -1,13 +1,27 @@
 package main
 
 import (
+	"flag"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoServer/MapServer/maps"
+	"github.com/pzqf/zMmoServer/MapServer/config"
+	"github.com/pzqf/zMmoServer/MapServer/server"
 	"github.com/pzqf/zMmoServer/MapServer/version"
 	"go.uber.org/zap"
 )
 
 func main() {
+	// 解析命令行参数
+	configPath := flag.String("config", "config_single.ini", "Path to config file")
+	flag.Parse()
+
+	cfg, err := config.LoadConfig(*configPath)
+	if err != nil {
+		zLog.Fatal("Failed to load config", zap.Error(err))
+	}
+	if err := zLog.InitLogger(cfg.GetLogConfig()); err != nil {
+		zLog.Fatal("Failed to initialize logger", zap.Error(err))
+	}
+
 	// 打印服务器启动信息
 	zLog.PrintLogo("Map Server", version.Version)
 
@@ -23,15 +37,11 @@ func main() {
 	)
 
 	// 创建地图服基础服务器
-	baseServer := maps.NewBaseServer()
+	baseServer := server.NewBaseServer(*configPath)
+	baseServer.SetLogger(zLog.GetStandardLogger())
 
 	// 启动服务器
-	if err := baseServer.Start(); err != nil {
+	if err := baseServer.Run(); err != nil {
 		zLog.Fatal("Failed to start MapServer", zap.Error(err))
 	}
-
-	// 等待服务器运行
-	zLog.Info("MapServer started successfully")
-	// 等待信号退出
-	select {}
 }

@@ -6,11 +6,12 @@ import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/config"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
+	"github.com/pzqf/zMmoServer/GameServer/game/maps"
 	"github.com/pzqf/zMmoServer/GameServer/session"
-	"github.com/pzqf/zMmoShared/metrics"
 	"go.uber.org/zap"
 )
 
@@ -19,15 +20,17 @@ type Metrics struct {
 	config         *config.Config
 	connManager    *connection.ConnectionManager
 	sessionManager *session.SessionManager
+	mapService     *maps.MapService
 	metricsMgr     *metrics.MetricsManager
 }
 
 // NewMetrics 创建监控指标
-func NewMetrics(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager) *Metrics {
+func NewMetrics(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, mapService *maps.MapService) *Metrics {
 	m := &Metrics{
 		config:         cfg,
 		connManager:    connManager,
 		sessionManager: sessionManager,
+		mapService:     mapService,
 		metricsMgr:     metrics.NewMetricsManager(),
 	}
 
@@ -91,6 +94,9 @@ func (m *Metrics) registerMetrics() {
 
 	// 注册系统指标
 	m.metricsMgr.RegisterGauge("game_uptime_seconds", "Game server uptime in seconds", nil)
+	m.metricsMgr.RegisterGauge("game_outbox_pending", "Current outbox pending message count", nil)
+	m.metricsMgr.RegisterGauge("game_outbox_dead", "Current outbox dead-letter count", nil)
+	m.metricsMgr.RegisterGauge("game_gateway_dedupe_hits_total", "Total gateway dedupe hit count", nil)
 
 	zLog.Info("Game metrics registered successfully")
 }
@@ -131,5 +137,22 @@ func (m *Metrics) IncrementMessagesSent() {
 func (m *Metrics) UpdateOnlinePlayers(count int) {
 	if gauge, ok := m.metricsMgr.GetGauge("game_players_online"); ok && gauge != nil {
 		gauge.Set(float64(count))
+	}
+}
+
+// UpdateConsistencyOutbox 更新跨服一致性Outbox指标
+func (m *Metrics) UpdateConsistencyOutbox(pending, dead int) {
+	if gauge, ok := m.metricsMgr.GetGauge("game_outbox_pending"); ok && gauge != nil {
+		gauge.Set(float64(pending))
+	}
+	if gauge, ok := m.metricsMgr.GetGauge("game_outbox_dead"); ok && gauge != nil {
+		gauge.Set(float64(dead))
+	}
+}
+
+// UpdateGatewayDedupeHits 更新Gateway重复请求去重累计命中次数
+func (m *Metrics) UpdateGatewayDedupeHits(total uint64) {
+	if gauge, ok := m.metricsMgr.GetGauge("game_gateway_dedupe_hits_total"); ok && gauge != nil {
+		gauge.Set(float64(total))
 	}
 }

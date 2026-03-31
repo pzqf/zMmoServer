@@ -8,17 +8,19 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
+	"github.com/pzqf/zCommon/discovery"
 )
 
 // Config 游戏服务器配置
 type Config struct {
-	Server       ServerConfig       `ini:"Server"`
-	Database     DatabaseConfig     `ini:"Database"`
-	Gateway      GatewayConfig      `ini:"Gateway"`
-	MapServer    MapServerConfig    `ini:"MapServer"`
-	GlobalServer GlobalServerConfig `ini:"GlobalServer"`
-	Logging      LoggingConfig      `ini:"Logging"`
-	Metrics      MetricsConfig      `ini:"Metrics"`
+	Server       ServerConfig         `ini:"Server"`
+	Database     DatabaseConfig       `ini:"Database"`
+	Gateway      GatewayConfig        `ini:"Gateway"`
+	MapServer    MapServerConfig      `ini:"MapServer"`
+	GlobalServer GlobalServerConfig   `ini:"GlobalServer"`
+	Etcd         discovery.EtcdConfig `ini:"Etcd"`
+	Logging      LoggingConfig        `ini:"Logging"`
+	Metrics      MetricsConfig        `ini:"Metrics"`
 }
 
 // ServerConfig 服务器基本配置
@@ -91,6 +93,8 @@ type MetricsConfig struct {
 	MetricsAddr string `ini:"MetricsAddr"`
 }
 
+
+
 var globalConfig *Config
 
 // LoadConfig 加载配置
@@ -118,11 +122,11 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	config.Database = DatabaseConfig{
 		DBType:          getConfigString(zcfg, "Database.DBType", "mysql"),
-		DBHost:          getConfigString(zcfg, "Database.DBHost", getEnv("DB_HOST", "mysql.game")),
-		DBPort:          getConfigInt(zcfg, "Database.DBPort", 3306),
+		DBHost:          getConfigString(zcfg, "Database.DBHost", getEnv("DB_HOST", "192.168.91.128")),
+		DBPort:          getConfigInt(zcfg, "Database.DBPort", 30306),
 		DBName:          getConfigString(zcfg, "Database.DBName", getEnv("DB_NAME", "GameDB_000101")),
 		DBUser:          getConfigString(zcfg, "Database.DBUser", getEnv("DB_USER", "root")),
-		DBPassword:      getConfigString(zcfg, "Database.DBPassword", getEnv("DB_PASSWORD", "root")),
+		DBPassword:      getConfigString(zcfg, "Database.DBPassword", getEnv("DB_PASSWORD", "123456")),
 		MaxOpenConns:    getConfigInt(zcfg, "Database.MaxOpenConns", 100),
 		MaxIdleConns:    getConfigInt(zcfg, "Database.MaxIdleConns", 10),
 		ConnMaxLifetime: getConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
@@ -163,6 +167,16 @@ func LoadConfig(configPath string) (*Config, error) {
 	config.Metrics = MetricsConfig{
 		Enabled:     getConfigBool(zcfg, "Metrics.Enabled", true),
 		MetricsAddr: getConfigString(zcfg, "Metrics.MetricsAddr", getEnv("METRICS_ADDR", "0.0.0.0:9092")),
+	}
+
+	// 解析etcd配置
+	config.Etcd = discovery.EtcdConfig{
+		Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", getEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
+		Username:       getConfigString(zcfg, "Etcd.Username", ""),
+		Password:       getConfigString(zcfg, "Etcd.Password", ""),
+		CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+		ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+		ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 	}
 
 	globalConfig = config

@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"math/big"
@@ -15,15 +16,16 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zUtil/zCrypto"
 )
 
-// HTTP API 相关结构体
+// HTTP API 相关结构
 type LoginRequest struct {
 	Account  string `json:"account"`
 	Password string `json:"password"`
@@ -63,6 +65,12 @@ type Client struct {
 	selectedServer   *protocol.ServerInfo
 	stopChan         chan struct{}
 	aesKey           []byte
+	smokeMu          sync.Mutex
+	mapEnterResult   int32
+	mapMoveResult    int32
+	mapAttackResult  int32
+	mapAttackDamage  int64
+	mapAttackTargetH int64
 }
 
 func NewClient(globalServerAddr string) *Client {
@@ -174,8 +182,8 @@ func (c *Client) readLoop() {
 			dataSize := binary.LittleEndian.Uint32(headerBuffer[8:12])
 			_ = binary.LittleEndian.Uint32(headerBuffer[12:16]) // isCompressed
 
-			// 读取数据体
-			if dataSize > 0 {
+			// 读取数据
+		if dataSize > 0 {
 				dataBuffer := make([]byte, dataSize)
 				_, err := io.ReadFull(c.conn, dataBuffer)
 				if err != nil {
@@ -230,6 +238,39 @@ func (c *Client) handleMessage(protoId uint32, data []byte) {
 			fmt.Printf("Player: ID=%d, Name=%s, Level=%d, Sex=%d, Age=%d\n",
 				resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level, 0, 0)
 		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):
+		var resp protocol.ClientMapEnterResponse
+		if err := proto.Unmarshal(data, &resp); err != nil {
+			fmt.Printf("Failed to unmarshal ClientMapEnterResponse: %v\n", err)
+			return
+		}
+		c.smokeMu.Lock()
+		c.mapEnterResult = resp.Result
+		c.smokeMu.Unlock()
+		fmt.Printf("ClientMapEnterResponse: Result=%d, ErrorMsg=%s, MapID=%d\n", resp.Result, resp.ErrorMsg, resp.MapId)
+	case uint32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE):
+		var resp protocol.ClientMapMoveResponse
+		if err := proto.Unmarshal(data, &resp); err != nil {
+			fmt.Printf("Failed to unmarshal ClientMapMoveResponse: %v\n", err)
+			return
+		}
+		c.smokeMu.Lock()
+		c.mapMoveResult = resp.Result
+		c.smokeMu.Unlock()
+		fmt.Printf("ClientMapMoveResponse: Result=%d\n", resp.Result)
+	case uint32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE):
+		var resp protocol.ClientMapAttackResponse
+		if err := proto.Unmarshal(data, &resp); err != nil {
+			fmt.Printf("Failed to unmarshal ClientMapAttackResponse: %v\n", err)
+			return
+		}
+		c.smokeMu.Lock()
+		c.mapAttackResult = resp.Result
+		c.mapAttackDamage = resp.Damage
+		c.mapAttackTargetH = resp.TargetHp
+		c.smokeMu.Unlock()
+		fmt.Printf("ClientMapAttackResponse: Result=%d, TargetID=%d, Damage=%d, TargetHp=%d\n",
+			resp.Result, resp.TargetId, resp.Damage, resp.TargetHp)
 	case uint32(protocol.ActivityMsgId_MSG_ACTIVITY_GET_LIST_RESPONSE):
 		var resp protocol.ActivityListResponse
 		if err := proto.Unmarshal(data, &resp); err != nil {
@@ -268,6 +309,22 @@ func (c *Client) handleMessage(protoId uint32, data []byte) {
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}
+}
+
+func (c *Client) resetSmokeResults() {
+	c.smokeMu.Lock()
+	defer c.smokeMu.Unlock()
+	c.mapEnterResult = -1
+	c.mapMoveResult = -1
+	c.mapAttackResult = -1
+	c.mapAttackDamage = 0
+	c.mapAttackTargetH = 0
+}
+
+func (c *Client) snapshotSmokeResults() (int32, int32, int32, int64, int64) {
+	c.smokeMu.Lock()
+	defer c.smokeMu.Unlock()
+	return c.mapEnterResult, c.mapMoveResult, c.mapAttackResult, c.mapAttackDamage, c.mapAttackTargetH
 }
 
 func (c *Client) Send(msgID uint32, data []byte) error {
@@ -529,14 +586,21 @@ func (c *Client) SelectServer(serverID int32, serverList []*protocol.ServerInfo)
 }
 
 func main() {
+	smokeMode := flag.Bool("smoke-map-combat", false, "run non-interactive map combat smoke flow")
+	gatewayAddr := flag.String("gateway", "127.0.0.1:10001", "gateway tcp address")
+	playerID := flag.Int64("player-id", 1, "player id for smoke flow")
+	mapID := flag.Int("map-id", 1001, "map id for smoke flow")
+	targetID := flag.Int64("target-id", 10001, "target id for smoke flow")
+	flag.Parse()
+
 	fmt.Println("=== 简化测试流程 ===")
 
 	// 直接创建客户端并连接到GatewayServer
 	client := NewClient("")
-	client.gatewayAddr = "127.0.0.1:10001" // GatewayServer地址
+	client.gatewayAddr = *gatewayAddr // GatewayServer地址
 
-	// 1. 连接到 Gateway 服务器
-	fmt.Println("1. 连接 Gateway 服务器...")
+	// 1. 连接到Gateway 服务器
+	fmt.Println("1. 连接 Gateway 服务器..")
 	if err := client.Connect(); err != nil {
 		fmt.Printf("连接失败: %v\n", err)
 		os.Exit(1)
@@ -564,42 +628,77 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// 3. 模拟玩家ID
-	playerID := int64(1) // 固定玩家ID
+	playerIDVal := *playerID
 
 	// 4. 测试进入地图
 	fmt.Println("\n3. 测试进入地图...")
-	if err := client.SendMapEnter(playerID, 1001); err != nil { // 1001是新手村地图ID
+	client.resetSmokeResults()
+	if err := client.SendMapEnter(playerIDVal, int32(*mapID)); err != nil {
 		fmt.Printf("进入地图失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("进入地图请求已发送: 角色ID=%d, 地图ID=1001\n", playerID)
+	fmt.Printf("进入地图请求已发送 角色ID=%d, 地图ID=%d\n", playerIDVal, *mapID)
 
 	// 等待2秒，让服务器处理进入地图
-	fmt.Println("\n等待服务器处理进入地图...")
+	fmt.Println("\n等待服务器处理进入地图..")
 	time.Sleep(2 * time.Second)
 
 	// 5. 测试移动
 	fmt.Println("\n4. 测试移动...")
-	if err := client.SendMapMove(playerID, 1001, 255, 255, 0); err != nil { // 移动到坐标(255, 255, 0)
+	if err := client.SendMapMove(playerIDVal, int32(*mapID), 255, 255, 0); err != nil {
 		fmt.Printf("移动失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("移动请求已发送: 角色ID=%d, 地图ID=1001, 坐标=(255, 255, 0)\n", playerID)
+	fmt.Printf("移动请求已发送 角色ID=%d, 地图ID=%d, 坐标=(255, 255, 0)\n", playerIDVal, *mapID)
 
 	// 等待1秒，让服务器处理移动
-	fmt.Println("\n等待服务器处理移动...")
+	fmt.Println("\n等待服务器处理移动..")
 	time.Sleep(1 * time.Second)
 
 	// 6. 测试攻击
 	fmt.Println("\n5. 测试攻击...")
-	if err := client.SendMapAttack(playerID, 1001, 10001); err != nil { // 攻击目标ID为10001的怪物
+	if err := client.SendMapAttack(playerIDVal, int32(*mapID), *targetID); err != nil {
 		fmt.Printf("攻击失败: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("攻击请求已发送: 角色ID=%d, 地图ID=1001, 目标ID=10001\n", playerID)
+	fmt.Printf("攻击请求已发送 角色ID=%d, 地图ID=%d, 目标ID=%d\n", playerIDVal, *mapID, *targetID)
 
 	// 等待1秒，让服务器处理攻击
-	fmt.Println("\n等待服务器处理攻击...")
+	fmt.Println("\n等待服务器处理攻击..")
+	time.Sleep(1 * time.Second)
+
+	if *smokeMode {
+		enter, move, attack, damage, targetHp := client.snapshotSmokeResults()
+		if enter != 0 || move != 0 || attack != 0 {
+			fmt.Printf("SMOKE FAILED: enter=%d move=%d attack=%d\n", enter, move, attack)
+			os.Exit(2)
+		}
+		fmt.Printf("SMOKE PASSED: enter=%d move=%d attack=%d damage=%d target_hp=%d\n", enter, move, attack, damage, targetHp)
+		return
+	}
+
+	// 7. 测试跨地图
+	fmt.Println("\n6. 测试跨地图...")
+	if err := client.SendMapEnter(playerIDVal, 2001); err != nil { // 进入地图2001（野外）
+		fmt.Printf("进入地图失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("进入地图请求已发送 角色ID=%d, 地图ID=2001\n", playerIDVal)
+
+	// 等待2秒，让服务器处理进入地图
+	fmt.Println("\n等待服务器处理进入地图..")
+	time.Sleep(2 * time.Second)
+
+	// 8. 在新地图测试移动
+	fmt.Println("\n7. 在新地图测试移动...")
+	if err := client.SendMapMove(playerIDVal, 2001, 300, 300, 0); err != nil { // 在野外地图移动
+		fmt.Printf("移动失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("移动请求已发送 角色ID=%d, 地图ID=2001, 坐标=(300, 300, 0)\n", playerIDVal)
+
+	// 等待1秒，让服务器处理移动
+	fmt.Println("\n等待服务器处理移动..")
 	time.Sleep(1 * time.Second)
 
 	fmt.Println("\n测试完成!")
@@ -642,17 +741,18 @@ func checkPlayerInDatabase() {
 	// 使用PowerShell执行命令
 	output, err := exec.Command("powershell", "-Command", cmd).Output()
 	if err != nil {
-		fmt.Printf("查询数据库失败: %v\n", err)
+		fmt.Printf("查询数据库失败 %v\n", err)
 		return
 	}
 
-	fmt.Println("数据库查询结果:")
+	fmt.Println("数据库查询结果")
 	fmt.Println(string(output))
 
 	// 检查是否有角色数据
 	if strings.Contains(string(output), "testrole") {
-		fmt.Println("\n✓ 角色数据已成功写入数据库!")
+		fmt.Println("\n测试角色数据已成功写入数据库!")
 	} else {
-		fmt.Println("\n✗ 角色数据未写入数据库!")
+		fmt.Println("\n测试角色数据未写入数据库!")
 	}
 }
+

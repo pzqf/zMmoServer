@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // Monster 怪物对象
@@ -41,6 +41,7 @@ type Monster struct {
 }
 
 // MonsterState 怪物状态
+
 type MonsterState int
 
 const (
@@ -590,3 +591,4 @@ func (m *Monster) SetTargetPosition(pos common.Vector3) {
 func (m *Monster) GetPatrolPath() []common.Vector3 {
 	return m.patrolPath
 }
+

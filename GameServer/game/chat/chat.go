@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // ChatChannel 聊天频道类型

@@ -6,8 +6,8 @@ import (
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
 	"github.com/pzqf/zMmoServer/GatewayServer/connection"
 	"github.com/pzqf/zMmoServer/GatewayServer/token"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/protocol"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -62,3 +62,4 @@ func (ah *AuthHandler) sendResponse(session zNet.Session, msg proto.Message) err
 
 	return session.Send(0, data)
 }
+

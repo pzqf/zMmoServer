@@ -2,33 +2,28 @@ package player
 
 import (
 	"errors"
-	"sync"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zActor"
-	"github.com/pzqf/zMmoShared/common/id"
 	"github.com/pzqf/zUtil/zMap"
 )
 
 // PlayerManager 玩家管理器
 type PlayerManager struct {
 	players          *zMap.Map
-	playersMu        sync.RWMutex
-	playersByAccount map[id.AccountIdType]*Player
+	playersByAccount *zMap.TypedMap[id.AccountIdType, *Player]
 }
 
 // NewPlayerManager 创建玩家管理器
 func NewPlayerManager() *PlayerManager {
 	return &PlayerManager{
 		players:          zMap.NewMap(),
-		playersByAccount: make(map[id.AccountIdType]*Player),
+		playersByAccount: zMap.NewTypedMap[id.AccountIdType, *Player](),
 	}
 }
 
 // CreatePlayer 创建并启动玩家Actor
 func (pm *PlayerManager) CreatePlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string) (*Player, error) {
-	pm.playersMu.Lock()
-	defer pm.playersMu.Unlock()
-
 	// 检查是否已存在
 	_, exists := pm.players.Load(playerID)
 	if exists {
@@ -45,7 +40,7 @@ func (pm *PlayerManager) CreatePlayer(playerID id.PlayerIdType, accountID id.Acc
 
 	// 注册到管理器
 	pm.players.Store(playerID, player)
-	pm.playersByAccount[accountID] = player
+	pm.playersByAccount.Store(accountID, player)
 
 	return player, nil
 }
@@ -61,9 +56,6 @@ func (pm *PlayerManager) AddPlayer(player *Player) error {
 		return errors.New("player id can't be 0")
 	}
 
-	pm.playersMu.Lock()
-	defer pm.playersMu.Unlock()
-
 	_, exists := pm.players.Load(playerID)
 	if exists {
 		return errors.New("player already exists")
@@ -75,7 +67,7 @@ func (pm *PlayerManager) AddPlayer(player *Player) error {
 	}
 
 	pm.players.Store(playerID, player)
-	pm.playersByAccount[player.GetAccountID()] = player
+	pm.playersByAccount.Store(player.GetAccountID(), player)
 
 	return nil
 }
@@ -91,10 +83,7 @@ func (pm *PlayerManager) GetPlayer(playerID id.PlayerIdType) (*Player, error) {
 
 // GetPlayerByAccount 通过账号ID获取玩家
 func (pm *PlayerManager) GetPlayerByAccount(accountID id.AccountIdType) (*Player, error) {
-	pm.playersMu.RLock()
-	defer pm.playersMu.RUnlock()
-
-	player, exists := pm.playersByAccount[accountID]
+	player, exists := pm.playersByAccount.Load(accountID)
 	if !exists {
 		return nil, errors.New("player not found")
 	}
@@ -103,9 +92,6 @@ func (pm *PlayerManager) GetPlayerByAccount(accountID id.AccountIdType) (*Player
 
 // RemovePlayer 停止并移除玩家Actor
 func (pm *PlayerManager) RemovePlayer(playerID id.PlayerIdType) error {
-	pm.playersMu.Lock()
-	defer pm.playersMu.Unlock()
-
 	v, ok := pm.players.Load(playerID)
 	if !ok {
 		return errors.New("player not found")
@@ -119,7 +105,7 @@ func (pm *PlayerManager) RemovePlayer(playerID id.PlayerIdType) error {
 	}
 
 	pm.players.Delete(playerID)
-	delete(pm.playersByAccount, player.GetAccountID())
+	pm.playersByAccount.Delete(player.GetAccountID())
 
 	return nil
 }
@@ -191,9 +177,7 @@ func (pm *PlayerManager) HasPlayer(playerID id.PlayerIdType) bool {
 
 // HasPlayerByAccount 检查账号是否在线
 func (pm *PlayerManager) HasPlayerByAccount(accountID id.AccountIdType) bool {
-	pm.playersMu.RLock()
-	defer pm.playersMu.RUnlock()
-	_, exists := pm.playersByAccount[accountID]
+	_, exists := pm.playersByAccount.Load(accountID)
 	return exists
 }
 
@@ -206,9 +190,6 @@ func (pm *PlayerManager) Range(f func(playerID id.PlayerIdType, player *Player) 
 
 // ClearAll 清除所有玩家
 func (pm *PlayerManager) ClearAll() {
-	pm.playersMu.Lock()
-	defer pm.playersMu.Unlock()
-
 	pm.players.Range(func(key, value interface{}) bool {
 		player := value.(*Player)
 		player.Stop()
@@ -216,5 +197,5 @@ func (pm *PlayerManager) ClearAll() {
 	})
 
 	pm.players.Clear()
-	pm.playersByAccount = make(map[id.AccountIdType]*Player)
+	pm.playersByAccount.Clear()
 }

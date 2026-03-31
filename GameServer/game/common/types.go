@@ -4,7 +4,7 @@ import (
 	"math"
 
 	"github.com/pzqf/zEngine/zEvent"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // GameObjectType 游戏对象类型
@@ -112,3 +112,4 @@ type IMap interface {
 	MoveObject(object IGameObject, targetPos Vector3) error
 	TeleportObject(object IGameObject, targetPos Vector3) error
 }
+

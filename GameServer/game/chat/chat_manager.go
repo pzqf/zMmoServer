@@ -4,10 +4,10 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
-	"github.com/pzqf/zMmoShared/common/id"
 	"go.uber.org/zap"
 )
 
@@ -31,18 +31,18 @@ type ChatManager struct {
 // NewChatManager 创建聊天管理器
 func NewChatManager(playerID id.PlayerIdType, playerName string) *ChatManager {
 	return &ChatManager{
-		playerID:         playerID,
-		playerName:       playerName,
-		mutedChannels:    make(map[ChatChannel]bool),
-		mutedPlayers:     make(map[id.PlayerIdType]bool),
-		lastSpeakTime:    make(map[ChatChannel]int64),
+		playerID:      playerID,
+		playerName:    playerName,
+		mutedChannels: make(map[ChatChannel]bool),
+		mutedPlayers:  make(map[id.PlayerIdType]bool),
+		lastSpeakTime: make(map[ChatChannel]int64),
 		cooldownTime: map[ChatChannel]int64{
-			ChatChannelWorld:   5000,  // 世界频道5秒冷却
-			ChatChannelGuild:   1000,  // 公会频道1秒冷却
-			ChatChannelTeam:    1000,  // 队伍频道1秒冷却
-			ChatChannelPrivate: 500,   // 私聊0.5秒冷却
-			ChatChannelMap:     2000,  // 地图频道2秒冷却
-			ChatChannelNearby:  1000,  // 附近频道1秒冷却
+			ChatChannelWorld:   5000, // 世界频道5秒冷�?
+			ChatChannelGuild:   1000, // 公会频道1秒冷�?
+			ChatChannelTeam:    1000, // 队伍频道1秒冷�?
+			ChatChannelPrivate: 500,  // 私聊0.5秒冷�?
+			ChatChannelMap:     2000, // 地图频道2秒冷�?
+			ChatChannelNearby:  1000, // 附近频道1秒冷�?
 		},
 		maxMessageLength: 200,
 		isGM:             false,

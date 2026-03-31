@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/config/models"
-	"github.com/pzqf/zMmoShared/config/tables"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/config/tables"
 	"go.uber.org/zap"
 )
 
@@ -444,3 +444,4 @@ func (ab *ActiveBuff) Refresh() {
 	ab.EndTime = time.Now().Add(ab.Duration)
 	ab.StartTime = time.Now()
 }
+

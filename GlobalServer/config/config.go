@@ -4,23 +4,25 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/pzqf/zCommon/db"
+	"github.com/pzqf/zCommon/discovery"
+	"github.com/pzqf/zCommon/metrics"
+	"github.com/pzqf/zCommon/redis"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zMmoShared/db"
-	"github.com/pzqf/zMmoShared/metrics"
-	"github.com/pzqf/zMmoShared/redis"
 	"github.com/pzqf/zUtil/zConfig"
 )
 
 // Config GlobalServer 配置
 type Config struct {
-	Server   ServerConfig  `ini:"server"`
-	HTTP     HTTPConfig    `ini:"http"`
-	Log      zLog.Config   `ini:"log"`
-	Database db.DBConfig   `ini:"database.global"`
-	Redis    RedisConfig   `ini:"redis"`
-	Pprof    PprofConfig   `ini:"pprof"`
-	Metrics  MetricsConfig `ini:"metrics"`
+	Server   ServerConfig         `ini:"server"`
+	HTTP     HTTPConfig           `ini:"http"`
+	Etcd     discovery.EtcdConfig `ini:"etcd"`
+	Log      zLog.Config          `ini:"log"`
+	Database db.DBConfig          `ini:"database.global"`
+	Redis    RedisConfig          `ini:"redis"`
+	Pprof    PprofConfig          `ini:"pprof"`
+	Metrics  MetricsConfig        `ini:"metrics"`
 }
 
 // ServerConfig 服务器基本配置
@@ -49,7 +51,7 @@ type PprofConfig struct {
 // MetricsConfig 监控指标配置
 type MetricsConfig metrics.MetricsConfig
 
-// RedisConfig Redis配置 - 直接使用zMmoShared/redis.RedisConfig
+// RedisConfig Redis配置 - 直接使用zCommon/redis.RedisConfig
 type RedisConfig redis.RedisConfig
 
 // LoadConfig 加载配置文件
@@ -59,7 +61,7 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	// 先获取 server_id，用于构建日志文件名
+	// 先获取server_id，用于构建日志文件名
 	serverID := getConfigInt(zcfg, "server.server_id", 1)
 
 	cfg := &Config{
@@ -98,7 +100,7 @@ func LoadConfig(filePath string) (*Config, error) {
 			Host:           getConfigString(zcfg, "database.global.host", "localhost"),
 			Port:           getConfigInt(zcfg, "database.global.port", 3306),
 			User:           getConfigString(zcfg, "database.global.user", "root"),
-			Password:       getConfigString(zcfg, "database.global.password", ""),
+			Password:       getConfigString(zcfg, "database.global.password", "123456"),
 			DBName:         getConfigString(zcfg, "database.global.dbname", "global"),
 			Charset:        getConfigString(zcfg, "database.global.charset", "utf8mb4"),
 			MaxIdle:        getConfigInt(zcfg, "database.global.max_idle", 10),
@@ -122,6 +124,14 @@ func LoadConfig(filePath string) (*Config, error) {
 		Metrics: MetricsConfig{
 			Enabled:       getConfigBool(zcfg, "metrics.enabled", true),
 			ListenAddress: getConfigString(zcfg, "metrics.listen_address", "0.0.0.0:8889"),
+		},
+		Etcd: discovery.EtcdConfig{
+			Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
+			Username:       getConfigString(zcfg, "Etcd.Username", ""),
+			Password:       getConfigString(zcfg, "Etcd.Password", ""),
+			CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "resources/etcd/ca.crt"),
+			ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "resources/etcd/server.crt"),
+			ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "resources/etcd/server.key"),
 		},
 	}
 

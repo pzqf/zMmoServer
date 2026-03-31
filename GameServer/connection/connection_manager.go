@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/config"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,14 +30,12 @@ type Connection struct {
 
 type ConnectionManager struct {
 	config               *config.Config
-	connections          map[string]*Connection
-	connectionsMu        sync.RWMutex
+	connections          *zMap.TypedMap[string, *Connection]
 	gatewayConn          net.Conn
 	gatewayMu            sync.Mutex
-	isConnected          bool
+	isConnected          atomic.Bool
 	gatewayConnectedChan chan struct{}
-	mapConnections       map[int]*MapConnection // 地图ID -> MapServer连接
-	mapConnMu            sync.RWMutex
+	mapConnections       *zMap.TypedMap[int, *MapConnection] // 地图ID -> MapServer连接
 }
 
 type MapConnection struct {
@@ -50,10 +50,10 @@ type MapConnection struct {
 func NewConnectionManager(cfg *config.Config) *ConnectionManager {
 	return &ConnectionManager{
 		config:               cfg,
-		connections:          make(map[string]*Connection),
-		isConnected:          false,
+		connections:          zMap.NewTypedMap[string, *Connection](),
+		isConnected:          atomic.Bool{},
 		gatewayConnectedChan: make(chan struct{}),
-		mapConnections:       make(map[int]*MapConnection),
+		mapConnections:       zMap.NewTypedMap[int, *MapConnection](),
 	}
 }
 
@@ -75,11 +75,9 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 	}
 
 	// 注册地图ID到连接的映射
-	cm.mapConnMu.Lock()
 	for _, mapID := range mapIDs {
-		cm.mapConnections[mapID] = mapConn
+		cm.mapConnections.Store(mapID, mapConn)
 	}
-	cm.mapConnMu.Unlock()
 
 	zLog.Info("Connected to MapServer successfully", zap.String("addr", mapServerAddr), zap.Ints("map_ids", mapIDs))
 
@@ -91,11 +89,8 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 }
 
 func (cm *ConnectionManager) DisconnectFromMapServer(mapIDs []int) {
-	cm.mapConnMu.Lock()
-	defer cm.mapConnMu.Unlock()
-
 	for _, mapID := range mapIDs {
-		if mapConn, exists := cm.mapConnections[mapID]; exists {
+		if mapConn, exists := cm.mapConnections.LoadAndDelete(mapID); exists {
 			mapConn.closeOnce.Do(func() {
 				close(mapConn.closeChan)
 				if mapConn.conn != nil {
@@ -103,16 +98,13 @@ func (cm *ConnectionManager) DisconnectFromMapServer(mapIDs []int) {
 				}
 				mapConn.isConnected = false
 			})
-			delete(cm.mapConnections, mapID)
 			zLog.Info("Disconnected from MapServer for map", zap.Int("map_id", mapID))
 		}
 	}
 }
 
 func (cm *ConnectionManager) SendToMap(mapID int, data []byte) error {
-	cm.mapConnMu.RLock()
-	mapConn, exists := cm.mapConnections[mapID]
-	cm.mapConnMu.RUnlock()
+	mapConn, exists := cm.mapConnections.Load(mapID)
 
 	if !exists || !mapConn.isConnected {
 		return fmt.Errorf("map server not connected for map %d", mapID)
@@ -189,13 +181,13 @@ func (cm *ConnectionManager) handleMapServerMessage(mapConn *MapConnection, data
 	switch msgID {
 	case uint32(protocol.MapMsgId_MSG_MAP_MOVE):
 		// 处理玩家移动
-		cm.handlePlayerMoveFromMap(msg)
+		cm.handlePlayerMoveFromMap(&msg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", msgID))
 	}
 }
 
-func (cm *ConnectionManager) handlePlayerMoveFromMap(msg protocol.ClientMessage) {
+func (cm *ConnectionManager) handlePlayerMoveFromMap(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player move from MapServer", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家移动逻辑
 }
@@ -221,14 +213,14 @@ func (cm *ConnectionManager) SendToGateway(data []byte) error {
 	cm.gatewayMu.Lock()
 	defer cm.gatewayMu.Unlock()
 
-	if !cm.isConnected || cm.gatewayConn == nil {
+	if !cm.isConnected.Load() || cm.gatewayConn == nil {
 		return fmt.Errorf("gateway not connected")
 	}
 
 	_, err := cm.gatewayConn.Write(data)
 	if err != nil {
 		zLog.Error("Failed to send to Gateway", zap.Error(err))
-		cm.isConnected = false
+		cm.isConnected.Store(false)
 		return err
 	}
 
@@ -240,7 +232,7 @@ func (cm *ConnectionManager) receiveFromGateway() {
 
 	for {
 		cm.gatewayMu.Lock()
-		if !cm.isConnected || cm.gatewayConn == nil {
+		if !cm.isConnected.Load() || cm.gatewayConn == nil {
 			cm.gatewayMu.Unlock()
 			break
 		}
@@ -250,9 +242,7 @@ func (cm *ConnectionManager) receiveFromGateway() {
 		n, err := conn.Read(buffer)
 		if err != nil {
 			zLog.Error("Failed to read from Gateway", zap.Error(err))
-			cm.gatewayMu.Lock()
-			cm.isConnected = false
-			cm.gatewayMu.Unlock()
+			cm.isConnected.Store(false)
 			break
 		}
 
@@ -295,37 +285,34 @@ func (cm *ConnectionManager) handleGatewayMessage(data []byte) {
 	switch msgID {
 	case uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME):
 		// 处理玩家登录
-		cm.handlePlayerLogin(msg)
+		cm.handlePlayerLogin(&msg)
 	case uint32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME):
 		// 处理玩家登出
-		cm.handlePlayerLogout(msg)
+		cm.handlePlayerLogout(&msg)
 	case uint32(protocol.MapMsgId_MSG_MAP_MOVE):
 		// 处理玩家移动
-		cm.handlePlayerMove(msg)
+		cm.handlePlayerMove(&msg)
 	default:
 		zLog.Info("Received unknown message from Gateway", zap.Uint32("msg_id", msgID))
 	}
 }
 
-func (cm *ConnectionManager) handlePlayerLogin(msg protocol.ClientMessage) {
+func (cm *ConnectionManager) handlePlayerLogin(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player login", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登录逻辑
 }
 
-func (cm *ConnectionManager) handlePlayerLogout(msg protocol.ClientMessage) {
+func (cm *ConnectionManager) handlePlayerLogout(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player logout", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家登出逻辑
 }
 
-func (cm *ConnectionManager) handlePlayerMove(msg protocol.ClientMessage) {
+func (cm *ConnectionManager) handlePlayerMove(msg *protocol.ClientMessage) {
 	zLog.Info("Handling player move", zap.Uint64("session_id", uint64(msg.SessionId)))
 	// 实现玩家移动逻辑
 }
 
 func (cm *ConnectionManager) AddConnection(connID string, conn net.Conn) *Connection {
-	cm.connectionsMu.Lock()
-	defer cm.connectionsMu.Unlock()
-
 	connection := &Connection{
 		conn:        conn,
 		connID:      connID,
@@ -335,17 +322,14 @@ func (cm *ConnectionManager) AddConnection(connID string, conn net.Conn) *Connec
 		closeChan:   make(chan struct{}),
 	}
 
-	cm.connections[connID] = connection
+	cm.connections.Store(connID, connection)
 	go connection.sendLoop()
 
 	return connection
 }
 
 func (cm *ConnectionManager) RemoveConnection(connID string) {
-	cm.connectionsMu.Lock()
-	defer cm.connectionsMu.Unlock()
-
-	if conn, exists := cm.connections[connID]; exists {
+	if conn, exists := cm.connections.LoadAndDelete(connID); exists {
 		conn.closeOnce.Do(func() {
 			close(conn.closeChan)
 			if conn.conn != nil {
@@ -353,30 +337,19 @@ func (cm *ConnectionManager) RemoveConnection(connID string) {
 			}
 			conn.isConnected = false
 		})
-		delete(cm.connections, connID)
 	}
 }
 
 func (cm *ConnectionManager) GetConnection(connID string) (*Connection, bool) {
-	cm.connectionsMu.RLock()
-	defer cm.connectionsMu.RUnlock()
-
-	conn, exists := cm.connections[connID]
-	return conn, exists
+	return cm.connections.Load(connID)
 }
 
 func (cm *ConnectionManager) GetConnectionCount() int {
-	cm.connectionsMu.RLock()
-	defer cm.connectionsMu.RUnlock()
-
-	return len(cm.connections)
+	return int(cm.connections.Len())
 }
 
 func (cm *ConnectionManager) Broadcast(data []byte) {
-	cm.connectionsMu.RLock()
-	defer cm.connectionsMu.RUnlock()
-
-	for _, conn := range cm.connections {
+	cm.connections.Range(func(connID string, conn *Connection) bool {
 		if conn.isConnected {
 			select {
 			case conn.sendChan <- data:
@@ -384,7 +357,8 @@ func (cm *ConnectionManager) Broadcast(data []byte) {
 				zLog.Warn("Connection send channel full, dropping message", zap.String("conn_id", conn.connID))
 			}
 		}
-	}
+		return true
+	})
 }
 
 func (c *Connection) Send(data []byte) error {
@@ -402,18 +376,44 @@ func (c *Connection) Send(data []byte) error {
 }
 
 func (c *Connection) sendLoop() {
+	var batch []byte
+	var batchSize int
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case data := <-c.sendChan:
-			if c.conn != nil {
-				_, err := c.conn.Write(data)
-				if err != nil {
-					zLog.Error("Failed to send to connection", zap.String("conn_id", c.connID), zap.Error(err))
-					c.isConnected = false
-				}
+			batch = append(batch, data...)
+			batchSize += len(data)
+			// 当批次达到一定大小或时间到时发送
+			if batchSize >= 4096 {
+				c.sendBatch(batch)
+				batch = nil
+				batchSize = 0
+			}
+		case <-ticker.C:
+			if batchSize > 0 {
+				c.sendBatch(batch)
+				batch = nil
+				batchSize = 0
 			}
 		case <-c.closeChan:
+			// 发送剩余数据
+			if batchSize > 0 {
+				c.sendBatch(batch)
+			}
 			return
+		}
+	}
+}
+
+func (c *Connection) sendBatch(batch []byte) {
+	if c.conn != nil {
+		_, err := c.conn.Write(batch)
+		if err != nil {
+			zLog.Error("Failed to send batch to connection", zap.String("conn_id", c.connID), zap.Error(err))
+			c.isConnected = false
 		}
 	}
 }
@@ -460,9 +460,9 @@ func (c *Connection) IsConnected() bool {
 func (cm *ConnectionManager) SetGatewayConnection(conn net.Conn) {
 	cm.gatewayMu.Lock()
 	oldConn := cm.gatewayConn
-	oldStatus := cm.isConnected
+	oldStatus := cm.isConnected.Load()
 	cm.gatewayConn = conn
-	cm.isConnected = (conn != nil)
+	cm.isConnected.Store(conn != nil)
 	cm.gatewayMu.Unlock()
 
 	if conn != nil {
@@ -484,10 +484,7 @@ func (cm *ConnectionManager) SetGatewayConnection(conn net.Conn) {
 
 // IsGatewayConnected 检查Gateway是否连接
 func (cm *ConnectionManager) IsGatewayConnected() bool {
-	cm.gatewayMu.Lock()
-	defer cm.gatewayMu.Unlock()
-
-	return cm.isConnected
+	return cm.isConnected.Load()
 }
 
 // GatewayConnectedChan 获取Gateway连接成功的通道

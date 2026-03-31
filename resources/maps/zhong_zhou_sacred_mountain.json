@@ -1,0 +1,182 @@
+{
+  "map_id": 5002,
+  "name": "圣山",
+  "map_type": 2,
+  "width": 150,
+  "height": 150,
+  "region_size": 50,
+  "tile_width": 10,
+  "tile_height": 10,
+  "is_instance": false,
+  "max_players": 500,
+  "description": "大陆最高山峰，山顶有神秘宫殿，是中州的野外地图2。",
+  "background": "default_bg.jpg",
+  "music": "mountain",
+  "weather_type": "clear",
+  "min_level": 30,
+  "max_level": 100,
+  "respawn_rate": 1.0,
+  "tile_map": "mountain",
+  "spawn_points": [
+    {
+      "type": "player",
+      "id": 1,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "name": "Spawn Point 1"
+    },
+    {
+      "type": "monster",
+      "id": 5000,
+      "x": 30,
+      "y": 30,
+      "z": 0,
+      "name": "mountain_goblin"
+    },
+    {
+      "type": "monster",
+      "id": 5001,
+      "x": 120,
+      "y": 30,
+      "z": 0,
+      "name": "mountain_goblin"
+    },
+    {
+      "type": "monster",
+      "id": 5002,
+      "x": 30,
+      "y": 120,
+      "z": 0,
+      "name": "mountain_tiger"
+    },
+    {
+      "type": "monster",
+      "id": 5003,
+      "x": 120,
+      "y": 120,
+      "z": 0,
+      "name": "mountain_tiger"
+    },
+    {
+      "type": "monster",
+      "id": 5004,
+      "x": 75,
+      "y": 75,
+      "z": 0,
+      "name": "mountain_guardian"
+    }
+  ],
+  "teleport_points": [
+    {
+      "id": 1,
+      "map_id": 5002,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "target_map_id": 5001,
+      "target_x": 150,
+      "target_y": 150,
+      "target_z": 0,
+      "name": "返回中央平原",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "map_id": 5002,
+      "x": 100,
+      "y": 100,
+      "z": 0,
+      "target_map_id": 5003,
+      "target_x": 50,
+      "target_y": 50,
+      "target_z": 0,
+      "name": "前往远古遗迹",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "map_id": 5002,
+      "x": 120,
+      "y": 30,
+      "z": 0,
+      "target_map_id": 5004,
+      "target_x": 30,
+      "target_y": 50,
+      "target_z": 0,
+      "name": "前往玄元城",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    }
+  ],
+  "buildings": [],
+  "resources": [
+    {
+      "id": 1,
+      "type": "celestial_herb",
+      "x": 30,
+      "y": 80,
+      "amount": 20
+    },
+    {
+      "id": 2,
+      "type": "celestial_herb",
+      "x": 70,
+      "y": 30,
+      "amount": 18
+    },
+    {
+      "id": 3,
+      "type": "celestial_herb",
+      "x": 120,
+      "y": 80,
+      "amount": 22
+    },
+    {
+      "id": 4,
+      "type": "celestial_herb",
+      "x": 80,
+      "y": 120,
+      "amount": 19
+    }
+  ],
+  "obstacles": [
+    {
+      "id": 1,
+      "type": "mountain",
+      "x": 40,
+      "y": 40,
+      "width": 10,
+      "height": 10
+    },
+    {
+      "id": 2,
+      "type": "mountain",
+      "x": 110,
+      "y": 70,
+      "width": 15,
+      "height": 15
+    }
+  ],
+  "npcs": [
+    {
+      "id": 1,
+      "name": "圣山守护者",
+      "x": 75,
+      "y": 75,
+      "type": "quest_giver"
+    },
+    {
+      "id": 2,
+      "name": "隐士",
+      "x": 50,
+      "y": 100,
+      "type": "merchant"
+    }
+  ]
+}

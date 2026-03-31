@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +25,7 @@ type Currency struct {
 }
 
 // CurrencyManager 货币管理器
+
 type CurrencyManager struct {
 	mu        sync.RWMutex
 	currencies map[id.PlayerIdType]map[CurrencyType]int64

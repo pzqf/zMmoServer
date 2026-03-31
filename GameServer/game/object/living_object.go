@@ -4,10 +4,10 @@ import (
 	"sync"
 
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
-// LivingObject 生物对象（玩家、NPC、怪物等的基类）
+// LivingObject 生物对象（玩家、NPC、怪物等的基类
 type LivingObject struct {
 	*GameObject
 	mu         sync.RWMutex
@@ -213,3 +213,4 @@ func (lo *LivingObject) ConsumeMP(amount int32) bool {
 	lo.mp -= amount
 	return true
 }
+

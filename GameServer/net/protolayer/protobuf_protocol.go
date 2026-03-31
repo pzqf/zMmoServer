@@ -28,11 +28,11 @@ func (p *ProtobufProtocol) Encode(msgID uint32, data []byte) ([]byte, error) {
 	totalLength := 4 + 2 + len(data)
 	buffer := bytes.NewBuffer(make([]byte, 0, totalLength))
 
-	if err := binary.Write(buffer, binary.BigEndian, uint32(totalLength)); err != nil {
+	if err := binary.Write(buffer, binary.LittleEndian, uint32(totalLength)); err != nil {
 		return nil, err
 	}
 
-	if err := binary.Write(buffer, binary.BigEndian, uint16(msgID)); err != nil {
+	if err := binary.Write(buffer, binary.LittleEndian, uint16(msgID)); err != nil {
 		return nil, err
 	}
 
@@ -51,12 +51,12 @@ func (p *ProtobufProtocol) Decode(data []byte) (uint32, []byte, error) {
 	reader := bytes.NewReader(data)
 
 	var length uint32
-	if err := binary.Read(reader, binary.BigEndian, &length); err != nil {
+	if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
 		return 0, nil, err
 	}
 
 	var msgID uint32
-	if err := binary.Read(reader, binary.BigEndian, &msgID); err != nil {
+	if err := binary.Read(reader, binary.LittleEndian, &msgID); err != nil {
 		return 0, nil, err
 	}
 

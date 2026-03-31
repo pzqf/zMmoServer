@@ -2,7 +2,7 @@ package object
 
 import (
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // NPC NPC对象
@@ -139,3 +139,4 @@ func (n *NPC) CanTalk() bool {
 func (n *NPC) CanTrade() bool {
 	return len(n.shopItems) > 0 && n.state == NPCStateIdle
 }
+

@@ -3,30 +3,30 @@ package item
 import (
 	"sync"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // ItemType 物品类型
 type ItemType int32
 
 const (
-	ItemTypeWeapon   ItemType = 1 // 武器
-	ItemTypeArmor    ItemType = 2 // 防具
-	ItemTypeAccessory ItemType = 3 // 饰品
+	ItemTypeWeapon     ItemType = 1 // 武器
+	ItemTypeArmor      ItemType = 2 // 防具
+	ItemTypeAccessory  ItemType = 3 // 饰品
 	ItemTypeConsumable ItemType = 4 // 消耗品
-	ItemTypeMaterial ItemType = 5 // 材料
-	ItemTypeQuest    ItemType = 6 // 任务物品
-	ItemTypeCurrency ItemType = 7 // 货币
+	ItemTypeMaterial   ItemType = 5 // 材料
+	ItemTypeQuest      ItemType = 6 // 任务物品
+	ItemTypeCurrency   ItemType = 7 // 货币
 )
 
 // ItemQuality 物品品质
 type ItemQuality int32
 
 const (
-	ItemQualityNormal   ItemQuality = 1 // 普通
-	ItemQualityGood     ItemQuality = 2 // 良好
-	ItemQualityRare     ItemQuality = 3 // 稀有
-	ItemQualityEpic     ItemQuality = 4 // 史诗
+	ItemQualityNormal    ItemQuality = 1 // 普通
+	ItemQualityGood      ItemQuality = 2 // 良好
+	ItemQualityRare      ItemQuality = 3 // 稀有
+	ItemQualityEpic      ItemQuality = 4 // 史诗
 	ItemQualityLegendary ItemQuality = 5 // 传说
 )
 
@@ -140,7 +140,7 @@ func (i *Item) ReduceCount(count int32) bool {
 	return true
 }
 
-// GetMaxStack 获取最大堆叠数量
+// GetMaxStack 获取最大堆叠数
 func (i *Item) GetMaxStack() int32 {
 	i.mu.RLock()
 	defer i.mu.RUnlock()

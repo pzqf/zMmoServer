@@ -9,8 +9,7 @@ import (
 	"github.com/pzqf/zMmoServer/GatewayServer/auth"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
 	"github.com/pzqf/zMmoServer/GatewayServer/connection"
-	"github.com/pzqf/zMmoServer/GatewayServer/protocol"
-	"github.com/pzqf/zMmoShared/net/protolayer"
+	"github.com/pzqf/zCommon/net/protolayer"
 	"go.uber.org/zap"
 )
 
@@ -18,17 +17,15 @@ type TCPService struct {
 	config          *config.Config
 	netServer       *zNet.TcpServer
 	connManager     *connection.ConnectionManager
-	protocolParser  *protocol.ProtocolHandler
 	compressionCfg  *protolayer.CompressionConfig
 	securityManager *auth.SecurityManager
 }
 
-func NewTCPService(cfg *config.Config, netServer *zNet.TcpServer, connManager *connection.ConnectionManager, protocolParser *protocol.ProtocolHandler, compressionCfg *protolayer.CompressionConfig, securityManager *auth.SecurityManager) *TCPService {
+func NewTCPService(cfg *config.Config, netServer *zNet.TcpServer, connManager *connection.ConnectionManager, compressionCfg *protolayer.CompressionConfig, securityManager *auth.SecurityManager) *TCPService {
 	return &TCPService{
 		config:          cfg,
 		netServer:       netServer,
 		connManager:     connManager,
-		protocolParser:  protocolParser,
 		compressionCfg:  compressionCfg,
 		securityManager: securityManager,
 	}
@@ -74,3 +71,4 @@ func (ts *TCPService) SendToClient(sessionID zNet.SessionIdType, data []byte) er
 func (ts *TCPService) GetSessionCount() int {
 	return len(ts.netServer.GetAllSession())
 }
+

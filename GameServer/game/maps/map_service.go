@@ -4,187 +4,206 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"net"
-	"sync"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/tables"
+	"github.com/pzqf/zCommon/consistency"
+	"github.com/pzqf/zCommon/crossserver"
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/config"
+	"github.com/pzqf/zMmoServer/GameServer/connection"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/object"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 // MapService 地图服务
+
 type MapService struct {
-	config        *config.Config
-	protocol      protolayer.Protocol
-	maps          map[id.MapIdType]*Map
-	mapsMu        sync.RWMutex
-	mapServerAddr string
-	mapServerConn net.Conn // 与MapServer的连接
-	connMu        sync.Mutex
+	config            *config.Config
+	protocol          protolayer.Protocol
+	maps              *zMap.TypedMap[id.MapIdType, *Map]
+	connectionManager *connection.ConnectionManager
+	pendingAttacks    *zMap.TypedMap[string, chan mapAttackResult]
+	pendingByReq      *zMap.TypedMap[uint64, chan mapAttackResult]
+	outbox            consistency.OutboxStore
+	inbox             consistency.InboxStore
+	retryCtx          context.Context
+	retryCancel       context.CancelFunc
+	onOutboxChanged   func(OutboxStats)
+}
+
+const maxOutboxRetry = 5
+
+type OutboxStats struct {
+	Pending int
+	Dead    int
+}
+
+type mapAttackResult struct {
+	damage   int64
+	targetHP int64
+	success  bool
+	errorMsg string
 }
 
 // NewMapService 创建地图服务
 func NewMapService(cfg *config.Config, protocol protolayer.Protocol) *MapService {
 	return &MapService{
-		config:        cfg,
-		protocol:      protocol,
-		maps:          make(map[id.MapIdType]*Map),
-		mapServerAddr: cfg.MapServer.MapServerAddr,
+		config:         cfg,
+		protocol:       protocol,
+		maps:           zMap.NewTypedMap[id.MapIdType, *Map](),
+		pendingAttacks: zMap.NewTypedMap[string, chan mapAttackResult](),
+		pendingByReq:   zMap.NewTypedMap[uint64, chan mapAttackResult](),
+		outbox:         consistency.NewMemoryOutbox(),
+		inbox:          consistency.NewMemoryInbox(),
 	}
+}
+
+// SetConnectionManager 设置连接管理器
+func (ms *MapService) SetConnectionManager(connManager *connection.ConnectionManager) {
+	ms.connectionManager = connManager
+}
+
+// SetOnOutboxStatsChanged 设置Outbox状态变更回调（用于实时监控更新）
+func (ms *MapService) SetOnOutboxStatsChanged(cb func(OutboxStats)) {
+	ms.onOutboxChanged = cb
+}
+
+// GetOutboxPendingMessages 返回待重试消息快照（用于监控/排障）
+func (ms *MapService) GetOutboxPendingMessages(limit int) []consistency.OutboxMessage {
+	return ms.outbox.ListPending(limit)
+}
+
+// GetOutboxDeadLetters 返回死信消息快照（用于监控/排障）
+func (ms *MapService) GetOutboxDeadLetters(limit int) []consistency.OutboxMessage {
+	return ms.outbox.ListDeadLetters(limit)
+}
+
+// GetOutboxStats 返回当前Outbox统计（用于监控/日志）
+func (ms *MapService) GetOutboxStats() OutboxStats {
+	return OutboxStats{
+		Pending: ms.outbox.CountPending(),
+		Dead:    ms.outbox.CountDeadLetters(),
+	}
+}
+
+// PurgeOutboxDeadLetters 清理超过指定时长的死信
+func (ms *MapService) PurgeOutboxDeadLetters(olderThan time.Duration) int {
+	removed := ms.outbox.PurgeDeadLetters(olderThan)
+	ms.publishOutboxStats()
+	return removed
 }
 
 // Start 启动地图服务
 func (ms *MapService) Start(ctx context.Context) error {
 	zLog.Info("Starting MapService...")
 
-	// 加载地图
-	ms.loadMaps()
-
-	// 连接到MapServer
-	err := ms.connectToMapServer()
-	if err != nil {
-		zLog.Error("Failed to connect to MapServer", zap.Error(err))
-		// 继续启动，MapServer连接失败不影响服务启动
+	// 严格加载地图配置，缺失配置直接启动失败
+	if err := ms.loadMaps(); err != nil {
+		return err
 	}
+	ms.retryCtx, ms.retryCancel = context.WithCancel(ctx)
+	go ms.outboxRetryLoop()
 
 	zLog.Info("MapService started successfully")
-	return nil
-}
-
-// connectToMapServer 连接到MapServer
-func (ms *MapService) connectToMapServer() error {
-	zLog.Info("Connecting to MapServer...", zap.String("addr", ms.mapServerAddr))
-
-	conn, err := net.Dial("tcp", ms.mapServerAddr)
-	if err != nil {
-		return fmt.Errorf("failed to connect to MapServer: %w", err)
-	}
-
-	ms.connMu.Lock()
-	ms.mapServerConn = conn
-	ms.connMu.Unlock()
-
-	zLog.Info("Connected to MapServer", zap.String("addr", ms.mapServerAddr))
-
-	// 发送认证请求
-	return ms.sendMapServerAuthRequest(conn)
-}
-
-// sendMapServerAuthRequest 发送MapServer认证请求
-func (ms *MapService) sendMapServerAuthRequest(conn net.Conn) error {
-	req := &protocol.MapServerAuthRequest{
-		MapServerId: "MapServer-1",
-		Version:     "1.0.0",
-	}
-
-	data, err := proto.Marshal(req)
-	if err != nil {
-		return fmt.Errorf("failed to marshal auth request: %w", err)
-	}
-
-	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-	header := make([]byte, 16)
-	protoId := 400 // MSG_INTERNAL_MAP_ENTER_REQUEST
-	version := 1
-	dataLen := len(data)
-	isCompressed := 0
-
-	// 使用大端序编码
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
-
-	// 发送消息
-	response := append(header, data...)
-	_, err = conn.Write(response)
-	if err != nil {
-		return fmt.Errorf("failed to send auth request: %w", err)
-	}
-
-	// 读取响应
-	buffer := make([]byte, 4096)
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := conn.Read(buffer)
-	if err != nil {
-		return fmt.Errorf("failed to read auth response: %w", err)
-	}
-
-	// 解析zNet格式的响应
-	if n < 16 {
-		return fmt.Errorf("invalid response length: %d", n)
-	}
-
-	respProtoId := int(binary.BigEndian.Uint32(buffer[:4]))
-	_ = int(binary.BigEndian.Uint32(buffer[4:8]))
-	respLen := int(binary.BigEndian.Uint32(buffer[8:12]))
-	_ = int(binary.BigEndian.Uint32(buffer[12:16]))
-
-	if respProtoId != 401 { // MSG_INTERNAL_MAP_ENTER_RESPONSE
-		return fmt.Errorf("unexpected response message ID: %d", respProtoId)
-	}
-
-	if n < 16+respLen {
-		return fmt.Errorf("response length mismatch: expected %d, got %d", 16+respLen, n)
-	}
-
-	var resp protocol.MapServerAuthResponse
-	if err := proto.Unmarshal(buffer[16:16+respLen], &resp); err != nil {
-		return fmt.Errorf("failed to unmarshal auth response: %w", err)
-	}
-
-	if !resp.Success {
-		return fmt.Errorf("MapServer auth failed: %s", resp.ErrorMsg)
-	}
-
-	zLog.Info("MapServer auth successful", zap.String("game_server_id", resp.GameServerId))
 	return nil
 }
 
 // Stop 停止地图服务
 func (ms *MapService) Stop(ctx context.Context) error {
 	zLog.Info("Stopping MapService...")
+	if ms.retryCancel != nil {
+		ms.retryCancel()
+	}
 
 	// 清理地图
-	ms.mapsMu.Lock()
-	ms.maps = make(map[id.MapIdType]*Map)
-	ms.mapsMu.Unlock()
+	ms.maps.Clear()
 
 	zLog.Info("MapService stopped")
 	return nil
 }
 
 // loadMaps 加载地图
-func (ms *MapService) loadMaps() {
+func (ms *MapService) loadMaps() error {
+	// 从Excel配置表加载地图数据
+	mapTableLoader := tables.NewMapTableLoader()
+	excelDir := "resources/excel_tables"
+
+	err := mapTableLoader.Load(excelDir)
+	if err != nil {
+		return fmt.Errorf("failed to load map tables from %s: %w", excelDir, err)
+	}
+
+	// 加载所有地图
+	maps := mapTableLoader.GetAllMaps()
+	for mapID, mapConfig := range maps {
+		newMap := NewMap(id.MapIdType(mapID), mapID, mapConfig.Name, float32(mapConfig.Width), float32(mapConfig.Height))
+		ms.maps.Store(id.MapIdType(mapID), newMap)
+		zLog.Info("Map loaded from config", zap.Int32("map_id", mapID), zap.String("name", mapConfig.Name))
+	}
+
+	if len(maps) == 0 {
+		return fmt.Errorf("map table loaded but no maps found in %s/map.xlsx", excelDir)
+	}
+
+	return nil
+}
+
+// loadDefaultMaps 加载默认地图
+func (ms *MapService) loadDefaultMaps() {
 	// 加载新手村地图
 	mapID := id.MapIdType(1001)
 	mapName := "新手村"
 	width, height := float32(500), float32(500)
 
-	ms.mapsMu.Lock()
-	ms.maps[mapID] = NewMap(mapID, 1001, mapName, width, height)
-	ms.mapsMu.Unlock()
+	ms.maps.Store(mapID, NewMap(mapID, 1001, mapName, width, height))
 
-	zLog.Info("Map loaded", zap.Int32("map_id", int32(mapID)), zap.String("name", mapName))
+	// 加载主城地图
+	mapID2 := id.MapIdType(1002)
+	mapName2 := "主城"
+	width2, height2 := float32(800), float32(800)
+
+	ms.maps.Store(mapID2, NewMap(mapID2, 1002, mapName2, width2, height2))
+
+	// 加载野外地图
+	mapID3 := id.MapIdType(2001)
+	mapName3 := "野外"
+	width3, height3 := float32(1000), float32(1000)
+
+	ms.maps.Store(mapID3, NewMap(mapID3, 2001, mapName3, width3, height3))
+
+	zLog.Info("Default maps loaded")
 }
 
 // GetMap 获取地图
 func (ms *MapService) GetMap(mapID id.MapIdType) (*Map, error) {
-	ms.mapsMu.RLock()
-	defer ms.mapsMu.RUnlock()
-
-	if m, exists := ms.maps[mapID]; exists {
-		return m, nil
+	m, exists := ms.maps.Load(mapID)
+	if !exists {
+		return nil, fmt.Errorf("map not found: %d", mapID)
 	}
+	return m, nil
+}
 
-	return nil, fmt.Errorf("map not found: %d", mapID)
+// GetDefaultMapID 返回可用的默认地图ID
+func (ms *MapService) GetDefaultMapID() id.MapIdType {
+	var defaultMapID id.MapIdType
+	ms.maps.Range(func(mapID id.MapIdType, m *Map) bool {
+		defaultMapID = mapID
+		return false
+	})
+
+	if defaultMapID == 0 {
+		return id.MapIdType(1001)
+	}
+	return defaultMapID
 }
 
 // HandlePlayerEnterMap 处理玩家进入地图
@@ -220,37 +239,136 @@ func (ms *MapService) HandlePlayerEnterMap(playerID id.PlayerIdType, mapID id.Ma
 	return nil
 }
 
-// sendMapEnterRequest 发送进入地图请求到MapServer
-func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	ms.connMu.Lock()
-	conn := ms.mapServerConn
-	ms.connMu.Unlock()
-
-	if conn == nil {
-		// 尝试重新连接
-		err := ms.connectToMapServer()
-		if err != nil {
-			return fmt.Errorf("no connection to MapServer: %w", err)
-		}
-
-		ms.connMu.Lock()
-		conn = ms.mapServerConn
-		ms.connMu.Unlock()
-
-		if conn == nil {
-			return fmt.Errorf("failed to connect to MapServer")
-		}
+// sendMapMessage 发送消息到MapServer
+func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byte, meta crossserver.Meta) error {
+	if ms.connectionManager == nil {
+		return fmt.Errorf("connection manager not set")
 	}
 
+	enveloped := crossserver.Wrap(meta, data)
+	msg := consistency.OutboxMessage{
+		RequestID:   meta.RequestID,
+		Topic:       fmt.Sprintf("map:%d:proto:%d", mapID, protoId),
+		TargetMapID: int(mapID),
+		ProtoID:     protoId,
+		Payload:     enveloped,
+	}
+	ms.outbox.Add(msg)
+	ms.outbox.MarkAttempt(meta.RequestID, nil)
+	ms.publishOutboxStats()
+
+	err := ms.sendFramedToMap(int(mapID), protoId, enveloped)
+	if err != nil {
+		ms.outbox.MarkAttempt(meta.RequestID, err)
+		zLog.Warn("Cross-server send failed",
+			zap.Uint64("trace_id", meta.TraceID),
+			zap.Uint64("request_id", meta.RequestID),
+			zap.Int("proto_id", protoId),
+			zap.Int32("map_id", int32(mapID)),
+			zap.Error(err))
+		return err
+	}
+	ms.outbox.MarkSent(meta.RequestID)
+	ms.publishOutboxStats()
+	zLog.Debug("Cross-server send succeeded",
+		zap.Uint64("trace_id", meta.TraceID),
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Int("proto_id", protoId),
+		zap.Int32("map_id", int32(mapID)))
+	return nil
+}
+
+func (ms *MapService) sendFramedToMap(mapID int, protoId int, enveloped []byte) error {
+	header := make([]byte, 16)
+	version := 1
+	dataLen := len(enveloped)
+	isCompressed := 0
+
+	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
+	binary.BigEndian.PutUint32(header[4:8], uint32(version))
+	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
+	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
+
+	message := append(header, enveloped...)
+
+	// 使用ConnectionManager发送消息到MapServer
+	err := ms.connectionManager.SendToMap(int(mapID), message)
+	if err != nil {
+		return fmt.Errorf("failed to send map message: %w", err)
+	}
+	return nil
+}
+
+func (ms *MapService) outboxRetryLoop() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ms.retryCtx.Done():
+			return
+		case <-ticker.C:
+			pending := ms.outbox.ListPending(50)
+			if dead := ms.outbox.ListDeadLetters(1); len(dead) > 0 {
+				zLog.Warn("Outbox dead-letter exists", zap.Int("sample_count", len(dead)))
+			}
+			for _, msg := range pending {
+				if msg.Attempts >= maxOutboxRetry {
+					ms.outbox.MarkDeadLetter(msg.RequestID, "max retry attempts exceeded")
+					zLog.Error("Outbox message moved to dead-letter",
+						zap.Uint64("request_id", msg.RequestID),
+						zap.Int("attempts", msg.Attempts),
+						zap.String("topic", msg.Topic))
+					ms.publishOutboxStats()
+					continue
+				}
+
+				targetMapID, protoID := msg.TargetMapID, msg.ProtoID
+				if targetMapID == 0 || protoID == 0 {
+					parts := strings.Split(msg.Topic, ":")
+					if len(parts) >= 4 {
+						if mapID, err := strconv.Atoi(parts[1]); err == nil {
+							targetMapID = mapID
+						}
+						if pid, err := strconv.Atoi(parts[3]); err == nil {
+							protoID = pid
+						}
+					}
+				}
+				if targetMapID == 0 || protoID == 0 {
+					ms.outbox.MarkDeadLetter(msg.RequestID, "invalid target metadata")
+					ms.publishOutboxStats()
+					continue
+				}
+				ms.outbox.MarkAttempt(msg.RequestID, nil)
+				if err := ms.sendFramedToMap(targetMapID, protoID, msg.Payload); err != nil {
+					ms.outbox.MarkAttempt(msg.RequestID, err)
+					continue
+				}
+				ms.outbox.MarkSent(msg.RequestID)
+				ms.publishOutboxStats()
+			}
+		}
+	}
+}
+
+func (ms *MapService) publishOutboxStats() {
+	if ms.onOutboxChanged == nil {
+		return
+	}
+	ms.onOutboxChanged(ms.GetOutboxStats())
+}
+
+// sendMapEnterRequest 发送进入地图请求到MapServer
+func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
 	req := &protocol.MapEnterRequest{
 		PlayerId:     int64(playerID),
-		SessionId:    0, // 暂时设为0
+		SessionId:    0,
 		MapId:        int64(mapID),
 		X:            pos.X,
 		Y:            pos.Y,
 		Z:            pos.Z,
-		GameServerId: 1,        // 暂时设为1
-		PlayerData:   []byte{}, // 暂时为空
+		GameServerId: int32(ms.config.Server.ServerID),
+		PlayerData:   []byte{},
 	}
 
 	data, err := proto.Marshal(req)
@@ -258,73 +376,18 @@ func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.Map
 		return fmt.Errorf("failed to marshal map enter request: %w", err)
 	}
 
-	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-	header := make([]byte, 16)
-	protoId := 400 // MSG_INTERNAL_MAP_ENTER_REQUEST
-	version := 1
-	dataLen := len(data)
-	isCompressed := 0
-
-	// 使用大端序编码
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
-
-	// 发送消息
-	response := append(header, data...)
-	_, err = conn.Write(response)
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
+	err = ms.sendMapMessage(mapID, 400, data, meta)
 	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return fmt.Errorf("failed to send map enter request: %w", err)
+		return err
 	}
 
-	// 读取响应
-	buffer := make([]byte, 4096)
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := conn.Read(buffer)
-	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return fmt.Errorf("failed to read map enter response: %w", err)
-	}
+	// 注意：由于我们使用异步通信，这里不再等待响应
+	// 响应会通过ConnectionManager的接收处理
 
-	// 解析zNet格式的响应
-	if n < 16 {
-		return fmt.Errorf("invalid response length: %d", n)
-	}
-
-	respProtoId := int(binary.BigEndian.Uint32(buffer[:4]))
-	_ = int(binary.BigEndian.Uint32(buffer[4:8]))
-	respLen := int(binary.BigEndian.Uint32(buffer[8:12]))
-	_ = int(binary.BigEndian.Uint32(buffer[12:16]))
-
-	if respProtoId != 401 { // MSG_INTERNAL_MAP_ENTER_RESPONSE
-		return fmt.Errorf("unexpected response message ID: %d", respProtoId)
-	}
-
-	if n < 16+respLen {
-		return fmt.Errorf("response length mismatch: expected %d, got %d", 16+respLen, n)
-	}
-
-	var resp protocol.MapEnterResponse
-	if err := proto.Unmarshal(buffer[16:16+respLen], &resp); err != nil {
-		return fmt.Errorf("failed to unmarshal map enter response: %w", err)
-	}
-
-	if !resp.Success {
-		return fmt.Errorf("MapServer enter map failed: %s", resp.ErrorMsg)
-	}
-
-	zLog.Info("MapServer enter map successful",
+	zLog.Info("MapServer enter map request sent",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int64("object_id", resp.ObjectId),
-		zap.Int64("map_id", resp.MapId))
+		zap.Int32("map_id", int32(mapID)))
 
 	return nil
 }
@@ -387,26 +450,6 @@ func (ms *MapService) HandlePlayerMove(playerID id.PlayerIdType, mapID id.MapIdT
 
 // sendMapMoveRequest 发送移动请求到MapServer
 func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, pos common.Vector3) error {
-	ms.connMu.Lock()
-	conn := ms.mapServerConn
-	ms.connMu.Unlock()
-
-	if conn == nil {
-		// 尝试重新连接
-		err := ms.connectToMapServer()
-		if err != nil {
-			return fmt.Errorf("no connection to MapServer: %w", err)
-		}
-
-		ms.connMu.Lock()
-		conn = ms.mapServerConn
-		ms.connMu.Unlock()
-
-		if conn == nil {
-			return fmt.Errorf("failed to connect to MapServer")
-		}
-	}
-
 	req := &protocol.MapMoveRequest{
 		PlayerId: int64(playerID),
 		ObjectId: int64(objectID),
@@ -421,72 +464,18 @@ func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.O
 		return fmt.Errorf("failed to marshal map move request: %w", err)
 	}
 
-	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-	header := make([]byte, 16)
-	protoId := 404 // MSG_INTERNAL_MAP_MOVE_SYNC
-	version := 1
-	dataLen := len(data)
-	isCompressed := 0
-
-	// 使用大端序编码
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
-
-	// 发送消息
-	response := append(header, data...)
-	_, err = conn.Write(response)
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
+	err = ms.sendMapMessage(mapID, 404, data, meta)
 	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return fmt.Errorf("failed to send map move request: %w", err)
+		return err
 	}
 
-	// 读取响应
-	buffer := make([]byte, 4096)
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := conn.Read(buffer)
-	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return fmt.Errorf("failed to read map move response: %w", err)
-	}
+	// 注意：由于我们使用异步通信，这里不再等待响应
+	// 响应会通过ConnectionManager的接收处理
 
-	// 解析zNet格式的响应
-	if n < 16 {
-		return fmt.Errorf("invalid response length: %d", n)
-	}
-
-	respProtoId := int(binary.BigEndian.Uint32(buffer[:4]))
-	_ = int(binary.BigEndian.Uint32(buffer[4:8]))
-	respLen := int(binary.BigEndian.Uint32(buffer[8:12]))
-	_ = int(binary.BigEndian.Uint32(buffer[12:16]))
-
-	if respProtoId != 405 { // MSG_INTERNAL_MAP_MOVE_RESPONSE
-		return fmt.Errorf("unexpected response message ID: %d", respProtoId)
-	}
-
-	if n < 16+respLen {
-		return fmt.Errorf("response length mismatch: expected %d, got %d", 16+respLen, n)
-	}
-
-	var resp protocol.MapMoveResponse
-	if err := proto.Unmarshal(buffer[16:16+respLen], &resp); err != nil {
-		return fmt.Errorf("failed to unmarshal map move response: %w", err)
-	}
-
-	if !resp.Success {
-		return fmt.Errorf("MapServer move failed")
-	}
-
-	zLog.Debug("MapServer move successful",
+	zLog.Debug("MapServer move request sent",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int64("resp_player_id", resp.PlayerId))
+		zap.Int32("map_id", int32(mapID)))
 
 	return nil
 }
@@ -521,10 +510,7 @@ func (ms *MapService) HandlePlayerAttack(playerID id.PlayerIdType, mapID id.MapI
 	damage, targetHP, err := ms.sendMapAttackRequest(playerID, id.ObjectIdType(playerID), mapID, targetID)
 	if err != nil {
 		zLog.Warn("Failed to send map attack request to MapServer", zap.Error(err))
-		// 继续执行，MapServer通信失败不影响本地处理
-		// 使用默认伤害值
-		damage = 10
-		targetHP = 90
+		return 0, 0, err
 	}
 
 	zLog.Info("Player attacked monster",
@@ -539,28 +525,58 @@ func (ms *MapService) HandlePlayerAttack(playerID id.PlayerIdType, mapID id.MapI
 	return damage, targetHP, nil
 }
 
-// sendMapAttackRequest 发送攻击请求到MapServer
-func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
-	ms.connMu.Lock()
-	conn := ms.mapServerConn
-	ms.connMu.Unlock()
+func (ms *MapService) attackResultKey(playerID id.PlayerIdType, targetID id.ObjectIdType) string {
+	return fmt.Sprintf("%d:%d", playerID, targetID)
+}
 
-	if conn == nil {
-		// 尝试重新连接
-		err := ms.connectToMapServer()
-		if err != nil {
-			return 0, 0, fmt.Errorf("no connection to MapServer: %w", err)
-		}
+func (ms *MapService) registerPendingAttack(playerID id.PlayerIdType, targetID id.ObjectIdType, requestID uint64) chan mapAttackResult {
+	key := ms.attackResultKey(playerID, targetID)
+	ch := make(chan mapAttackResult, 1)
+	ms.pendingAttacks.Store(key, ch)
+	if requestID != 0 {
+		ms.pendingByReq.Store(requestID, ch)
+	}
+	return ch
+}
 
-		ms.connMu.Lock()
-		conn = ms.mapServerConn
-		ms.connMu.Unlock()
+func (ms *MapService) removePendingAttack(playerID id.PlayerIdType, targetID id.ObjectIdType, requestID uint64) {
+	key := ms.attackResultKey(playerID, targetID)
+	ms.pendingAttacks.Delete(key)
+	if requestID != 0 {
+		ms.pendingByReq.Delete(requestID)
+	}
+}
 
-		if conn == nil {
-			return 0, 0, fmt.Errorf("failed to connect to MapServer")
-		}
+// HandleMapAttackResponse 处理 MapServer 返回的攻击结果
+func (ms *MapService) HandleMapAttackResponse(requestID uint64, playerID id.PlayerIdType, targetID id.ObjectIdType, damage int64, targetHP int64, success bool, errorMsg string) {
+	if !ms.inbox.TryAccept(requestID) {
+		zLog.Warn("Duplicate map attack response ignored", zap.Uint64("request_id", requestID))
+		return
 	}
 
+	key := ms.attackResultKey(playerID, targetID)
+
+	ch, exists := ms.pendingByReq.Load(requestID)
+	if !exists {
+		ch, exists = ms.pendingAttacks.Load(key)
+	}
+	if !exists {
+		return
+	}
+
+	select {
+	case ch <- mapAttackResult{
+		damage:   damage,
+		targetHP: targetHP,
+		success:  success,
+		errorMsg: errorMsg,
+	}:
+	default:
+	}
+}
+
+// sendMapAttackRequest 发送攻击请求到MapServer
+func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
 	req := &protocol.MapAttackRequest{
 		PlayerId: int64(playerID),
 		ObjectId: int64(objectID),
@@ -573,76 +589,29 @@ func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id
 		return 0, 0, fmt.Errorf("failed to marshal map attack request: %w", err)
 	}
 
-	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-	header := make([]byte, 16)
-	protoId := 406 // MSG_INTERNAL_MAP_ATTACK_REQUEST
-	version := 1
-	dataLen := len(data)
-	isCompressed := 0
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
+	respCh := ms.registerPendingAttack(playerID, targetID, meta.RequestID)
+	defer ms.removePendingAttack(playerID, targetID, meta.RequestID)
 
-	// 使用大端序编码
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
-
-	// 发送消息
-	response := append(header, data...)
-	_, err = conn.Write(response)
+	err = ms.sendMapMessage(mapID, 406, data, meta)
 	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return 0, 0, fmt.Errorf("failed to send map attack request: %w", err)
+		return 0, 0, err
 	}
 
-	// 读取响应
-	buffer := make([]byte, 4096)
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	n, err := conn.Read(buffer)
-	if err != nil {
-		// 连接可能已断开，重置连接
-		ms.connMu.Lock()
-		ms.mapServerConn = nil
-		ms.connMu.Unlock()
-		return 0, 0, fmt.Errorf("failed to read map attack response: %w", err)
-	}
-
-	// 解析zNet格式的响应
-	if n < 16 {
-		return 0, 0, fmt.Errorf("invalid response length: %d", n)
-	}
-
-	respProtoId := int(binary.BigEndian.Uint32(buffer[:4]))
-	_ = int(binary.BigEndian.Uint32(buffer[4:8]))
-	respLen := int(binary.BigEndian.Uint32(buffer[8:12]))
-	_ = int(binary.BigEndian.Uint32(buffer[12:16]))
-
-	if respProtoId != 407 { // MSG_INTERNAL_MAP_ATTACK_RESPONSE
-		return 0, 0, fmt.Errorf("unexpected response message ID: %d", respProtoId)
-	}
-
-	if n < 16+respLen {
-		return 0, 0, fmt.Errorf("response length mismatch: expected %d, got %d", 16+respLen, n)
-	}
-
-	var resp protocol.MapAttackResponse
-	if err := proto.Unmarshal(buffer[16:16+respLen], &resp); err != nil {
-		return 0, 0, fmt.Errorf("failed to unmarshal map attack response: %w", err)
-	}
-
-	if !resp.Success {
-		return 0, 0, fmt.Errorf("MapServer attack failed")
-	}
-
-	zLog.Debug("MapServer attack successful",
+	zLog.Debug("MapServer attack request sent",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int64("target_id", resp.TargetId),
-		zap.Int64("damage", resp.Damage),
-		zap.Int64("target_hp", resp.TargetHp))
+		zap.Int64("target_id", int64(targetID)),
+		zap.Int32("map_id", int32(mapID)))
 
-	return resp.Damage, resp.TargetHp, nil
+	select {
+	case result := <-respCh:
+		if !result.success {
+			return 0, 0, fmt.Errorf("map attack failed: %s", result.errorMsg)
+		}
+		return result.damage, result.targetHP, nil
+	case <-time.After(1500 * time.Millisecond):
+		return 0, 0, fmt.Errorf("map attack response timeout")
+	}
 }
 
 // SendMapEnterResponse 发送进入地图响应
@@ -661,8 +630,10 @@ func (ms *MapService) SendMapEnterResponse(conn interface{}, playerID id.PlayerI
 		return err
 	}
 
-	// 这里需要根据实际的连接类型发送消息
-	// 暂时返回nil
+	// 发送响应到客户端
+	// 注意：这里需要根据实际的连接类型实现发送逻辑
+	// 目前留作接口，后续根据具体连接类型实现
 	_ = data
+	_ = conn
 	return nil
 }

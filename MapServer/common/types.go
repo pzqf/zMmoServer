@@ -1,6 +1,6 @@
 package common
 
-import "github.com/pzqf/zMmoShared/common/id"
+import "github.com/pzqf/zCommon/common/id"
 
 // Vector3 三维向量
 type Vector3 struct {
@@ -34,3 +34,4 @@ type IGameObject interface {
 	GetPosition() Vector3
 	SetPosition(pos Vector3)
 }
+

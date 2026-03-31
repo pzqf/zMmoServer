@@ -2,7 +2,7 @@ package object
 
 import (
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // Item 物品对象
@@ -136,3 +136,4 @@ func (i *Item) SetPicked(picked bool) {
 func (i *Item) CanBePicked() bool {
 	return !i.isPicked && i.quantity > 0
 }
+

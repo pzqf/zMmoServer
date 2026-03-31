@@ -3,8 +3,6 @@ package skill
 import (
 	"sync"
 	"time"
-
-	"github.com/pzqf/zMmoShared/common/id"
 )
 
 // SkillType 技能类型
@@ -22,7 +20,7 @@ type SkillStatus int32
 const (
 	SkillStatusLocked   SkillStatus = 1 // 未解锁
 	SkillStatusUnlocked SkillStatus = 2 // 已解锁
-	SkillStatusMaxLevel SkillStatus = 3 // 已满级
+	SkillStatusMaxLevel SkillStatus = 3 // 已满等级
 )
 
 // SkillEffectType 技能效果类型
@@ -60,24 +58,24 @@ type SkillEffect struct {
 
 // Skill 技能结构
 type Skill struct {
-	mu           sync.RWMutex
-	skillID      int64
+	mu            sync.RWMutex
+	skillID       int64
 	skillConfigID int32
-	name         string
-	description  string
-	skillType    SkillType
-	status       SkillStatus
-	level        int32
-	maxLevel     int32
-	requireLevel int32
-	expCost      int64
-	goldCost     int64
-	effects      []*SkillEffect
-	cooldown     int32 // 毫秒
-	lastUseTime  int64
-	mpCost       int32
-	castTime     int32 // 毫秒
-	castRange    float32
+	name          string
+	description   string
+	skillType     SkillType
+	status        SkillStatus
+	level         int32
+	maxLevel      int32
+	requireLevel  int32
+	expCost       int64
+	goldCost      int64
+	effects       []*SkillEffect
+	cooldown      int32 // 毫秒
+	lastUseTime   int64
+	mpCost        int32
+	castTime      int32 // 毫秒
+	castRange     float32
 }
 
 // NewSkill 创建新技能
@@ -419,7 +417,7 @@ func (s *Skill) CalculateDamage(baseAttack float64) float64 {
 	return damage
 }
 
-// CalculateHeal 计算治疗量
+// CalculateHeal 计算治疗
 func (s *Skill) CalculateHeal(baseHeal float64) float64 {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

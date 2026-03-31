@@ -4,8 +4,8 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	playerservice "github.com/pzqf/zMmoServer/GameServer/service"
 	"github.com/pzqf/zMmoServer/GameServer/session"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/protocol"
 	"go.uber.org/zap"
 )
 
@@ -153,3 +153,4 @@ func (ph *PlayerHandler) HandlePlayerLogout(sessionID string) (*protocol.CommonR
 		Result: 0,
 	}, nil
 }
+

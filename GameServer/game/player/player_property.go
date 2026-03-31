@@ -1,7 +1,7 @@
 package player
 
 import (
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // GetAccountID 获取账号ID
@@ -107,87 +107,3 @@ func (p *Player) SetVipExp(exp int32) {
 	defer p.mu.Unlock()
 	p.vipExp = exp
 }
-
-// GetGuildID 获取公会ID
-func (p *Player) GetGuildID() id.GuildIdType {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.guildID
-}
-
-// SetGuildID 设置公会ID
-func (p *Player) SetGuildID(guildID id.GuildIdType) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.guildID = guildID
-}
-
-// HasGuild 是否有公会
-func (p *Player) HasGuild() bool {
-	return p.GetGuildID() > 0
-}
-
-// GetTeamID 获取队伍ID
-func (p *Player) GetTeamID() id.TeamIdType {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.teamID
-}
-
-// SetTeamID 设置队伍ID
-func (p *Player) SetTeamID(teamID id.TeamIdType) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.teamID = teamID
-}
-
-// HasTeam 是否有队伍
-func (p *Player) HasTeam() bool {
-	return p.GetTeamID() > 0
-}
-
-// GetFriendList 获取好友列表
-func (p *Player) GetFriendList() []id.PlayerIdType {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	result := make([]id.PlayerIdType, len(p.friendList))
-	copy(result, p.friendList)
-	return result
-}
-
-// AddFriend 添加好友
-func (p *Player) AddFriend(friendID id.PlayerIdType) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for _, id := range p.friendList {
-		if id == friendID {
-			return
-		}
-	}
-	p.friendList = append(p.friendList, friendID)
-}
-
-// RemoveFriend 移除好友
-func (p *Player) RemoveFriend(friendID id.PlayerIdType) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	for i, id := range p.friendList {
-		if id == friendID {
-			p.friendList = append(p.friendList[:i], p.friendList[i+1:]...)
-			return
-		}
-	}
-}
-
-// IsFriend 是否是好友
-func (p *Player) IsFriend(friendID id.PlayerIdType) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	for _, id := range p.friendList {
-		if id == friendID {
-			return true
-		}
-	}
-	return false
-}
-

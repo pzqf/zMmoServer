@@ -13,7 +13,7 @@ import (
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
 	"github.com/pzqf/zMmoServer/GatewayServer/connection"
 	"github.com/pzqf/zMmoServer/GatewayServer/version"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zCommon/protocol"
 	"go.uber.org/zap"
 )
 
@@ -75,7 +75,6 @@ func (hr *HeartbeatReporter) Start() {
 	}
 
 	hr.isRunning = true
-
 	go hr.reportLoop()
 
 	zLog.Info("Heartbeat reporter started",
@@ -117,7 +116,6 @@ func (hr *HeartbeatReporter) reportLoop() {
 func (hr *HeartbeatReporter) report() {
 	// 收集状态信息
 	status := hr.collectStatus()
-
 	// 创建符合 GlobalServer 要求的心跳请求
 	// 心跳上报时只需要上报在线人数和状态，不需要上报地址
 	heartbeatReq := &protocol.ServerHeartbeatRequest{
@@ -134,7 +132,7 @@ func (hr *HeartbeatReporter) report() {
 		return
 	}
 
-	// 使用正确的 URL 路径
+	// 使用正确的URL路径
 	url := fmt.Sprintf("http://%s/api/v1/server/heartbeat", hr.globalServerAddr)
 	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {

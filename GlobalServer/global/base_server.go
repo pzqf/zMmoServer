@@ -2,7 +2,12 @@ package global
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/pzqf/zCommon/common/id"
+	sharedDB "github.com/pzqf/zCommon/db"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
@@ -12,24 +17,26 @@ import (
 	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
 	"github.com/pzqf/zMmoServer/GlobalServer/serverstatus"
 	"github.com/pzqf/zMmoServer/GlobalServer/version"
-	"github.com/pzqf/zMmoShared/common/id"
-	sharedDB "github.com/pzqf/zMmoShared/db"
 	"go.uber.org/zap"
 )
 
 // ServerType 全局服类型
 const ServerTypeGlobal zServer.ServerType = "global"
 
-// BaseServer 全局服基础服务器
+// global 没有分组概念，使用默认分组 "default"
+const DefaultGroupID = "default"
+
+// BaseServer 全局服基础服务
 type BaseServer struct {
 	*zServer.BaseServer
-	Config      *config.Config
-	HTTPService *http.HttpService
-	DBService   *db.DBService
-	Metrics     *metrics.Metrics
+	Config           *config.Config
+	HTTPService      *http.HttpService
+	DBService        *db.DBService
+	Metrics          *metrics.Metrics
+	ServiceDiscovery *discovery.ServiceDiscovery
 }
 
-// NewBaseServer 创建全局服基础服务器
+// NewBaseServer 创建全局服基础服务
 func NewBaseServer() *BaseServer {
 	// 先创建子类实例
 	gs := &BaseServer{}
@@ -55,9 +62,13 @@ func (s *BaseServer) OnBeforeStart() error {
 		return nil
 	}
 
-	// 设置服务器ID（格式：前缀+ID）
-	serverId := fmt.Sprintf("global-%d", cfg.Server.ServerID)
-	s.SetId(serverId)
+	// 严格使用 6 位 ServerID（GroupID(4)+ServerIndex(2)）
+	serverID, err := id.ParseServerIDInt(int32(cfg.Server.ServerID))
+	if err != nil {
+		return fmt.Errorf("invalid global ServerID %d: %w", cfg.Server.ServerID, err)
+	}
+	serverIDStr := id.ServerIDString(serverID)
+	s.SetId(fmt.Sprintf("global-%s", serverIDStr))
 
 	// 初始化 DBManager（只初始化 GlobalServer 需要的 Repository）
 	dbConfigs := map[string]sharedDB.DBConfig{
@@ -68,14 +79,21 @@ func (s *BaseServer) OnBeforeStart() error {
 		return err
 	}
 
-	// 初始化 Redis 和服务器状态管理器
-	if err := serverstatus.InitManager(cfg.Redis.ToRedisConfig()); err != nil {
-		return fmt.Errorf("failed to init server status manager: %w", err)
-	}
+	// 初始化数据库表结构
+	dbMgr := sharedDB.GetMgr()
+	if dbMgr != nil {
+		conn := dbMgr.GetConnector("global")
+		if conn != nil {
+			if err := sharedDB.InitTables(conn, sharedDB.RepoTypeGlobal); err != nil {
+				zLog.Error("Failed to initialize database tables", zap.Error(err))
+				return err
+			}
 
-	// 从 MySQL 加载静态服务器配置
-	if err := s.loadStaticServers(); err != nil {
-		zLog.Warn("Failed to load static servers", zap.Error(err))
+			if err := sharedDB.InitDefaultData(conn); err != nil {
+				zLog.Error("Failed to initialize default data", zap.Error(err))
+				return err
+			}
+		}
 	}
 
 	// 初始化 ID 生成器
@@ -108,6 +126,128 @@ func (s *BaseServer) OnBeforeStart() error {
 	// 初始化数据库服务
 	dbService := db.NewDBService(cfg)
 	s.DBService = dbService
+
+	// 初始化服务发现
+	etcdEndpoints := strings.Split(cfg.Etcd.Endpoints, ",")
+	etcdConfig := &discovery.EtcdConfig{
+		Endpoints:      cfg.Etcd.Endpoints,
+		Username:       cfg.Etcd.Username,
+		Password:       cfg.Etcd.Password,
+		CACertPath:     cfg.Etcd.CACertPath,
+		ClientCertPath: cfg.Etcd.ClientCertPath,
+		ClientKeyPath:  cfg.Etcd.ClientKeyPath,
+	}
+	serviceDiscovery, err := discovery.NewServiceDiscoveryWithConfig(etcdEndpoints, etcdConfig)
+	if err != nil {
+		zLog.Error("Failed to create service discovery", zap.Error(err))
+		return fmt.Errorf("failed to create service discovery: %w", err)
+	}
+	s.ServiceDiscovery = serviceDiscovery
+	zLog.Info("Using etcd service discovery", zap.Strings("endpoints", etcdEndpoints))
+	// 注册服务发现组件
+	s.RegisterComponent("ServiceDiscovery", serviceDiscovery)
+
+	// 初始化服务器状态管理器（使用服务发现）
+	if err := serverstatus.InitManager(serviceDiscovery); err != nil {
+		return fmt.Errorf("failed to init server status manager: %w", err)
+	}
+
+	// 从 MySQL 加载静态服务器配置
+	if err := s.loadStaticServers(); err != nil {
+		zLog.Warn("Failed to load static servers", zap.Error(err))
+	}
+
+	// 注册当前服务
+	serviceInfo := &discovery.ServerInfo{
+		ID:          serverIDStr,
+		ServiceType: "global",
+		GroupID:     DefaultGroupID,
+		Status:      discovery.ServerStatusHealthy,
+		Address:     cfg.HTTP.ListenAddress,
+		Port:        0, // 全局服端口已在Address中包含
+		Load:        0,
+		Players:     0,
+		ReadyTime:   time.Now().Unix(),
+	}
+
+	zLog.Info("Attempting to register service",
+		zap.String("service_id", serviceInfo.ID),
+		zap.String("address", serviceInfo.Address))
+
+	// 服务注册，添加重试机制
+	maxRetries := 3
+	var registerErr error
+	for i := 0; i < maxRetries; i++ {
+		if err := serviceDiscovery.Register(serviceInfo); err != nil {
+			zLog.Warn("Failed to register service", zap.Error(err), zap.Int("retry", i+1))
+			registerErr = err
+			if s.Metrics != nil {
+				s.Metrics.IncrementServiceDiscoveryFailures()
+			}
+			time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
+		} else {
+			zLog.Info("Service registered successfully",
+				zap.String("service_id", serviceInfo.ID),
+				zap.String("address", serviceInfo.Address))
+			if s.Metrics != nil {
+				s.Metrics.IncrementServiceRegister()
+			}
+			registerErr = nil
+			break
+		}
+	}
+	if registerErr != nil {
+		return fmt.Errorf("failed to register service after %d retries: %w", maxRetries, registerErr)
+	}
+
+	// 启动心跳保持
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-s.GetContext().Done():
+				return
+			case <-ticker.C:
+				// 重新创建serviceInfo并更新字段
+				updatedInfo := &discovery.ServerInfo{
+					ID:          serverIDStr,
+					ServiceType: "global",
+					GroupID:     DefaultGroupID,
+					Status:      discovery.ServerStatusHealthy,
+					Address:     serviceInfo.Address,
+					Port:        serviceInfo.Port,
+					Load:        0,
+					Players:     0,
+					ReadyTime:   serviceInfo.ReadyTime,
+				}
+				// 心跳发送，添加重试机制
+				maxRetries := 2
+				var heartbeatErr error
+				for i := 0; i < maxRetries; i++ {
+					if err := serviceDiscovery.Register(updatedInfo); err != nil {
+						zLog.Warn("Failed to keep service alive", zap.Error(err), zap.Int("retry", i+1))
+						heartbeatErr = err
+						if s.Metrics != nil {
+							s.Metrics.IncrementServiceDiscoveryFailures()
+						}
+						time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
+					} else {
+						if s.Metrics != nil {
+							s.Metrics.IncrementServiceHeartbeat()
+						}
+						zLog.Debug("Service heartbeat kept alive", zap.String("service_id", serviceInfo.ID))
+						heartbeatErr = nil
+						break
+					}
+				}
+				if heartbeatErr != nil {
+					zLog.Error("Failed to keep service alive after retries", zap.Error(heartbeatErr))
+				}
+			}
+		}
+	}()
 
 	// 注册组件
 	s.RegisterComponent("Config", cfg)
@@ -155,6 +295,40 @@ func (s *BaseServer) OnBeforeStop() {
 	// 停止数据库服务
 	if s.DBService != nil {
 		s.DBService.Stop()
+	}
+
+	// 注销服务发现
+	if s.ServiceDiscovery != nil {
+		if s.Config != nil {
+			serverID, _ := id.ParseServerIDInt(int32(s.Config.Server.ServerID))
+			serviceID := id.ServerIDString(serverID)
+			// 服务注销，添加重试机制
+			maxRetries := 3
+			var unregisterErr error
+			for i := 0; i < maxRetries; i++ {
+				if err := s.ServiceDiscovery.Unregister("global", DefaultGroupID, serviceID); err != nil {
+					zLog.Warn("Failed to unregister service", zap.Error(err), zap.Int("retry", i+1))
+					unregisterErr = err
+					if s.Metrics != nil {
+						s.Metrics.IncrementServiceDiscoveryFailures()
+					}
+					time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
+				} else {
+					zLog.Info("Service unregistered successfully", zap.String("service_id", serviceID))
+					if s.Metrics != nil {
+						s.Metrics.IncrementServiceUnregister()
+					}
+					unregisterErr = nil
+					break
+				}
+			}
+			if unregisterErr != nil {
+				zLog.Error("Failed to unregister service after retries", zap.Error(unregisterErr))
+			}
+		}
+		if err := s.ServiceDiscovery.Close(); err != nil {
+			zLog.Warn("Failed to close service discovery", zap.Error(err))
+		}
 	}
 
 	// 关闭服务器状态管理器

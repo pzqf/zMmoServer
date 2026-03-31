@@ -8,6 +8,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zUtil/zConfig"
 )
 
@@ -18,6 +19,7 @@ type Config struct {
 	DDoS           zNet.DDoSConfig      `ini:"ddos"`
 	NetCompression NetCompressionConfig `ini:"net_compression"`
 	GameServer     GameServerConfig     `ini:"GameServer"`
+	Etcd           discovery.EtcdConfig `ini:"Etcd"`
 	Log            zLog.Config          `ini:"log"`
 	Metrics        MetricsConfig        `ini:"Metrics"`
 }
@@ -26,6 +28,7 @@ type Config struct {
 type ServerConfig struct {
 	ServerName        string `ini:"ServerName"`
 	ServerID          int    `ini:"ServerID"`
+	GroupID           int    `ini:"GroupID"`
 	ListenAddr        string `ini:"ListenAddr"`
 	ExternalAddr      string `ini:"ExternalAddr"`
 	MaxConnections    int    `ini:"MaxConnections"`
@@ -93,6 +96,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	config.Server = ServerConfig{
 		ServerName:        getConfigString(zcfg, "Server.ServerName", GetEnv("SERVER_NAME", "GatewayServer")),
 		ServerID:          serverID,
+		GroupID:           getConfigInt(zcfg, "Server.GroupID", 1),
 		ListenAddr:        listenAddr,
 		ExternalAddr:      externalAddr,
 		MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
@@ -164,6 +168,16 @@ func LoadConfig(configPath string) (*Config, error) {
 	config.Metrics = MetricsConfig{
 		Enabled:     getConfigBool(zcfg, "Metrics.Enabled", true),
 		MetricsAddr: getConfigString(zcfg, "Metrics.MetricsAddr", GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
+	}
+
+	// 解析etcd配置
+	config.Etcd = discovery.EtcdConfig{
+		Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", GetEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
+		Username:       getConfigString(zcfg, "Etcd.Username", ""),
+		Password:       getConfigString(zcfg, "Etcd.Password", ""),
+		CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+		ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+		ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 	}
 
 	// 验证配置

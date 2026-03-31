@@ -9,9 +9,9 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
-	"github.com/pzqf/zMmoShared/common/id"
-	"github.com/pzqf/zMmoShared/config/models"
-	"github.com/pzqf/zMmoShared/config/tables"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/config/tables"
 	"go.uber.org/zap"
 )
 
@@ -464,3 +464,4 @@ func calculateDistance(pos1, pos2 common.Vector3) float32 {
 	dz := pos1.Z - pos2.Z
 	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
 }
+

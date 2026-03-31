@@ -3,7 +3,7 @@ package auction
 import (
 	"sync"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // AuctionType 拍卖类型
@@ -14,15 +14,15 @@ const (
 	AuctionTypeBidding AuctionType = 2 // 竞拍
 )
 
-// AuctionStatus 拍卖状态
+// AuctionStatus 拍卖状�?
 type AuctionStatus int32
 
 const (
-	AuctionStatusPending  AuctionStatus = 0 // 待上架
-	AuctionStatusActive   AuctionStatus = 1 // 拍卖中
-	AuctionStatusSold     AuctionStatus = 2 // 已售出
-	AuctionStatusExpired  AuctionStatus = 3 // 已过期
-	AuctionStatusCanceled AuctionStatus = 4 // 已取消
+	AuctionStatusPending  AuctionStatus = 0 // 待上�?
+	AuctionStatusActive   AuctionStatus = 1 // 拍卖�?
+	AuctionStatusSold     AuctionStatus = 2 // 已售�?
+	AuctionStatusExpired  AuctionStatus = 3 // 已过�?
+	AuctionStatusCanceled AuctionStatus = 4 // 已取�?
 )
 
 // AuctionItem 拍卖物品
@@ -128,14 +128,14 @@ func (ai *AuctionItem) SetAuctionType(auctionType AuctionType) {
 	ai.auctionType = auctionType
 }
 
-// GetStartPrice 获取起拍价
+// GetStartPrice 获取起拍价格
 func (ai *AuctionItem) GetStartPrice() int64 {
 	ai.mu.RLock()
 	defer ai.mu.RUnlock()
 	return ai.startPrice
 }
 
-// SetStartPrice 设置起拍价
+// SetStartPrice 设置起拍价格
 func (ai *AuctionItem) SetStartPrice(price int64) {
 	ai.mu.Lock()
 	defer ai.mu.Unlock()

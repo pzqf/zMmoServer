@@ -1,0 +1,122 @@
+{
+  "map_id": 5005,
+  "name": "跨服战场",
+  "map_type": 2,
+  "width": 200,
+  "height": 200,
+  "region_size": 50,
+  "tile_width": 10,
+  "tile_height": 10,
+  "is_instance": false,
+  "max_players": 500,
+  "description": "服务器组内玩家可以在此争夺资源的跨服战场，是中州的特殊区域。",
+  "background": "default_bg.jpg",
+  "music": "battlefield",
+  "weather_type": "clear",
+  "min_level": 30,
+  "max_level": 100,
+  "respawn_rate": 1.0,
+  "tile_map": "battlefield",
+  "spawn_points": [
+    {
+      "type": "player",
+      "id": 1,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "name": "Spawn Point 1"
+    },
+    {
+      "type": "monster",
+      "id": 5000,
+      "x": 30,
+      "y": 100,
+      "z": 0,
+      "name": "battle_guardian"
+    },
+    {
+      "type": "monster",
+      "id": 5001,
+      "x": 170,
+      "y": 100,
+      "z": 0,
+      "name": "battle_guardian"
+    },
+    {
+      "type": "monster",
+      "id": 5002,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "name": "battle_minion"
+    },
+    {
+      "type": "monster",
+      "id": 5003,
+      "x": 150,
+      "y": 150,
+      "z": 0,
+      "name": "battle_minion"
+    }
+  ],
+  "teleport_points": [
+    {
+      "id": 1,
+      "map_id": 5005,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "target_map_id": 5004,
+      "target_x": 170,
+      "target_y": 150,
+      "target_z": 0,
+      "name": "返回玄元城",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    }
+  ],
+  "buildings": [],
+  "resources": [
+    {
+      "id": 1,
+      "type": "battle_flag",
+      "x": 30,
+      "y": 100,
+      "amount": 1
+    },
+    {
+      "id": 2,
+      "type": "battle_flag",
+      "x": 170,
+      "y": 100,
+      "amount": 1
+    },
+    {
+      "id": 3,
+      "type": "resource_point",
+      "x": 100,
+      "y": 100,
+      "amount": 1
+    }
+  ],
+  "obstacles": [
+    {
+      "id": 1,
+      "type": "wall",
+      "x": 100,
+      "y": 0,
+      "width": 10,
+      "height": 100
+    },
+    {
+      "id": 2,
+      "type": "wall",
+      "x": 100,
+      "y": 100,
+      "width": 10,
+      "height": 100
+    }
+  ],
+  "npcs": []
+}

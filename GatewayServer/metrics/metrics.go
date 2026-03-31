@@ -6,10 +6,10 @@ import (
 	"net/http"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
 	"github.com/pzqf/zMmoServer/GatewayServer/connection"
-	"github.com/pzqf/zMmoShared/metrics"
 	"go.uber.org/zap"
 )
 
@@ -39,14 +39,14 @@ func (m *Metrics) Start() error {
 		return nil
 	}
 
-	// 尝试监听端口，检查是否可用
+	// 尝试监听端口，检查是否可
 	ln, err := net.Listen("tcp", m.config.Metrics.MetricsAddr)
 	if err != nil {
 		return fmt.Errorf("failed to listen metrics on %s: %w", m.config.Metrics.MetricsAddr, err)
 	}
 	ln.Close()
 
-	// 注册健康检查路由
+	// 注册健康检查路�?
 	http.HandleFunc("/health", m.healthCheck)
 	http.Handle("/metrics", promhttp.HandlerFor(m.metricsMgr.GetRegistry(), promhttp.HandlerOpts{}))
 
@@ -63,7 +63,7 @@ func (m *Metrics) Start() error {
 	return nil
 }
 
-// healthCheck 健康检查
+// healthCheck 健康检�?
 func (m *Metrics) healthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -107,7 +107,7 @@ func (m *Metrics) IncrementMessagesReceived() {
 	}
 }
 
-// IncrementMessagesSent 增加消息发送计数
+// IncrementMessagesSent 增加消息发送计�?
 func (m *Metrics) IncrementMessagesSent() {
 	if counter, ok := m.metricsMgr.GetCounter("gateway_messages_sent_total"); ok && counter != nil {
 		counter.Inc()
@@ -128,7 +128,7 @@ func (m *Metrics) IncrementTokenFailures() {
 	}
 }
 
-// UpdateCurrentConnections 更新当前连接数
+// UpdateCurrentConnections 更新当前连接�?
 func (m *Metrics) UpdateCurrentConnections() {
 	if gauge, ok := m.metricsMgr.GetGauge("gateway_connections_current"); ok && gauge != nil {
 		gauge.Set(float64(m.connManager.GetConnectionCount()))

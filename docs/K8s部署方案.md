@@ -434,7 +434,110 @@ opt {
 deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /
 ```
 
-## 五、常用命令
+## 五、部署 etcdkeeper 服务
+
+### 1. 清理现有 etcdkeeper 资源
+```bash
+# 查看现有的 etcdkeeper Pod
+kubectl get pods -A | grep etcdkeeper
+
+# 删除现有的 etcdkeeper Pod
+kubectl delete pod etcdkeeper-57bdbcff8c-8mxtx etcdkeeper-cc4c75cdb-m75xj -n kube-system
+
+# 查看并删除 etcdkeeper Deployment
+kubectl get deployment -n kube-system | grep etcdkeeper
+kubectl delete deployment etcdkeeper -n kube-system
+
+# 查看并删除 etcdkeeper Service
+kubectl get svc -n kube-system | grep etcdkeeper
+kubectl delete svc etcdkeeper -n kube-system
+```
+
+### 2. 重新部署 etcdkeeper
+
+#### 2.1 创建 Deployment 配置
+```bash
+cat > etcdkeeper-deployment.yaml << 'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: etcdkeeper
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: etcdkeeper
+  template:
+    metadata:
+      labels:
+        app: etcdkeeper
+    spec:
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      containers:
+      - name: etcdkeeper
+        image: deltaprojects/etcdkeeper:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8080
+        env:
+        - name: ETCD_HOST
+          value: "etcd-cluster.kube-system.svc.cluster.local"
+        - name: ETCD_PORT
+          value: "2379"
+EOF
+```
+
+#### 2.2 创建 Service 配置
+```bash
+cat > etcdkeeper-service.yaml << 'EOF'
+apiVersion: v1
+kind: Service
+metadata:
+  name: etcdkeeper
+  namespace: kube-system
+spec:
+  selector:
+    app: etcdkeeper
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: NodePort
+EOF
+```
+
+#### 2.3 应用配置
+```bash
+kubectl apply -f etcdkeeper-deployment.yaml
+kubectl apply -f etcdkeeper-service.yaml
+```
+
+### 3. 验证部署结果
+```bash
+# 查看 Pod 状态
+kubectl get pods -n kube-system | grep etcdkeeper
+
+# 查看 Service 状态
+kubectl get svc etcdkeeper -n kube-system
+
+# 查看详细日志
+kubectl logs -f deployment/etcdkeeper -n kube-system
+```
+
+### 4. 访问 etcdkeeper
+- **访问地址**：`http://<节点IP>:<NodePort>`
+- **示例**：`http://192.168.91.128:32079`
+- **功能**：通过 Web 界面管理和监控 etcd 集群
+
+### 5. 故障排查
+- **Pod 无法调度**：添加对控制平面节点污点的容忍度（已在配置中添加）
+- **ImagePullBackOff**：确保本地有 `deltaprojects/etcdkeeper:latest` 镜像，或修改 `imagePullPolicy` 为 `Never`
+- **无法连接 etcd**：检查 etcd 服务地址是否正确，确保 etcd 集群正常运行
+
+## 六、常用命令
 
 ### 1. 集群状态查看
 - **查看节点状态**：`kubectl get nodes -o wide`

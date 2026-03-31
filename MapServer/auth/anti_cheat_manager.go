@@ -6,7 +6,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/config"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 	"go.uber.org/zap"
 )
 
@@ -39,7 +39,7 @@ type CheatReport struct {
 	Time        time.Time
 	Type        string
 	Description string
-	Severity    int // 1-低, 2-中, 3-高
+	Severity    int // 1-低 2-中 3-高
 }
 
 // NewAntiCheatManager 创建防作弊管理器
@@ -287,3 +287,4 @@ func (acm *AntiCheatManager) StartCleanupTask() {
 		}
 	}()
 }
+

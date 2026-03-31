@@ -1,20 +1,19 @@
 package skill
 
 import (
-	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 // SkillManager 技能管理器
 type SkillManager struct {
-	mu            sync.RWMutex
-	skills        map[id.ObjectIdType]*Skill
+	skills        *zMap.TypedMap[id.ObjectIdType, *Skill]
 	configManager *SkillConfigManager
 	comboManager  *SkillComboManager
 }
@@ -22,7 +21,7 @@ type SkillManager struct {
 // NewSkillManager 创建技能管理器
 func NewSkillManager() *SkillManager {
 	return &SkillManager{
-		skills:        make(map[id.ObjectIdType]*Skill),
+		skills:        zMap.NewTypedMap[id.ObjectIdType, *Skill](),
 		configManager: NewSkillConfigManager(),
 		comboManager:  NewSkillComboManager(),
 	}
@@ -50,36 +49,29 @@ func (sm *SkillManager) GetSkillComboManager() *SkillComboManager {
 
 // AddSkill 添加技能
 func (sm *SkillManager) AddSkill(skill *Skill) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.skills[skill.GetID()] = skill
+	sm.skills.Store(skill.GetID(), skill)
 }
 
 // RemoveSkill 移除技能
 func (sm *SkillManager) RemoveSkill(skillID id.ObjectIdType) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	delete(sm.skills, skillID)
+	sm.skills.Delete(skillID)
 }
 
 // GetSkill 获取技能
 func (sm *SkillManager) GetSkill(skillID id.ObjectIdType) *Skill {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	return sm.skills[skillID]
+	skill, _ := sm.skills.Load(skillID)
+	return skill
 }
 
 // Update 更新技能状态
 func (sm *SkillManager) Update() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	for skillID, skill := range sm.skills {
+	sm.skills.Range(func(skillID id.ObjectIdType, skill *Skill) bool {
 		if skill.IsExpired() {
-			delete(sm.skills, skillID)
+			sm.skills.Delete(skillID)
 			zLog.Debug("Skill expired and removed", zap.Int64("skill_id", int64(skillID)))
 		}
-	}
+		return true
+	})
 }
 
 // Skill 技能对象

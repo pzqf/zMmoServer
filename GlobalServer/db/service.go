@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/db"
+	"github.com/pzqf/zCommon/db/connector"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
-	"github.com/pzqf/zMmoShared/db"
-	"github.com/pzqf/zMmoShared/db/connector"
 	"go.uber.org/zap"
 )
 
@@ -95,7 +95,7 @@ func (s *DBService) Stop() {
 	s.isRunning = false
 	s.cancel()
 
-	// 关闭数据库连接
+	// 关闭数据库连�?
 	if s.connector != nil {
 		s.connector.Close()
 		zLog.Info("Database connection closed")

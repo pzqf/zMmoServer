@@ -3,7 +3,7 @@ package buff
 import (
 	"time"
 
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // BuffType Buff类型常量
@@ -58,11 +58,11 @@ type BuffInstance struct {
 	BuffID       id.BuffIdType         // Buff ID
 	CasterID     id.ObjectIdType       // 施法者ID
 	TargetID     id.ObjectIdType       // 目标ID
-	StartTime    time.Time             // 开始时间
+	StartTime    time.Time             // 开始时�?
 	EndTime      time.Time             // 结束时间
 	StackCount   int                   // 当前层数
 	LastTickTime time.Time             // 上次触发时间
-	IsActive     bool                  // 是否激活
+	IsActive     bool                  // 是否激�?
 }
 
 // NewBuffInstance 创建Buff实例
@@ -81,12 +81,12 @@ func NewBuffInstance(instanceID id.BuffInstanceIdType, buff *Buff, casterID, tar
 	}
 }
 
-// IsExpired 检查是否过期
+// IsExpired 检查是否过�?
 func (bi *BuffInstance) IsExpired() bool {
 	return time.Now().After(bi.EndTime)
 }
 
-// ShouldTick 检查是否应该触发效果
+// ShouldTick 检查是否应该触发效�?
 func (bi *BuffInstance) ShouldTick(interval int) bool {
 	if interval <= 0 {
 		return false
@@ -122,10 +122,11 @@ func (bi *BuffInstance) Refresh(duration int) {
 	bi.EndTime = time.Now().Add(time.Duration(duration) * time.Second)
 }
 
-// CalculateValue 计算实际效果值
+// CalculateValue 计算实际效果�?
 func (bi *BuffInstance) CalculateValue(baseValue int64, buff *Buff) int64 {
 	if buff.Percent > 0 {
 		return int64(float64(baseValue) * buff.Percent * float64(bi.StackCount))
 	}
 	return buff.Value * int64(bi.StackCount)
 }
+

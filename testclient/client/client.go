@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/pzqf/zMmoShared/protocol"
+	"github.com/pzqf/zCommon/protocol"
 )
 
-// HTTP API 相关结构体
+// HTTP API 相关结构
 type LoginRequest struct {
 	Account  string `json:"account"`
 	Password string `json:"password"`
@@ -140,67 +140,67 @@ func (c *Client) handleMessage(data []byte) {
 
 	// 解析消息内容
 	switch msgID {
-	case protocol.MsgIdPlayerLogin:
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE):
 		var resp protocol.PlayerLoginResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal PlayerLoginResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("PlayerLoginResponse: Success=%v, PlayerID=%d, Name=%s, Level=%d, Gold=%d\n",
-			resp.Success, resp.PlayerId, resp.Name, resp.Level, resp.Gold)
-	case protocol.MsgIdPlayerCreate:
+		fmt.Printf("PlayerLoginResponse: Result=%v, ErrorMsg=%s, PlayerID=%d, Name=%s, Level=%d, Gold=%d\n",
+			resp.Result, resp.ErrorMsg, resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level, resp.PlayerInfo.Gold)
+	case uint32(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE):
 		var resp protocol.PlayerCreateResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal PlayerCreateResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("PlayerCreateResponse: Success=%v\n", resp.Success)
-		if resp.Success && resp.Player != nil {
-			fmt.Printf("Player: ID=%d, Name=%s, Level=%d, Sex=%d, Age=%d\n",
-				resp.Player.PlayerId, resp.Player.Name, resp.Player.Level, resp.Player.Sex, resp.Player.Age)
+		fmt.Printf("PlayerCreateResponse: Result=%v, ErrorMsg=%s\n", resp.Result, resp.ErrorMsg)
+		if resp.Result == 0 && resp.PlayerInfo != nil {
+			fmt.Printf("Player: ID=%d, Name=%s, Level=%d\n",
+				resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level)
 		}
-	case protocol.MsgIdActivityList:
+	case uint32(protocol.ActivityMsgId_MSG_ACTIVITY_GET_LIST_RESPONSE):
 		var resp protocol.ActivityListResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal ActivityListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("ActivityListResponse: Success=%v, Activities=%d\n", resp.Success, len(resp.Activities))
-	case protocol.MsgIdShopItemList:
+		fmt.Printf("ActivityListResponse: Result=%v, ErrorMsg=%s, Activities=%d\n", resp.Result, resp.ErrorMsg, len(resp.Activities))
+	case uint32(protocol.ShopMsgId_MSG_SHOP_GET_ITEMS_RESPONSE):
 		var resp protocol.ShopItemListResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal ShopItemListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("ShopItemListResponse: Success=%v, Items=%d\n", resp.Success, len(resp.Items))
-	case protocol.MsgIdDungeonList:
+		fmt.Printf("ShopItemListResponse: Result=%v, ErrorMsg=%s, Items=%d\n", resp.Result, resp.ErrorMsg, len(resp.Items))
+	case uint32(protocol.DungeonMsgId_MSG_DUNGEON_GET_LIST_RESPONSE):
 		var resp protocol.DungeonListResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal DungeonListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("DungeonListResponse: Success=%v, Dungeons=%d\n", resp.Success, len(resp.Dungeons))
-	case protocol.MsgIdBuffList:
+		fmt.Printf("DungeonListResponse: Result=%v, ErrorMsg=%s, Dungeons=%d\n", resp.Result, resp.ErrorMsg, len(resp.Dungeons))
+	case 1404: // MSG_COMBAT_BUFF_APPLY
 		var resp protocol.BuffListResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal BuffListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("BuffListResponse: Success=%v, Buffs=%d\n", resp.Success, len(resp.Buffs))
-	case protocol.MsgIdDropList:
+		fmt.Printf("BuffListResponse: Result=%v, ErrorMsg=%s, Buffs=%d\n", resp.Result, resp.ErrorMsg, len(resp.Buffs))
+	case 1300: // MSG_AOI_ENTER
 		var resp protocol.DropListResponse
 		if err := proto.Unmarshal(data[8:length], &resp); err != nil {
 			fmt.Printf("Failed to unmarshal DropListResponse: %v\n", err)
 			return
 		}
-		fmt.Printf("DropListResponse: Success=%v, Drops=%d\n", resp.Success, len(resp.Drops))
+		fmt.Printf("DropListResponse: Result=%v, ErrorMsg=%s, Drops=%d\n", resp.Result, resp.ErrorMsg, len(resp.Drops))
 	default:
 		fmt.Printf("Received message: ID=%d, Length=%d\n", msgID, length)
 	}
 }
 
 func (c *Client) Send(msgID uint32, data []byte) error {
-	// 构建消息：长度 + 消息ID + 数据
+	// 构建消息：长�?+ 消息ID + 数据
 	length := uint32(8 + len(data))
 	buffer := make([]byte, length)
 	binary.BigEndian.PutUint32(buffer[:4], length)
@@ -238,7 +238,7 @@ func (c *Client) SendPlayerLogin(playerID int64) error {
 	if err != nil {
 		return err
 	}
-	return c.Send(protocol.MsgIdPlayerLogin, data)
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), data)
 }
 
 func (c *Client) SendPlayerCreate(name string, sex, age int32) error {
@@ -252,37 +252,37 @@ func (c *Client) SendPlayerCreate(name string, sex, age int32) error {
 	if err != nil {
 		return err
 	}
-	return c.Send(protocol.MsgIdPlayerCreate, data)
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_CREATE), data)
 }
 
 func (c *Client) SendPlayerLogout() error {
 	// 玩家登出请求
-	return c.Send(protocol.MsgIdPlayerLogout, nil)
+	return c.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME), nil)
 }
 
 func (c *Client) SendActivityList() error {
 	// 活动列表请求
-	return c.Send(protocol.MsgIdActivityList, nil)
+	return c.Send(uint32(protocol.ActivityMsgId_MSG_ACTIVITY_GET_LIST), nil)
 }
 
 func (c *Client) SendShopItemList(categoryID int32) error {
 	// 商品列表请求 - 暂时发送空数据
-	return c.Send(protocol.MsgIdShopItemList, nil)
+	return c.Send(uint32(protocol.ShopMsgId_MSG_SHOP_GET_ITEMS), nil)
 }
 
 func (c *Client) SendDungeonList() error {
 	// 副本列表请求
-	return c.Send(protocol.MsgIdDungeonList, nil)
+	return c.Send(uint32(protocol.DungeonMsgId_MSG_DUNGEON_GET_LIST), nil)
 }
 
 func (c *Client) SendBuffList() error {
-	// Buff列表请求
-	return c.Send(protocol.MsgIdBuffList, nil)
+	// Buff列表请求 - 暂时使用通用消息ID
+	return c.Send(1404, nil)
 }
 
 func (c *Client) SendDropList(x, y, z, radius float32) error {
 	// 掉落列表请求 - 暂时发送空数据
-	return c.Send(protocol.MsgIdDropList, nil)
+	return c.Send(1300, nil)
 }
 
 // HTTP 方法
@@ -398,7 +398,7 @@ func main() {
 
 	switch choice {
 	case "1":
-		fmt.Print("用户名: ")
+		fmt.Print("用户�? ")
 		var account string
 		if scanner.Scan() {
 			account = scanner.Text()
@@ -421,7 +421,7 @@ func main() {
 		fmt.Printf("登录成功! \n")
 
 	case "2":
-		fmt.Print("用户名: ")
+		fmt.Print("用户�? ")
 		var account string
 		if scanner.Scan() {
 			account = scanner.Text()
@@ -454,7 +454,7 @@ func main() {
 	}
 
 	// 2. 获取服务器列表
-	fmt.Println("\n=== 服务器列表 ===")
+	fmt.Println("\n=== 服务器列表===")
 	serverListResp, err := client.GetServerList()
 	if err != nil {
 		fmt.Printf("获取服务器列表失败: %v\n", err)
@@ -490,7 +490,7 @@ func main() {
 	fmt.Printf("已选择服务器: %s (%s)\n", targetServer.Name, targetServer.GetAddr())
 
 	// 4. 连接到 Gateway 服务器
-	fmt.Println("\n=== 连接 Gateway 服务器 ===")
+	fmt.Println("\n=== 连接 Gateway 服务器===")
 	if err := client.Connect(); err != nil {
 		fmt.Printf("连接失败: %v\n", err)
 		os.Exit(1)
@@ -513,7 +513,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("进入游戏成功! 开始游戏...")
+	fmt.Println("进入游戏成功! 开始游戏..")
 
 	// 7. 角色创建/登录
 	fmt.Println("\n=== 角色管理 ===")
@@ -532,7 +532,7 @@ func main() {
 		if scanner.Scan() {
 			name = scanner.Text()
 		}
-		fmt.Print("性别 (1-男, 2-女): ")
+		fmt.Print("性别 (1-男 2-女): ")
 		var sex int32
 		if scanner.Scan() {
 			fmt.Sscanf(scanner.Text(), "%d", &sex)
@@ -567,7 +567,7 @@ func main() {
 	}
 
 	// 进入游戏后，保持连接并提供命令交互
-	fmt.Println("\n游戏中... 输入命令:")
+	fmt.Println("\n游戏中.. 输入命令:")
 	fmt.Println("- 'quit' 退出")
 	fmt.Println("- 'logout' 登出角色")
 	fmt.Println("- 'activity' 查看活动列表")
@@ -623,3 +623,4 @@ func main() {
 
 	fmt.Println("游戏结束!")
 }
+

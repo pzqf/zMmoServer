@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/config"
 	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps"
-	"github.com/pzqf/zMmoServer/zMmoShared/protocol"
 	"go.uber.org/zap"
 )
 
@@ -164,7 +164,7 @@ func (ts *TCPService) processGameServerData(conn net.Conn, pendingData *[]byte) 
 		dataLen := int(binary.BigEndian.Uint32((*pendingData)[8:12]))
 		isCompressed := int(binary.BigEndian.Uint32((*pendingData)[12:16]))
 
-		zLog.Debug("zNet message header parsed", 
+		zLog.Debug("zNet message header parsed",
 			zap.Int("proto_id", protoId),
 			zap.Int("version", version),
 			zap.Int("data_len", dataLen),
@@ -181,7 +181,7 @@ func (ts *TCPService) processGameServerData(conn net.Conn, pendingData *[]byte) 
 		totalLen := 16 + dataLen
 		if len(*pendingData) < totalLen {
 			// 数据不足，等待更多数据
-			zLog.Debug("Insufficient data", 
+			zLog.Debug("Insufficient data",
 				zap.Int("available", len(*pendingData)),
 				zap.Int("required", totalLen))
 			break
@@ -240,8 +240,6 @@ func (ts *TCPService) handleGameServerMessage(conn net.Conn, data []byte) {
 	}
 }
 
-
-
 // handleMapEnterRequest 处理玩家进入地图请求
 func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
 	var req protocol.MapEnterRequest
@@ -267,7 +265,7 @@ func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
 				Success:  false,
 				ErrorMsg: err.Error(),
 			}
-			ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_MAP_ENTER_RESPONSE), resp)
+			ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp)
 			return
 		}
 	}
@@ -281,7 +279,7 @@ func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
 		Y:        req.Y,
 		Z:        req.Z,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_MAP_ENTER_RESPONSE), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp)
 }
 
 // handleMapMoveRequest 处理玩家移动请求
@@ -310,13 +308,13 @@ func (ts *TCPService) handleMapMoveRequest(conn net.Conn, payload []byte) {
 
 	// 发送成功响应
 	resp := &protocol.MapMoveResponse{
-		Success: true,
-		ObjectId: req.ObjectId,
+		Success:  true,
+		PlayerId: req.PlayerId,
 		X:        req.X,
 		Y:        req.Y,
 		Z:        req.Z,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_MAP_MOVE_RESPONSE), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC), resp)
 }
 
 // handleMapAttackRequest 处理玩家攻击请求
@@ -333,25 +331,38 @@ func (ts *TCPService) handleMapAttackRequest(conn net.Conn, payload []byte) {
 		zap.Int64("map_id", req.MapId),
 		zap.Int64("target_id", req.TargetId))
 
-	// 处理玩家攻击
-	var damage int64 = 100
-	var targetHp int64 = 900
-
-	if ts.mapService != nil {
-		damage, targetHp, err := ts.mapService.HandlePlayerAttack(req.PlayerId, req.ObjectId, req.MapId, req.TargetId)
-		if err != nil {
-			zLog.Error("Failed to handle player attack", zap.Error(err))
+	if ts.mapService == nil {
+		resp := &protocol.MapAttackResponse{
+			Success:  false,
+			ErrorMsg: "map service not initialized",
+			PlayerId: req.PlayerId,
+			TargetId: req.TargetId,
 		}
+		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
+		return
 	}
 
-	// 发送成功响应
+	damage, targetHp, err := ts.mapService.HandlePlayerAttack(req.PlayerId, req.ObjectId, req.MapId, req.TargetId)
+	if err != nil {
+		zLog.Error("Failed to handle player attack", zap.Error(err))
+		resp := &protocol.MapAttackResponse{
+			Success:  false,
+			ErrorMsg: err.Error(),
+			PlayerId: req.PlayerId,
+			TargetId: req.TargetId,
+		}
+		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
+		return
+	}
+
 	resp := &protocol.MapAttackResponse{
 		Success:  true,
+		PlayerId: req.PlayerId,
 		TargetId: req.TargetId,
 		Damage:   damage,
 		TargetHp: targetHp,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_MAP_ATTACK_RESPONSE), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
 }
 
 // sendResponse 发送响应消息
@@ -364,20 +375,19 @@ func (ts *TCPService) sendResponse(conn net.Conn, msgID int, msg proto.Message) 
 
 	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
 	header := make([]byte, 16)
-	protoId := msgID
 	version := 1
 	dataLen := len(data)
 	isCompressed := 0
 
 	// 使用大端序编码
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
+	binary.BigEndian.PutUint32(header[:4], uint32(msgID))
 	binary.BigEndian.PutUint32(header[4:8], uint32(version))
 	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
 	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
 
 	// 发送消息
-	response := append(header, data...)
-	_, err = conn.Write(response)
+	responseData := append(header, data...)
+	_, err = conn.Write(responseData)
 	if err != nil {
 		zLog.Error("Failed to send response", zap.Error(err))
 	}

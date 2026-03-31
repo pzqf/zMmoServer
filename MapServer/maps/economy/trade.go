@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoShared/common/id"
 	"go.uber.org/zap"
 )
 
@@ -27,22 +27,22 @@ type TradeItem struct {
 
 // Trade 交易
 type Trade struct {
-	TradeID     int64          `json:"trade_id"`
-	InitiatorID id.PlayerIdType `json:"initiator_id"`
-	TargetID    id.PlayerIdType `json:"target_id"`
-	Status      TradeStatus     `json:"status"`
-	InitiatorItems []*TradeItem `json:"initiator_items"`
-	TargetItems    []*TradeItem `json:"target_items"`
+	TradeID           int64                  `json:"trade_id"`
+	InitiatorID       id.PlayerIdType        `json:"initiator_id"`
+	TargetID          id.PlayerIdType        `json:"target_id"`
+	Status            TradeStatus            `json:"status"`
+	InitiatorItems    []*TradeItem           `json:"initiator_items"`
+	TargetItems       []*TradeItem           `json:"target_items"`
 	InitiatorCurrency map[CurrencyType]int64 `json:"initiator_currency"`
 	TargetCurrency    map[CurrencyType]int64 `json:"target_currency"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	CreatedAt         time.Time              `json:"created_at"`
+	UpdatedAt         time.Time              `json:"updated_at"`
 }
 
 // TradeManager 交易管理器
 type TradeManager struct {
-	mu     sync.RWMutex
-	trades map[int64]*Trade
+	mu           sync.RWMutex
+	trades       map[int64]*Trade
 	playerTrades map[id.PlayerIdType]int64
 }
 
@@ -74,16 +74,16 @@ func (tm *TradeManager) InitiateTrade(initiatorID, targetID id.PlayerIdType) (*T
 
 	// 创建交易
 	trade := &Trade{
-		TradeID:     tradeID,
-		InitiatorID: initiatorID,
-		TargetID:    targetID,
-		Status:      TradeStatusPending,
-		InitiatorItems: make([]*TradeItem, 0),
-		TargetItems:    make([]*TradeItem, 0),
+		TradeID:           tradeID,
+		InitiatorID:       initiatorID,
+		TargetID:          targetID,
+		Status:            TradeStatusPending,
+		InitiatorItems:    make([]*TradeItem, 0),
+		TargetItems:       make([]*TradeItem, 0),
 		InitiatorCurrency: make(map[CurrencyType]int64),
 		TargetCurrency:    make(map[CurrencyType]int64),
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
 	// 保存交易和玩家交易关系

@@ -46,12 +46,12 @@ func (ph *ProtocolHandler) Encode(msgType uint32, data interface{}) ([]byte, err
 
 	buffer := new(bytes.Buffer)
 
-	err = binary.Write(buffer, binary.BigEndian, uint32(totalLen))
+	err = binary.Write(buffer, binary.LittleEndian, uint32(totalLen))
 	if err != nil {
 		return nil, err
 	}
 
-	err = binary.Write(buffer, binary.BigEndian, uint32(msgType))
+	err = binary.Write(buffer, binary.LittleEndian, uint32(msgType))
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (ph *ProtocolHandler) Decode(data []byte) (*Message, error) {
 		return nil, errors.New("insufficient data")
 	}
 
-	length := binary.BigEndian.Uint32(data[:MsgHeaderLen])
+	length := binary.LittleEndian.Uint32(data[:MsgHeaderLen])
 	if length > MaxMsgLen {
 		return nil, errors.New("message too long")
 	}
@@ -78,7 +78,7 @@ func (ph *ProtocolHandler) Decode(data []byte) (*Message, error) {
 		return nil, errors.New("insufficient data")
 	}
 
-	msgType := binary.BigEndian.Uint32(data[MsgHeaderLen : MsgHeaderLen+4])
+	msgType := binary.LittleEndian.Uint32(data[MsgHeaderLen : MsgHeaderLen+4])
 	msgData := data[MsgHeaderLen+4 : length]
 
 	return &Message{

@@ -5,9 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
@@ -15,8 +16,8 @@ import (
 type QuestManager struct {
 	mu                sync.RWMutex
 	playerID          id.PlayerIdType
-	quests            map[int32]*Quest
-	completedQuestIDs map[int32]bool
+	quests            *zMap.TypedMap[int32, *Quest]
+	completedQuestIDs *zMap.TypedMap[int32, bool]
 	maxAcceptCount    int32
 	maxDailyCount     int32
 	dailyAcceptCount  int32
@@ -27,8 +28,8 @@ type QuestManager struct {
 func NewQuestManager(playerID id.PlayerIdType, maxAcceptCount int32) *QuestManager {
 	return &QuestManager{
 		playerID:          playerID,
-		quests:            make(map[int32]*Quest),
-		completedQuestIDs: make(map[int32]bool),
+		quests:            zMap.NewTypedMap[int32, *Quest](),
+		completedQuestIDs: zMap.NewTypedMap[int32, bool](),
 		maxAcceptCount:    maxAcceptCount,
 		maxDailyCount:     20,
 		dailyAcceptCount:  0,
@@ -45,10 +46,10 @@ func (qm *QuestManager) GetPlayerID() id.PlayerIdType {
 func (qm *QuestManager) GetQuestCount() int32 {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
-	return int32(len(qm.quests))
+	return int32(qm.quests.Len())
 }
 
-// GetMaxAcceptCount 获取最大接取数量
+// GetMaxAcceptCount 获取最大接取数
 func (qm *QuestManager) GetMaxAcceptCount() int32 {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
@@ -66,11 +67,11 @@ func (qm *QuestManager) AddQuest(quest *Quest) error {
 
 	questConfigID := quest.GetQuestConfigID()
 
-	if _, exists := qm.quests[questConfigID]; exists {
+	if _, exists := qm.quests.Load(questConfigID); exists {
 		return errors.New("quest already exists")
 	}
 
-	qm.quests[questConfigID] = quest
+	qm.quests.Store(questConfigID, quest)
 
 	zLog.Debug("Quest added",
 		zap.Int64("player_id", int64(qm.playerID)),
@@ -85,12 +86,12 @@ func (qm *QuestManager) RemoveQuest(questConfigID int32) (*Quest, error) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	quest, exists := qm.quests[questConfigID]
+	quest, exists := qm.quests.Load(questConfigID)
 	if !exists {
 		return nil, errors.New("quest not found")
 	}
 
-	delete(qm.quests, questConfigID)
+	qm.quests.Delete(questConfigID)
 
 	zLog.Debug("Quest removed",
 		zap.Int64("player_id", int64(qm.playerID)),
@@ -104,7 +105,7 @@ func (qm *QuestManager) GetQuest(questConfigID int32) (*Quest, error) {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
 
-	quest, exists := qm.quests[questConfigID]
+	quest, exists := qm.quests.Load(questConfigID)
 	if !exists {
 		return nil, errors.New("quest not found")
 	}
@@ -115,7 +116,7 @@ func (qm *QuestManager) GetQuest(questConfigID int32) (*Quest, error) {
 func (qm *QuestManager) HasQuest(questConfigID int32) bool {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
-	_, exists := qm.quests[questConfigID]
+	_, exists := qm.quests.Load(questConfigID)
 	return exists
 }
 
@@ -125,9 +126,10 @@ func (qm *QuestManager) GetAllQuests() map[int32]*Quest {
 	defer qm.mu.RUnlock()
 
 	result := make(map[int32]*Quest)
-	for questConfigID, quest := range qm.quests {
+	qm.quests.Range(func(questConfigID int32, quest *Quest) bool {
 		result[questConfigID] = quest
-	}
+		return true
+	})
 	return result
 }
 
@@ -137,11 +139,12 @@ func (qm *QuestManager) GetQuestsByType(questType QuestType) []*Quest {
 	defer qm.mu.RUnlock()
 
 	result := make([]*Quest, 0)
-	for _, quest := range qm.quests {
+	qm.quests.Range(func(_ int32, quest *Quest) bool {
 		if quest.GetQuestType() == questType {
 			result = append(result, quest)
 		}
-	}
+		return true
+	})
 	return result
 }
 
@@ -151,11 +154,12 @@ func (qm *QuestManager) GetQuestsByStatus(status QuestStatus) []*Quest {
 	defer qm.mu.RUnlock()
 
 	result := make([]*Quest, 0)
-	for _, quest := range qm.quests {
+	qm.quests.Range(func(_ int32, quest *Quest) bool {
 		if quest.GetStatus() == status {
 			result = append(result, quest)
 		}
-	}
+		return true
+	})
 	return result
 }
 
@@ -181,22 +185,32 @@ func (qm *QuestManager) AcceptQuest(quest *Quest, playerLevel int32) error {
 	questConfigID := quest.GetQuestConfigID()
 
 	// 检查是否已存在
-	if _, exists := qm.quests[questConfigID]; exists {
+	if _, exists := qm.quests.Load(questConfigID); exists {
 		return errors.New("quest already accepted")
 	}
 
 	// 检查接取数量限制
-	if int32(len(qm.quests)) >= qm.maxAcceptCount {
+	count := 0
+	qm.quests.Range(func(_ int32, _ *Quest) bool {
+		count++
+		return true
+	})
+	if int32(count) >= qm.maxAcceptCount {
 		return errors.New("max accept count reached")
 	}
 
-	// 检查日常任务数量
+	// 检查日常任务数限制
 	if quest.IsDaily() && qm.dailyAcceptCount >= qm.maxDailyCount {
 		return errors.New("max daily quest count reached")
 	}
 
 	// 检查是否可以接取
-	if !quest.CanAccept(playerLevel, qm.completedQuestIDs) {
+	completedIDs := make(map[int32]bool)
+	qm.completedQuestIDs.Range(func(questID int32, _ bool) bool {
+		completedIDs[questID] = true
+		return true
+	})
+	if !quest.CanAccept(playerLevel, completedIDs) {
 		return errors.New("cannot accept quest")
 	}
 
@@ -204,7 +218,7 @@ func (qm *QuestManager) AcceptQuest(quest *Quest, playerLevel int32) error {
 		return errors.New("accept quest failed")
 	}
 
-	qm.quests[questConfigID] = quest
+	qm.quests.Store(questConfigID, quest)
 
 	if quest.IsDaily() {
 		qm.dailyAcceptCount++
@@ -227,7 +241,7 @@ func (qm *QuestManager) CompleteQuest(questConfigID int32) (*Quest, error) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	quest, exists := qm.quests[questConfigID]
+	quest, exists := qm.quests.Load(questConfigID)
 	if !exists {
 		return nil, errors.New("quest not found")
 	}
@@ -251,7 +265,7 @@ func (qm *QuestManager) SubmitQuest(questConfigID int32) (*Quest, error) {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	quest, exists := qm.quests[questConfigID]
+	quest, exists := qm.quests.Load(questConfigID)
 	if !exists {
 		return nil, errors.New("quest not found")
 	}
@@ -260,7 +274,7 @@ func (qm *QuestManager) SubmitQuest(questConfigID int32) (*Quest, error) {
 		return nil, errors.New("submit quest failed")
 	}
 
-	qm.completedQuestIDs[questConfigID] = true
+	qm.completedQuestIDs.Store(questConfigID, true)
 
 	qm.publishQuestSubmitEvent(quest)
 
@@ -277,7 +291,7 @@ func (qm *QuestManager) AbandonQuest(questConfigID int32) error {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	quest, exists := qm.quests[questConfigID]
+	quest, exists := qm.quests.Load(questConfigID)
 	if !exists {
 		return errors.New("quest not found")
 	}
@@ -287,7 +301,7 @@ func (qm *QuestManager) AbandonQuest(questConfigID int32) error {
 		return errors.New("cannot abandon completed quest")
 	}
 
-	delete(qm.quests, questConfigID)
+	qm.quests.Delete(questConfigID)
 
 	if quest.IsDaily() {
 		qm.dailyAcceptCount--
@@ -309,7 +323,7 @@ func (qm *QuestManager) UpdateTargetProgress(targetType QuestTargetType, targetI
 	defer qm.mu.RUnlock()
 
 	updatedCount := int32(0)
-	for _, quest := range qm.quests {
+	qm.quests.Range(func(_ int32, quest *Quest) bool {
 		if quest.GetStatus() == QuestStatusInProgress {
 			if quest.UpdateTargetProgress(targetType, targetID, count) {
 				updatedCount++
@@ -320,7 +334,8 @@ func (qm *QuestManager) UpdateTargetProgress(targetType QuestTargetType, targetI
 				}
 			}
 		}
-	}
+		return true
+	})
 
 	return updatedCount
 }
@@ -369,14 +384,20 @@ func (qm *QuestManager) OnExplore(areaID int32) {
 func (qm *QuestManager) HasCompletedQuest(questConfigID int32) bool {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
-	return qm.completedQuestIDs[questConfigID]
+	_, exists := qm.completedQuestIDs.Load(questConfigID)
+	return exists
 }
 
-// GetCompletedQuestCount 获取已完成任务数量
+// GetCompletedQuestCount 获取已完成任务数
 func (qm *QuestManager) GetCompletedQuestCount() int32 {
 	qm.mu.RLock()
 	defer qm.mu.RUnlock()
-	return int32(len(qm.completedQuestIDs))
+	count := int32(0)
+	qm.completedQuestIDs.Range(func(_ int32, _ bool) bool {
+		count++
+		return true
+	})
+	return count
 }
 
 // RefreshDailyQuests 刷新日常任务
@@ -387,13 +408,14 @@ func (qm *QuestManager) RefreshDailyQuests() {
 	currentTime := time.Now().UnixMilli()
 	refreshedCount := int32(0)
 
-	for _, quest := range qm.quests {
+	qm.quests.Range(func(_ int32, quest *Quest) bool {
 		if quest.IsDaily() && quest.NeedRefresh(currentTime) {
 			quest.Reset()
 			quest.SetRefreshTime(qm.getNextDailyRefreshTime())
 			refreshedCount++
 		}
-	}
+		return true
+	})
 
 	qm.dailyAcceptCount = 0
 
@@ -412,13 +434,14 @@ func (qm *QuestManager) RefreshWeeklyQuests() {
 	currentTime := time.Now().UnixMilli()
 	refreshedCount := int32(0)
 
-	for _, quest := range qm.quests {
+	qm.quests.Range(func(_ int32, quest *Quest) bool {
 		if quest.IsWeekly() && quest.NeedRefresh(currentTime) {
 			quest.Reset()
 			quest.SetRefreshTime(qm.getNextWeeklyRefreshTime())
 			refreshedCount++
 		}
-	}
+		return true
+	})
 
 	qm.weeklyAcceptCount = 0
 
@@ -455,8 +478,8 @@ func (qm *QuestManager) Clear() {
 	qm.mu.Lock()
 	defer qm.mu.Unlock()
 
-	qm.quests = make(map[int32]*Quest)
-	qm.completedQuestIDs = make(map[int32]bool)
+	qm.quests = zMap.NewTypedMap[int32, *Quest]()
+	qm.completedQuestIDs = zMap.NewTypedMap[int32, bool]()
 	qm.dailyAcceptCount = 0
 	qm.weeklyAcceptCount = 0
 }

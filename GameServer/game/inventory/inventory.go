@@ -4,10 +4,11 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
 	"github.com/pzqf/zMmoServer/GameServer/game/item"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
@@ -15,7 +16,7 @@ import (
 type Inventory struct {
 	mu       sync.RWMutex
 	playerID id.PlayerIdType
-	items    map[int32]*item.Item
+	items    *zMap.TypedMap[int32, *item.Item]
 	size     int32
 	maxSize  int32
 }
@@ -24,7 +25,7 @@ type Inventory struct {
 func NewInventory(playerID id.PlayerIdType, maxSize int32) *Inventory {
 	return &Inventory{
 		playerID: playerID,
-		items:    make(map[int32]*item.Item),
+		items:    zMap.NewTypedMap[int32, *item.Item](),
 		size:     0,
 		maxSize:  maxSize,
 	}
@@ -74,20 +75,21 @@ func (inv *Inventory) AddItem(newItem *item.Item) (int32, error) {
 
 	// 尝试堆叠到已有物品
 	if newItem.GetMaxStack() > 1 {
-		for slotIndex, existingItem := range inv.items {
+		inv.items.Range(func(slotIndex int32, existingItem *item.Item) bool {
 			if existingItem.CanStack(newItem) && !existingItem.IsFull() {
 				space := existingItem.GetSpace()
 				if space >= newItem.GetCount() {
 					existingItem.AddCount(newItem.GetCount())
 					inv.publishItemAddEvent(existingItem, slotIndex, newItem.GetCount())
-					return slotIndex, nil
+					return false
 				}
 				// 部分堆叠
 				existingItem.AddCount(space)
 				newItem.ReduceCount(space)
 				inv.publishItemAddEvent(existingItem, slotIndex, space)
 			}
-		}
+			return true
+		})
 	}
 
 	// 放入新格子
@@ -100,7 +102,7 @@ func (inv *Inventory) AddItem(newItem *item.Item) (int32, error) {
 		return -1, errors.New("no empty slot")
 	}
 
-	inv.items[slotIndex] = newItem
+	inv.items.Store(slotIndex, newItem)
 	inv.size++
 
 	inv.publishItemAddEvent(newItem, slotIndex, newItem.GetCount())
@@ -125,7 +127,7 @@ func (inv *Inventory) RemoveItem(slotIndex int32, count int32) (*item.Item, erro
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
 
-	existingItem, exists := inv.items[slotIndex]
+	existingItem, exists := inv.items.Load(slotIndex)
 	if !exists {
 		return nil, errors.New("item not found")
 	}
@@ -136,7 +138,7 @@ func (inv *Inventory) RemoveItem(slotIndex int32, count int32) (*item.Item, erro
 
 	// 全部移除
 	if existingItem.GetCount() == count {
-		delete(inv.items, slotIndex)
+		inv.items.Delete(slotIndex)
 		inv.size--
 		inv.publishItemRemoveEvent(existingItem, slotIndex, count)
 		return existingItem, nil
@@ -158,11 +160,11 @@ func (inv *Inventory) RemoveItemByConfigID(itemConfigID int32, count int32) (int
 	defer inv.mu.Unlock()
 
 	removedCount := int32(0)
-	for slotIndex, existingItem := range inv.items {
+	inv.items.Range(func(slotIndex int32, existingItem *item.Item) bool {
 		if existingItem.GetItemConfigID() == itemConfigID {
 			itemCount := existingItem.GetCount()
 			if itemCount <= count-removedCount {
-				delete(inv.items, slotIndex)
+				inv.items.Delete(slotIndex)
 				inv.size--
 				removedCount += itemCount
 				inv.publishItemRemoveEvent(existingItem, slotIndex, itemCount)
@@ -174,10 +176,11 @@ func (inv *Inventory) RemoveItemByConfigID(itemConfigID int32, count int32) (int
 			}
 
 			if removedCount >= count {
-				break
+				return false
 			}
 		}
-	}
+		return true
+	})
 
 	if removedCount < count {
 		return removedCount, errors.New("not enough items")
@@ -191,7 +194,7 @@ func (inv *Inventory) GetItem(slotIndex int32) (*item.Item, error) {
 	inv.mu.RLock()
 	defer inv.mu.RUnlock()
 
-	existingItem, exists := inv.items[slotIndex]
+	existingItem, exists := inv.items.Load(slotIndex)
 	if !exists {
 		return nil, errors.New("item not found")
 	}
@@ -203,12 +206,17 @@ func (inv *Inventory) GetItemByConfigID(itemConfigID int32) (*item.Item, int32) 
 	inv.mu.RLock()
 	defer inv.mu.RUnlock()
 
-	for slotIndex, existingItem := range inv.items {
+	var resultItem *item.Item
+	var resultIndex int32 = -1
+	inv.items.Range(func(slotIndex int32, existingItem *item.Item) bool {
 		if existingItem.GetItemConfigID() == itemConfigID {
-			return existingItem, slotIndex
+			resultItem = existingItem
+			resultIndex = slotIndex
+			return false
 		}
-	}
-	return nil, -1
+		return true
+	})
+	return resultItem, resultIndex
 }
 
 // GetItemCount 获取物品数量
@@ -217,11 +225,12 @@ func (inv *Inventory) GetItemCount(itemConfigID int32) int32 {
 	defer inv.mu.RUnlock()
 
 	count := int32(0)
-	for _, existingItem := range inv.items {
+	inv.items.Range(func(_ int32, existingItem *item.Item) bool {
 		if existingItem.GetItemConfigID() == itemConfigID {
 			count += existingItem.GetCount()
 		}
-	}
+		return true
+	})
 	return count
 }
 
@@ -236,9 +245,10 @@ func (inv *Inventory) GetAllItems() map[int32]*item.Item {
 	defer inv.mu.RUnlock()
 
 	result := make(map[int32]*item.Item)
-	for slotIndex, existingItem := range inv.items {
+	inv.items.Range(func(slotIndex int32, existingItem *item.Item) bool {
 		result[slotIndex] = existingItem
-	}
+		return true
+	})
 	return result
 }
 
@@ -251,17 +261,17 @@ func (inv *Inventory) MoveItem(fromSlot int32, toSlot int32) error {
 		return nil
 	}
 
-	fromItem, fromExists := inv.items[fromSlot]
+	fromItem, fromExists := inv.items.Load(fromSlot)
 	if !fromExists {
 		return errors.New("source item not found")
 	}
 
-	toItem, toExists := inv.items[toSlot]
+	toItem, toExists := inv.items.Load(toSlot)
 
 	// 目标格子为空，直接移动
 	if !toExists {
-		inv.items[toSlot] = fromItem
-		delete(inv.items, fromSlot)
+		inv.items.Store(toSlot, fromItem)
+		inv.items.Delete(fromSlot)
 		return nil
 	}
 
@@ -270,7 +280,7 @@ func (inv *Inventory) MoveItem(fromSlot int32, toSlot int32) error {
 		space := toItem.GetSpace()
 		if space >= fromItem.GetCount() {
 			toItem.AddCount(fromItem.GetCount())
-			delete(inv.items, fromSlot)
+			inv.items.Delete(fromSlot)
 			inv.size--
 		} else {
 			fromItem.ReduceCount(space)
@@ -280,8 +290,8 @@ func (inv *Inventory) MoveItem(fromSlot int32, toSlot int32) error {
 	}
 
 	// 交换位置
-	inv.items[fromSlot] = toItem
-	inv.items[toSlot] = fromItem
+	inv.items.Store(fromSlot, toItem)
+	inv.items.Store(toSlot, fromItem)
 	return nil
 }
 
@@ -290,7 +300,7 @@ func (inv *Inventory) UseItem(slotIndex int32, count int32) (*item.Item, error) 
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
 
-	existingItem, exists := inv.items[slotIndex]
+	existingItem, exists := inv.items.Load(slotIndex)
 	if !exists {
 		return nil, errors.New("item not found")
 	}
@@ -310,7 +320,7 @@ func (inv *Inventory) UseItem(slotIndex int32, count int32) (*item.Item, error) 
 
 	// 消耗物品
 	if existingItem.GetCount() == count {
-		delete(inv.items, slotIndex)
+		inv.items.Delete(slotIndex)
 		inv.size--
 		return existingItem, nil
 	}
@@ -339,18 +349,19 @@ func (inv *Inventory) Clear() {
 	inv.mu.Lock()
 	defer inv.mu.Unlock()
 
-	for slotIndex, existingItem := range inv.items {
+	inv.items.Range(func(slotIndex int32, existingItem *item.Item) bool {
 		inv.publishItemRemoveEvent(existingItem, slotIndex, existingItem.GetCount())
-	}
+		inv.items.Delete(slotIndex)
+		return true
+	})
 
-	inv.items = make(map[int32]*item.Item)
 	inv.size = 0
 }
 
 // findEmptySlot 查找空格子
 func (inv *Inventory) findEmptySlot() int32 {
 	for i := int32(0); i < inv.maxSize; i++ {
-		if _, exists := inv.items[i]; !exists {
+		if _, exists := inv.items.Load(i); !exists {
 			return i
 		}
 	}

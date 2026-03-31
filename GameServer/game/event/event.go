@@ -2,7 +2,7 @@ package event
 
 import (
 	"github.com/pzqf/zEngine/zEvent"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // 游戏业务相关的事件类型定义
@@ -251,3 +251,4 @@ func Publish(event *zEvent.Event) {
 func PublishSync(event *zEvent.Event) {
 	GetGlobalEventBus().PublishSync(event)
 }
+

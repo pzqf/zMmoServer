@@ -3,8 +3,8 @@ package object
 import (
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoShared/common/id"
 )
 
 // PlayerStatus 玩家状态
@@ -556,7 +556,7 @@ func (p *Player) CalculateAttack() int32 {
 	// 基础攻击力 = 力量 * 2
 	attack := p.strength * 2
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	return attack
 }
@@ -566,7 +566,7 @@ func (p *Player) CalculateDefense() int32 {
 	// 基础防御力 = 耐力 * 1 + 敏捷 * 0.5
 	defense := p.stamina*1 + p.agility/2
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	return defense
 }
@@ -576,7 +576,7 @@ func (p *Player) CalculateCriticalRate() float32 {
 	// 基础暴击率 = 敏捷 * 0.1%
 	criticalRate := float32(p.agility) * 0.1
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	// 上限 50%
 	if criticalRate > 50 {
@@ -591,7 +591,7 @@ func (p *Player) CalculateHitRate() float32 {
 	// 基础命中率 = 90% + 敏捷 * 0.05%
 	hitRate := 90.0 + float32(p.agility)*0.05
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	// 上限 99%
 	if hitRate > 99 {
@@ -606,7 +606,7 @@ func (p *Player) CalculateAvoidRate() float32 {
 	// 基础闪避率 = 敏捷 * 0.1%
 	avoidRate := float32(p.agility) * 0.1
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	// 上限 30%
 	if avoidRate > 30 {
@@ -621,7 +621,7 @@ func (p *Player) CalculateMagicPower() int32 {
 	// 基础魔法强度 = 智力 * 2
 	magicPower := p.intelligence * 2
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	return magicPower
 }
@@ -631,7 +631,7 @@ func (p *Player) CalculateManaRegen() float32 {
 	// 基础魔法回复 = 精神 * 0.5
 	manaRegen := float32(p.spirit) * 0.5
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	return manaRegen
 }
@@ -641,7 +641,7 @@ func (p *Player) CalculateHealthRegen() float32 {
 	// 基础生命回复 = 耐力 * 0.3
 	healthRegen := float32(p.stamina) * 0.3
 
-	// 可以添加装备和 buff 加成
+	// 可以添加装备和buff 加成
 
 	return healthRegen
 }
@@ -667,7 +667,7 @@ func (p *Player) ApplyBuffEffects() {
 	// 例如：增加属性、回复生命值等
 }
 
-// RemoveExpiredBuffs 移除过期的 buff
+// RemoveExpiredBuffs 移除过期�?buff
 func (p *Player) RemoveExpiredBuffs() {
 	currentTime := time.Now()
 	validBuffs := make([]Buff, 0)
@@ -681,7 +681,7 @@ func (p *Player) RemoveExpiredBuffs() {
 	p.buffs = validBuffs
 }
 
-// RemoveExpiredDebuffs 移除过期的 debuff
+// RemoveExpiredDebuffs 移除过期�?debuff
 func (p *Player) RemoveExpiredDebuffs() {
 	currentTime := time.Now()
 	validDebuffs := make([]Debuff, 0)
@@ -697,7 +697,7 @@ func (p *Player) RemoveExpiredDebuffs() {
 
 // UpdateStatus 更新玩家状态
 func (p *Player) UpdateStatus() {
-	// 移除过期的 buff 和 debuff
+	// 移除过期的buff 和 debuff
 	p.RemoveExpiredBuffs()
 	p.RemoveExpiredDebuffs()
 

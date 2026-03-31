@@ -1,0 +1,240 @@
+{
+  "map_id": 5004,
+  "name": "玄元城",
+  "map_type": 2,
+  "width": 200,
+  "height": 200,
+  "region_size": 50,
+  "tile_width": 10,
+  "tile_height": 10,
+  "is_instance": false,
+  "max_players": 500,
+  "description": "大陆中心城市，建筑宏伟，汇聚四州风格，是中州的主城。",
+  "background": "default_bg.jpg",
+  "music": "central_city",
+  "weather_type": "sunny",
+  "min_level": 30,
+  "max_level": 100,
+  "respawn_rate": 1.0,
+  "tile_map": "central_city",
+  "spawn_points": [
+    {
+      "type": "player",
+      "id": 1,
+      "x": 30,
+      "y": 50,
+      "z": 0,
+      "name": "Spawn Point 1"
+    }
+  ],
+  "teleport_points": [
+    {
+      "id": 1,
+      "map_id": 5004,
+      "x": 30,
+      "y": 50,
+      "z": 0,
+      "target_map_id": 5001,
+      "target_x": 150,
+      "target_y": 50,
+      "target_z": 0,
+      "name": "返回中央平原",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "map_id": 5004,
+      "x": 30,
+      "y": 50,
+      "z": 0,
+      "target_map_id": 5002,
+      "target_x": 120,
+      "target_y": 30,
+      "target_z": 0,
+      "name": "返回圣山",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    },
+    {
+      "id": 3,
+      "map_id": 5004,
+      "x": 170,
+      "y": 150,
+      "z": 0,
+      "target_map_id": 5005,
+      "target_x": 50,
+      "target_y": 50,
+      "target_z": 0,
+      "name": "前往跨服战场",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    }
+  ],
+  "buildings": [
+    {
+      "id": 1,
+      "name": "皇宫",
+      "x": 100,
+      "y": 100,
+      "width": 20,
+      "height": 20,
+      "type": "government"
+    },
+    {
+      "id": 2,
+      "name": "武器店",
+      "x": 60,
+      "y": 80,
+      "width": 8,
+      "height": 8,
+      "type": "shop"
+    },
+    {
+      "id": 3,
+      "name": "防具店",
+      "x": 140,
+      "y": 80,
+      "width": 8,
+      "height": 8,
+      "type": "shop"
+    },
+    {
+      "id": 4,
+      "name": "药店",
+      "x": 60,
+      "y": 120,
+      "width": 8,
+      "height": 8,
+      "type": "shop"
+    },
+    {
+      "id": 5,
+      "name": "饰品店",
+      "x": 140,
+      "y": 120,
+      "width": 8,
+      "height": 8,
+      "type": "shop"
+    },
+    {
+      "id": 6,
+      "name": "拍卖行",
+      "x": 100,
+      "y": 60,
+      "width": 10,
+      "height": 10,
+      "type": "auction"
+    },
+    {
+      "id": 7,
+      "name": "钱庄",
+      "x": 100,
+      "y": 140,
+      "width": 10,
+      "height": 10,
+      "type": "bank"
+    },
+    {
+      "id": 8,
+      "name": "传送阵",
+      "x": 170,
+      "y": 150,
+      "width": 10,
+      "height": 10,
+      "type": "teleport"
+    }
+  ],
+  "resources": [
+    {
+      "id": 1,
+      "type": "celestial_crystal",
+      "x": 40,
+      "y": 40,
+      "amount": 5
+    },
+    {
+      "id": 2,
+      "type": "celestial_crystal",
+      "x": 160,
+      "y": 40,
+      "amount": 5
+    },
+    {
+      "id": 3,
+      "type": "celestial_crystal",
+      "x": 40,
+      "y": 160,
+      "amount": 5
+    },
+    {
+      "id": 4,
+      "type": "celestial_crystal",
+      "x": 160,
+      "y": 160,
+      "amount": 5
+    }
+  ],
+  "obstacles": [],
+  "npcs": [
+    {
+      "id": 1,
+      "name": "皇帝",
+      "x": 110,
+      "y": 110,
+      "type": "quest_giver"
+    },
+    {
+      "id": 2,
+      "name": "武器商",
+      "x": 64,
+      "y": 84,
+      "type": "merchant"
+    },
+    {
+      "id": 3,
+      "name": "防具商",
+      "x": 144,
+      "y": 84,
+      "type": "merchant"
+    },
+    {
+      "id": 4,
+      "name": "药师",
+      "x": 64,
+      "y": 124,
+      "type": "merchant"
+    },
+    {
+      "id": 5,
+      "name": "饰品商",
+      "x": 144,
+      "y": 124,
+      "type": "merchant"
+    },
+    {
+      "id": 6,
+      "name": "拍卖师",
+      "x": 105,
+      "y": 65,
+      "type": "auctioneer"
+    },
+    {
+      "id": 7,
+      "name": "钱庄掌柜",
+      "x": 105,
+      "y": 145,
+      "type": "banker"
+    },
+    {
+      "id": 8,
+      "name": "传送师",
+      "x": 175,
+      "y": 155,
+      "type": "teleporter"
+    }
+  ]
+}

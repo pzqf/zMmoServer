@@ -1,0 +1,169 @@
+{
+  "map_id": 5003,
+  "name": "远古遗迹",
+  "map_type": 2,
+  "width": 150,
+  "height": 150,
+  "region_size": 50,
+  "tile_width": 10,
+  "tile_height": 10,
+  "is_instance": false,
+  "max_players": 500,
+  "description": "上古文明的遗迹，藏有惊天秘密，是中州的地下城。",
+  "background": "default_bg.jpg",
+  "music": "ruins",
+  "weather_type": "none",
+  "min_level": 30,
+  "max_level": 100,
+  "respawn_rate": 1.0,
+  "tile_map": "ruins",
+  "spawn_points": [
+    {
+      "type": "player",
+      "id": 1,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "name": "Spawn Point 1"
+    },
+    {
+      "type": "monster",
+      "id": 5000,
+      "x": 40,
+      "y": 40,
+      "z": 0,
+      "name": "ancient_guard"
+    },
+    {
+      "type": "monster",
+      "id": 5001,
+      "x": 100,
+      "y": 90,
+      "z": 0,
+      "name": "ancient_guard"
+    },
+    {
+      "type": "monster",
+      "id": 5002,
+      "x": 75,
+      "y": 40,
+      "z": 0,
+      "name": "ancient_mage"
+    },
+    {
+      "type": "monster",
+      "id": 5003,
+      "x": 75,
+      "y": 90,
+      "z": 0,
+      "name": "ancient_mage"
+    },
+    {
+      "type": "monster",
+      "id": 5004,
+      "x": 75,
+      "y": 75,
+      "z": 0,
+      "name": "ancient_dragon"
+    }
+  ],
+  "teleport_points": [
+    {
+      "id": 1,
+      "map_id": 5003,
+      "x": 50,
+      "y": 50,
+      "z": 0,
+      "target_map_id": 5002,
+      "target_x": 100,
+      "target_y": 100,
+      "target_z": 0,
+      "name": "返回圣山",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    },
+    {
+      "id": 2,
+      "map_id": 5003,
+      "x": 100,
+      "y": 100,
+      "z": 0,
+      "target_map_id": 5002,
+      "target_x": 100,
+      "target_y": 100,
+      "target_z": 0,
+      "name": "返回圣山",
+      "required_level": 30,
+      "required_item": 0,
+      "is_active": true
+    }
+  ],
+  "buildings": [],
+  "resources": [
+    {
+      "id": 1,
+      "type": "ancient_treasure",
+      "x": 40,
+      "y": 80,
+      "amount": 1
+    },
+    {
+      "id": 2,
+      "type": "ancient_treasure",
+      "x": 100,
+      "y": 40,
+      "amount": 1
+    },
+    {
+      "id": 3,
+      "type": "ancient_treasure",
+      "x": 75,
+      "y": 75,
+      "amount": 1
+    }
+  ],
+  "obstacles": [
+    {
+      "id": 1,
+      "type": "ancient_wall",
+      "x": 30,
+      "y": 30,
+      "width": 10,
+      "height": 50
+    },
+    {
+      "id": 2,
+      "type": "ancient_wall",
+      "x": 110,
+      "y": 30,
+      "width": 10,
+      "height": 50
+    },
+    {
+      "id": 3,
+      "type": "ancient_wall",
+      "x": 30,
+      "y": 100,
+      "width": 90,
+      "height": 10
+    },
+    {
+      "id": 4,
+      "type": "ancient_wall",
+      "x": 60,
+      "y": 30,
+      "width": 30,
+      "height": 10
+    }
+  ],
+  "npcs": [
+    {
+      "id": 1,
+      "name": "遗迹守护者",
+      "x": 75,
+      "y": 75,
+      "type": "boss"
+    }
+  ]
+}

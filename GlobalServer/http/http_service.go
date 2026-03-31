@@ -26,7 +26,6 @@ type HttpService struct {
 	zService.BaseService
 	echo         *echo.Echo
 	httpCfg      *config.HTTPConfig
-	isRunning    bool
 	shutdownFunc ShutdownFunc // 关闭回调函数
 	metrics      *metrics.Metrics
 }
@@ -55,7 +54,6 @@ func NewService() *HttpService {
 	service := &HttpService{
 		BaseService: *zService.NewBaseService("http_service"),
 		echo:        e,
-		isRunning:   false,
 	}
 
 	return service
@@ -108,7 +106,13 @@ func (s *HttpService) metricsMiddleware() echo.MiddlewareFunc {
 			duration := time.Since(start)
 
 			// 记录 HTTP 请求指标
+			s.metrics.IncrementHTTPRequests()
 			s.metrics.RecordHTTPRequest(duration)
+
+			// 记录 HTTP 错误请求
+			if err != nil {
+				s.metrics.IncrementHTTPErrorRequests()
+			}
 
 			return err
 		}
@@ -139,14 +143,13 @@ func (s *HttpService) Start() error {
 		}
 	}()
 
-	s.isRunning = true
 	zLog.Info("Echo HTTP service started successfully")
 	return nil
 }
 
 // Stop stops the HTTP service
 func (s *HttpService) Stop() error {
-	if !s.isRunning {
+	if s.GetState() != zService.ServiceStateRunning {
 		return nil
 	}
 
@@ -163,7 +166,6 @@ func (s *HttpService) Stop() error {
 		return err
 	}
 
-	s.isRunning = false
 	s.SetState(zService.ServiceStateStopped)
 	zLog.Info("Echo HTTP service stopped")
 	return nil
@@ -208,8 +210,6 @@ func (s *HttpService) registerRoutes() {
 	{
 		server.GET("/list", handler.HandleGetServerList)
 		server.GET("/group/:groupId", handler.HandleGetServerListByGroup)
-		server.POST("/register", handler.HandleServerRegister)
-		server.POST("/heartbeat", handler.HandleServerHeartbeat)
 	}
 }
 

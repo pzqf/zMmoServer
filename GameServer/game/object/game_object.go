@@ -7,10 +7,10 @@ import (
 	"github.com/pzqf/zEngine/zObject"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/object/component"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
-// GameObject 基础游戏对象类
+// GameObject 基础游戏对象
 type GameObject struct {
 	*zObject.BaseObject
 	mu           sync.RWMutex
@@ -238,3 +238,4 @@ func (goObj *GameObject) GetNeighbors(radius float32) []common.IGameObject {
 
 	return goObj.mapObject.GetObjectsInRange(goObj.position, radius)
 }
+

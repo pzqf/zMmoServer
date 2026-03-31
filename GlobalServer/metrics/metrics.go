@@ -4,9 +4,9 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	sharedMetrics "github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
-	sharedMetrics "github.com/pzqf/zMmoShared/metrics"
 )
 
 // Metrics GlobalServer 监控指标
@@ -28,16 +28,31 @@ type Metrics struct {
 
 	// 系统指标
 	activeAccounts prometheus.Gauge
+
+	// 服务发现相关指标
+	serviceRegisterTotal     prometheus.Counter
+	serviceUnregisterTotal   prometheus.Counter
+	serviceDiscoveryFailures prometheus.Counter
+	serviceHeartbeatTotal    prometheus.Counter
+
+	// HTTP 服务指标
+	httpRequestsTotal      prometheus.Counter
+	httpRequestDuration    prometheus.Histogram
+	httpErrorRequestsTotal prometheus.Counter
+
+	// 业务逻辑指标
+	serverListResponseTime prometheus.Histogram
+	accountOperationTime   prometheus.Histogram
 }
 
 // NewMetrics 创建 GlobalServer 监控指标
 func NewMetrics(cfg *config.MetricsConfig) *Metrics {
 	// 转换配置为通用 metrics 配置
 	commonCfg := (*sharedMetrics.MetricsConfig)(cfg)
-	
+
 	// 创建通用服务器指标
 	commonMetrics := sharedMetrics.NewServerMetrics(commonCfg)
-	
+
 	m := &Metrics{
 		ServerMetrics: commonMetrics,
 	}
@@ -97,6 +112,60 @@ func (m *Metrics) registerGlobalServerMetrics() {
 		nil,
 	)
 
+	// 注册服务发现相关指标
+	m.serviceRegisterTotal = m.RegisterCounter(
+		"global_service_register_total",
+		"Total number of service registrations",
+		nil,
+	)
+	m.serviceUnregisterTotal = m.RegisterCounter(
+		"global_service_unregister_total",
+		"Total number of service unregistrations",
+		nil,
+	)
+	m.serviceDiscoveryFailures = m.RegisterCounter(
+		"global_service_discovery_failures_total",
+		"Total number of service discovery failures",
+		nil,
+	)
+	m.serviceHeartbeatTotal = m.RegisterCounter(
+		"global_service_heartbeat_total",
+		"Total number of service heartbeats",
+		nil,
+	)
+
+	// 注册 HTTP 服务指标
+	m.httpRequestsTotal = m.RegisterCounter(
+		"global_http_requests_total",
+		"Total number of HTTP requests",
+		nil,
+	)
+	m.httpRequestDuration = m.RegisterHistogram(
+		"global_http_request_duration_seconds",
+		"HTTP request duration in seconds",
+		[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
+		nil,
+	)
+	m.httpErrorRequestsTotal = m.RegisterCounter(
+		"global_http_error_requests_total",
+		"Total number of HTTP error requests",
+		nil,
+	)
+
+	// 注册业务逻辑指标
+	m.serverListResponseTime = m.RegisterHistogram(
+		"global_server_list_response_time_seconds",
+		"Server list response time in seconds",
+		[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+		nil,
+	)
+	m.accountOperationTime = m.RegisterHistogram(
+		"global_account_operation_time_seconds",
+		"Account operation time in seconds",
+		[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1},
+		nil,
+	)
+
 	zLog.Info("GlobalServer specific metrics registered successfully")
 }
 
@@ -149,5 +218,74 @@ func (m *Metrics) RecordDBQuery(duration time.Duration) {
 func (m *Metrics) SetActiveAccounts(count int) {
 	if m.activeAccounts != nil {
 		m.activeAccounts.Set(float64(count))
+	}
+}
+
+// 服务发现相关指标方法
+
+// IncrementServiceRegister 增加服务注册计数
+func (m *Metrics) IncrementServiceRegister() {
+	if m.serviceRegisterTotal != nil {
+		m.serviceRegisterTotal.Inc()
+	}
+}
+
+// IncrementServiceUnregister 增加服务注销计数
+func (m *Metrics) IncrementServiceUnregister() {
+	if m.serviceUnregisterTotal != nil {
+		m.serviceUnregisterTotal.Inc()
+	}
+}
+
+// IncrementServiceDiscoveryFailures 增加服务发现失败计数
+func (m *Metrics) IncrementServiceDiscoveryFailures() {
+	if m.serviceDiscoveryFailures != nil {
+		m.serviceDiscoveryFailures.Inc()
+	}
+}
+
+// IncrementServiceHeartbeat 增加服务心跳计数
+func (m *Metrics) IncrementServiceHeartbeat() {
+	if m.serviceHeartbeatTotal != nil {
+		m.serviceHeartbeatTotal.Inc()
+	}
+}
+
+// HTTP 服务指标方法
+
+// IncrementHTTPRequests 增加 HTTP 请求计数
+func (m *Metrics) IncrementHTTPRequests() {
+	if m.httpRequestsTotal != nil {
+		m.httpRequestsTotal.Inc()
+	}
+}
+
+// RecordHTTPRequest 记录 HTTP 请求耗时
+func (m *Metrics) RecordHTTPRequest(duration time.Duration) {
+	if m.httpRequestDuration != nil {
+		m.httpRequestDuration.Observe(duration.Seconds())
+	}
+}
+
+// IncrementHTTPErrorRequests 增加 HTTP 错误请求计数
+func (m *Metrics) IncrementHTTPErrorRequests() {
+	if m.httpErrorRequestsTotal != nil {
+		m.httpErrorRequestsTotal.Inc()
+	}
+}
+
+// 业务逻辑指标方法
+
+// RecordServerListResponseTime 记录服务器列表响应时间
+func (m *Metrics) RecordServerListResponseTime(duration time.Duration) {
+	if m.serverListResponseTime != nil {
+		m.serverListResponseTime.Observe(duration.Seconds())
+	}
+}
+
+// RecordAccountOperationTime 记录账号操作时间
+func (m *Metrics) RecordAccountOperationTime(duration time.Duration) {
+	if m.accountOperationTime != nil {
+		m.accountOperationTime.Observe(duration.Seconds())
 	}
 }

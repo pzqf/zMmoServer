@@ -2,7 +2,7 @@ package player
 
 import (
 	"github.com/pzqf/zEngine/zActor"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 )
 
 // ==================== 消息类型定义 ====================
@@ -257,3 +257,4 @@ func NewAddFriendMessage(playerID id.PlayerIdType, source MessageSource, friendI
 func NewRemoveFriendMessage(playerID id.PlayerIdType, source MessageSource, friendID id.PlayerIdType) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgRemoveFriend, NewRemoveFriendRequest(friendID))
 }
+

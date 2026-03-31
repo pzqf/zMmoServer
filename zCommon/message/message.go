@@ -1,0 +1,77 @@
+package message
+
+import (
+	"encoding/binary"
+	"errors"
+	"sync"
+)
+
+// MessageHeader 消息头
+type MessageHeader struct {
+	Length uint32 // 消息总长度
+	MsgID  uint32 // 消息ID
+}
+
+// Message 消息结构
+type Message struct {
+	Header MessageHeader
+	Data   []byte // 消息数据
+}
+
+// 消息对象池
+var messagePool = sync.Pool{
+	New: func() interface{} {
+		return &Message{}
+	},
+}
+
+// GetMessage 从对象池获取消息对象
+func GetMessage() *Message {
+	return messagePool.Get().(*Message)
+}
+
+// PutMessage 将消息对象归还到对象池
+func PutMessage(msg *Message) {
+	// 重置消息对象
+	msg.Header.Length = 0
+	msg.Header.MsgID = 0
+	msg.Data = nil
+	messagePool.Put(msg)
+}
+
+// Encode 编码消息
+func Encode(msgID uint32, data []byte) ([]byte, error) {
+	totalLen := 8 + len(data)
+	buffer := make([]byte, totalLen)
+	
+	// 编码长度
+	binary.LittleEndian.PutUint32(buffer[0:4], uint32(totalLen))
+	// 编码消息ID
+	binary.LittleEndian.PutUint32(buffer[4:8], msgID)
+	// 编码数据
+	copy(buffer[8:], data)
+	
+	return buffer, nil
+}
+
+// Decode 解码消息
+func Decode(data []byte) (*Message, error) {
+	if len(data) < 8 {
+		return nil, errors.New("invalid message format: insufficient data for header")
+	}
+	
+	// 从对象池获取消息对象
+	message := GetMessage()
+	
+	message.Header.Length = binary.LittleEndian.Uint32(data[0:4])
+	message.Header.MsgID = binary.LittleEndian.Uint32(data[4:8])
+	
+	if len(data) < int(message.Header.Length) {
+		PutMessage(message)
+		return nil, errors.New("invalid message format: insufficient data for message")
+	}
+	
+	message.Data = data[8:message.Header.Length]
+	
+	return message, nil
+}

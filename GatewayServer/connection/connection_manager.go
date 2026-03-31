@@ -3,7 +3,7 @@ package connection
 import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zMmoShared/common/id"
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -128,3 +128,4 @@ func (cm *ConnectionManager) GetConnectionCount() int {
 func (cm *ConnectionManager) GetAccountCount() int {
 	return int(cm.accountMap.Len())
 }
+
