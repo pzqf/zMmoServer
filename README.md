@@ -37,32 +37,42 @@ zMmoServer 是一个基于 Go 语言开发的分布式 MMORPG 游戏服务器框
 - **活动系统**：限时活动、奖励发放
 - **副本系统**：副本管理、Boss 战
 - **通信模式**：统一消息结构、智能路由、数据一致性
+
 ## 技术栈
 
 - **语言**：Go 1.25+
 - **Web 框架**：gorilla/websocket
 - **日志**：go.uber.org/zap + lumberjack
 - **配置管理**：gopkg.in/ini.v1, Kubernetes ConfigMap/Secret
-- **数据�?*：MySQL (go-sql-driver/mysql), MongoDB (mongo-driver)
+- **数据库**：MySQL (go-sql-driver/mysql), MongoDB (mongo-driver)
 - **服务发现**：etcd, Kubernetes Service
 - **监控**：Prometheus, Grafana
 - **容器编排**：Kubernetes
-- **序列�?*：Protocol Buffers (google.golang.org/protobuf)
+- **序列化**：Protocol Buffers (google.golang.org/protobuf)
 - **本地模块**：zEngine, zUtil
 
 ## 项目结构
 
 ```
 zMmoServer/
-├── AdminServer/          # 管理服（暂未实现�?├── GameServer/           # 游戏�?├── GatewayServer/        # 网关�?├── GlobalServer/         # 全局�?├── MapServer/            # 地图�?├── docs/                 # 文档
+├── AdminServer/          # 管理服（暂未实现）
+├── GameServer/           # 游戏服
+├── GatewayServer/        # 网关服
+├── GlobalServer/         # 全局服
+├── MapServer/            # 地图服
+├── docs/                 # 文档
 ├── kubernetes/           # Kubernetes 部署配置
 ├── resources/            # 资源文件
-�?  ├── excel_tables/     # 配置�?�?  ├── maps/             # 地图文件
-�?  └── protocol/         # 协议文件
-├── testclient/           # 测试客户�?├── zCommon/           # 共享�?└── README.md             # 项目文档
+│   ├── excel_tables/     # 配置表
+│   ├── maps/             # 地图文件
+│   └── protocol/         # 协议文件
+├── testclient/           # 测试客户端
+├── zCommon/              # 共享包
+└── README.md             # 项目文档
 ```
 
 ## 开发进度
+
 ### 已完成功能
 - [x] 服务器框架搭建
 - [x] 网络通信模块
@@ -79,13 +89,17 @@ zMmoServer/
 - [x] 服务发现优化（MapServer地图ID注册）
 - [x] 并发安全数据结构（zMap.TypedMap）
 
-### 待开发功�?- [ ] AdminServer 实现
+### 待开发功能
+- [ ] AdminServer 实现
 - [ ] 跨服功能完善
 - [ ] 数据库分片与读写分离
 - [ ] Kubernetes 部署优化
-- [ ] 性能测试与优�?
-## 快速开�?
-### 编译服务�?
+- [ ] 性能测试与优化
+
+## 快速开始
+
+### 编译服务器
+
 ```bash
 # 编译 GlobalServer
 cd GlobalServer
@@ -104,31 +118,41 @@ cd ../MapServer
 go build -o bin/map_server.exe ./main.go
 ```
 
-### 运行服务�?
+### 运行服务器
+
 1. 启动 etcd 服务（用于服务发现）
-2. 配置各服务器�?`config.ini` 文件
-3. 按顺序启动服务器：GlobalServer �?GatewayServer �?GameServer �?MapServer
+2. 配置各服务器的 `config.ini` 文件
+3. 按顺序启动服务器：GlobalServer → GatewayServer → GameServer → MapServer
 
 ### 配置文件
 
-各服务器的配置文件位于各自目录下�?`config.ini`，主要配置项包括�?- 服务器基本信息（类型、ID、名称等�?- 网络配置（监听地址、端口等�?- 数据库配置（连接信息、池大小等）
-- 日志配置（级别、文件路径等�?- 其他服务地址（如 etcd 地址、其他服务器地址等）
+各服务器的配置文件位于各自目录下的 `config.ini`，主要配置项包括：
+- 服务器基本信息（类型、ID、名称等）
+- 网络配置（监听地址、端口等）
+- 数据库配置（连接信息、池大小等）
+- 日志配置（级别、文件路径等）
+- 其他服务地址（如 etcd 地址、其他服务器地址等）
 
-## 开发规�?
-请参�?`project_rules.md` 文件，了解项目的代码规范、架构设计原则和开发约束�?
+## 开发规范
+
+请参考 `project_rules.md` 文件，了解项目的代码规范、架构设计原则和开发约束。
+
 ## 贡献指南
 
-1. Fork 本项�?2. 创建特性分�?(`git checkout -b feature/amazing-feature`)
+1. Fork 本项目
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
 3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
 4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 开�?Pull Request
+5. 开启 Pull Request
 
-## 许可�?
-本项目采�?MIT 许可证，详情请参�?LICENSE 文件�?
+## 许可证
+
+本项目采用 MIT 许可证，详情请参考 LICENSE 文件。
+
 ## 联系方式
 
-如有问题或建议，欢迎通过 GitHub Issues 或邮件联系我们�?
+如有问题或建议，欢迎通过 GitHub Issues 或邮件联系我们。
+
 ---
 
-**最后更新时间**：2026-04-03
-
+**最后更新时间**：2026-04-04
