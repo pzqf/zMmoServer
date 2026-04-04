@@ -22,6 +22,8 @@ const (
 	ServiceTypeUnknown uint8 = 0
 	ServiceTypeGame    uint8 = 1
 	ServiceTypeMap     uint8 = 2
+	ServiceTypeGateway uint8 = 3
+	ServiceTypeGlobal  uint8 = 4
 )
 
 type Meta struct {

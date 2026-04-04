@@ -3,6 +3,7 @@ package maps
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -18,19 +19,20 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/connection"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/object"
+	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
-// MapService 地图服务
-
 type MapService struct {
 	config            *config.Config
 	protocol          protolayer.Protocol
 	maps              *zMap.TypedMap[id.MapIdType, *Map]
 	connectionManager *connection.ConnectionManager
+	mapServerManager  *MapServerManager
+	playerMapManager  *player.PlayerMapManager
 	pendingAttacks    *zMap.TypedMap[string, chan mapAttackResult]
 	pendingByReq      *zMap.TypedMap[uint64, chan mapAttackResult]
 	outbox            consistency.OutboxStore
@@ -70,6 +72,16 @@ func NewMapService(cfg *config.Config, protocol protolayer.Protocol) *MapService
 // SetConnectionManager 设置连接管理器
 func (ms *MapService) SetConnectionManager(connManager *connection.ConnectionManager) {
 	ms.connectionManager = connManager
+}
+
+// SetMapServerManager 设置地图服务器管理器
+func (ms *MapService) SetMapServerManager(mapServerManager *MapServerManager) {
+	ms.mapServerManager = mapServerManager
+}
+
+// SetPlayerMapManager 设置玩家地图管理器
+func (ms *MapService) SetPlayerMapManager(playerMapManager *player.PlayerMapManager) {
+	ms.playerMapManager = playerMapManager
 }
 
 // SetOnOutboxStatsChanged 设置Outbox状态变更回调（用于实时监控更新）
@@ -208,30 +220,34 @@ func (ms *MapService) GetDefaultMapID() id.MapIdType {
 
 // HandlePlayerEnterMap 处理玩家进入地图
 func (ms *MapService) HandlePlayerEnterMap(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	// 先在本地处理
-	// 获取地图
 	m, err := ms.GetMap(mapID)
 	if err != nil {
 		return err
 	}
 
-	// 创建玩家游戏对象
 	playerObj := object.NewGameObjectWithType(id.ObjectIdType(playerID), "player", common.GameObjectTypePlayer)
 	playerObj.SetPosition(pos)
 
-	// 添加玩家到地图
 	m.AddPlayer(playerID, playerObj)
 
-	// 向MapServer发送进入地图请求
+	var mapServerID uint32
+	if ms.mapServerManager != nil {
+		mapServerID, _ = ms.mapServerManager.GetMapServerID(mapID)
+	}
+
+	if ms.playerMapManager != nil {
+		ms.playerMapManager.SetPlayerMap(playerID, mapID, mapServerID)
+	}
+
 	err = ms.sendMapEnterRequest(playerID, mapID, pos)
 	if err != nil {
 		zLog.Warn("Failed to send map enter request to MapServer", zap.Error(err))
-		// 继续执行，MapServer通信失败不影响本地处理
 	}
 
 	zLog.Info("Player entered map",
 		zap.Int64("player_id", int64(playerID)),
 		zap.Int32("map_id", int32(mapID)),
+		zap.Uint32("map_server_id", mapServerID),
 		zap.Float32("x", pos.X),
 		zap.Float32("y", pos.Y),
 		zap.Float32("z", pos.Z))
@@ -240,12 +256,45 @@ func (ms *MapService) HandlePlayerEnterMap(playerID id.PlayerIdType, mapID id.Ma
 }
 
 // sendMapMessage 发送消息到MapServer
-func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byte, meta crossserver.Meta) error {
+func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byte, playerID id.PlayerIdType, meta crossserver.Meta) error {
 	if ms.connectionManager == nil {
 		return fmt.Errorf("connection manager not set")
 	}
 
-	enveloped := crossserver.Wrap(meta, data)
+	var mapServerID uint32
+	if ms.mapServerManager != nil {
+		var exists bool
+		mapServerID, exists = ms.mapServerManager.GetMapServerID(mapID)
+		if !exists {
+			zLog.Warn("Map server not found for map, using default routing", zap.Int32("map_id", int32(mapID)))
+		}
+	}
+
+	baseMsg := crossserver.BaseMessage{
+		MsgID:       uint32(protoId),
+		PlayerID:    uint64(playerID),
+		ServerID:    uint32(ms.config.Server.ServerID),
+		Timestamp:   uint64(time.Now().Unix()),
+		Data:        data,
+		MapID:       uint32(mapID),
+		MapServerID: mapServerID,
+	}
+
+	crossMsg := crossserver.CrossServerMessage{
+		TraceID:      meta.TraceID,
+		FromService:  crossserver.ServiceTypeGame,
+		ToService:    crossserver.ServiceTypeMap,
+		FromServerID: uint32(ms.config.Server.ServerID),
+		ToServerID:   mapServerID,
+		Message:      baseMsg,
+	}
+
+	crossMsgData, err := json.Marshal(crossMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal cross server message: %w", err)
+	}
+
+	enveloped := crossserver.Wrap(meta, crossMsgData)
 	msg := consistency.OutboxMessage{
 		RequestID:   meta.RequestID,
 		Topic:       fmt.Sprintf("map:%d:proto:%d", mapID, protoId),
@@ -257,7 +306,7 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byt
 	ms.outbox.MarkAttempt(meta.RequestID, nil)
 	ms.publishOutboxStats()
 
-	err := ms.sendFramedToMap(int(mapID), protoId, enveloped)
+	err = ms.sendFramedToMap(int(mapID), protoId, enveloped)
 	if err != nil {
 		ms.outbox.MarkAttempt(meta.RequestID, err)
 		zLog.Warn("Cross-server send failed",
@@ -377,7 +426,7 @@ func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.Map
 	}
 
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 400, data, meta)
+	err = ms.sendMapMessage(mapID, 400, data, playerID, meta)
 	if err != nil {
 		return err
 	}
@@ -394,14 +443,16 @@ func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.Map
 
 // HandlePlayerLeaveMap 处理玩家离开地图
 func (ms *MapService) HandlePlayerLeaveMap(playerID id.PlayerIdType, mapID id.MapIdType) error {
-	// 获取地图
 	m, err := ms.GetMap(mapID)
 	if err != nil {
 		return err
 	}
 
-	// 从地图移除玩家
 	m.RemovePlayer(playerID)
+
+	if ms.playerMapManager != nil {
+		ms.playerMapManager.RemovePlayerMap(playerID)
+	}
 
 	zLog.Info("Player left map",
 		zap.Int64("player_id", int64(playerID)),
@@ -465,13 +516,10 @@ func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.O
 	}
 
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 404, data, meta)
+	err = ms.sendMapMessage(mapID, 404, data, playerID, meta)
 	if err != nil {
 		return err
 	}
-
-	// 注意：由于我们使用异步通信，这里不再等待响应
-	// 响应会通过ConnectionManager的接收处理
 
 	zLog.Debug("MapServer move request sent",
 		zap.Int64("player_id", int64(playerID)),
@@ -593,7 +641,7 @@ func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id
 	respCh := ms.registerPendingAttack(playerID, targetID, meta.RequestID)
 	defer ms.removePendingAttack(playerID, targetID, meta.RequestID)
 
-	err = ms.sendMapMessage(mapID, 406, data, meta)
+	err = ms.sendMapMessage(mapID, 406, data, playerID, meta)
 	if err != nil {
 		return 0, 0, err
 	}

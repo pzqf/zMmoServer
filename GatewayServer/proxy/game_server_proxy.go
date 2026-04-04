@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"time"
@@ -14,9 +15,8 @@ import (
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zMmoServer/GatewayServer/common"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
-	"github.com/pzqf/zMmoServer/GatewayServer/connection"
-	gwService "github.com/pzqf/zMmoServer/GatewayServer/service"
 	"go.uber.org/zap"
 )
 
@@ -27,19 +27,17 @@ type GameServerProxy interface {
 }
 
 type gameServerProxy struct {
-	config      *config.Config
-	tcpService  *gwService.TCPService
-	connManager *connection.ConnectionManager
-	tcpClient   *zNet.TcpClient
-	discovery   *discovery.ServiceDiscovery
-	gameServers []*discovery.ServerInfo
+	config        *config.Config
+	clientService common.ClientServiceInterface
+	tcpClient     *zNet.TcpClient
+	discovery     *discovery.ServiceDiscovery
+	gameServers   []*discovery.ServerInfo
 }
 
-func NewGameServerProxy(cfg *config.Config, tcpService *gwService.TCPService, connManager *connection.ConnectionManager) GameServerProxy {
+func NewGameServerProxy(cfg *config.Config, clientService common.ClientServiceInterface) GameServerProxy {
 	return &gameServerProxy{
-		config:      cfg,
-		tcpService:  tcpService,
-		connManager: connManager,
+		config:        cfg,
+		clientService: clientService,
 	}
 }
 
@@ -160,15 +158,19 @@ func (gsp *gameServerProxy) handleGameServerStatusChange(event *discovery.Server
 		zap.String("event_type", event.EventType),
 		zap.String("status", string(event.Status)))
 
-	// 如果当前连接的GameServer状态变为不健康，重新选择服务器
+	// 只关注与当前Gateway ServerID相同的GameServer
+	targetServerID := fmt.Sprintf("%d", gsp.config.Server.ServerID)
+	if event.ServerID != targetServerID {
+		return
+	}
+
+	// 如果当前连接的GameServer状态变为不健康，关闭连接
 	if gsp.tcpClient != nil && gsp.tcpClient.IsConnected() {
-		// 这里可以根据实际情况判断是否需要重新连接
-		// 例如，如果当前连接的服务器状态变为maintenance或stopped，需要重新选择
-		if event.Status == discovery.ServerStatusMaintenance || event.Status == discovery.ServerStatusStopped {
-			zLog.Warn("Current GameServer status changed to unhealthy, will reconnect",
+		if event.Status == "maintenance" || event.Status == "stopped" {
+			zLog.Warn("Current GameServer status changed to unhealthy, closing connection",
 				zap.String("server_id", event.ServerID),
 				zap.String("status", string(event.Status)))
-			// 关闭当前连接，触发重新连接
+			// 关闭当前连接，等待下一次发现周期重新连接
 			gsp.tcpClient.Close()
 		}
 	}
@@ -179,68 +181,23 @@ func (gsp *gameServerProxy) selectGameServer(instances []*discovery.ServerInfo) 
 		return nil
 	}
 
-	// 首先尝试根据配置的GameServerID选择
-	targetGameServerID, err := id.ParseServerIDInt(int32(gsp.config.GameServer.GameServerID))
-	if err != nil {
-		zLog.Error("Invalid target GameServerID", zap.Int("game_server_id", gsp.config.GameServer.GameServerID), zap.Error(err))
-		// 如果配置的ID无效，尝试选择健康状态的服务器
-	} else {
-		// 尝试找到配置的目标服务器
-		targetInt := int32(targetGameServerID)
-		for _, inst := range instances {
-			// 使用ID字段作为服务器ID
-			if inst.ID == fmt.Sprintf("%d", gsp.config.GameServer.GameServerID) {
-				// 检查服务器状态是否健康
-				if inst.Status == discovery.ServerStatusHealthy || inst.Status == discovery.ServerStatusReady {
-					return inst
-				}
+	// 只选择与Gateway ServerID相同的GameServer
+	targetServerID := fmt.Sprintf("%d", gsp.config.Server.ServerID)
+	for _, inst := range instances {
+		// 使用ID字段作为服务器ID
+		if inst.ID == targetServerID {
+			// 检查服务器状态是否健康
+			if inst.Status == "healthy" || inst.Status == "ready" {
+				zLog.Info("Selected GameServer with matching ServerID",
+					zap.String("server_id", inst.ID),
+					zap.String("address", inst.Address),
+					zap.String("status", string(inst.Status)))
+				return inst
 			}
 		}
-		zLog.Warn("No matching healthy GameServer instance for target", zap.Int32("target_game_server_id", targetInt))
 	}
 
-	// 如果没有找到配置的服务器或配置的服务器不健康，选择最健康的服务器
-	var bestInstance *discovery.ServerInfo
-	var bestScore float64
-
-	for _, inst := range instances {
-		// 跳过不健康的服务器
-		if inst.Status != discovery.ServerStatusHealthy && inst.Status != discovery.ServerStatusReady {
-			continue
-		}
-
-		// 计算服务器评分：负载越低，玩家数越少，评分越高
-		score := 100.0
-		if inst.Load > 0 {
-			score -= inst.Load * 10
-		}
-		score -= float64(inst.Players) * 0.1
-
-		// 选择评分最高的服务器
-		if bestInstance == nil || score > bestScore {
-			bestInstance = inst
-			bestScore = score
-		}
-	}
-
-	if bestInstance != nil {
-		zLog.Info("Selected GameServer based on health and load",
-			zap.String("server_id", bestInstance.ID),
-			zap.String("address", bestInstance.Address),
-			zap.Float64("load", bestInstance.Load),
-			zap.Int("players", bestInstance.Players),
-			zap.String("status", string(bestInstance.Status)))
-		return bestInstance
-	}
-
-	// 如果没有健康的服务器，返回第一个服务器
-	if len(instances) > 0 {
-		zLog.Warn("No healthy GameServer instances found, returning first available",
-			zap.String("server_id", instances[0].ID),
-			zap.String("status", string(instances[0].Status)))
-		return instances[0]
-	}
-
+	zLog.Warn("No matching GameServer instance found for ServerID", zap.Int("server_id", gsp.config.Server.ServerID))
 	return nil
 }
 
@@ -341,18 +298,21 @@ func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
 		return
 	}
 
-	// 解析消息内容，提取sessionID
-	var clientMsg protocol.ClientMessage
-	if err := proto.Unmarshal(msg.Data, &clientMsg); err != nil {
-		zLog.Error("Failed to unmarshal client message", zap.Error(err))
+	// 解析跨服务器消息
+	var crossMsg crossserver.CrossServerMessage
+	if err := json.Unmarshal(msg.Data, &crossMsg); err != nil {
+		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
 		return
 	}
 
-	// 查找对应的客户端连接
-	sessionID := zNet.SessionIdType(clientMsg.SessionId)
+	// 提取基础消息
+	baseMsg := crossMsg.Message
 
-	// 转发消息给客户端
-	err = gsp.tcpService.SendToClient(sessionID, data)
+	// 查找对应的客户端连接
+	sessionID := zNet.SessionIdType(baseMsg.SessionID)
+
+	// 转发消息给客户端，使用baseMsg.Data作为实际消息数据
+	err = gsp.clientService.SendToClient(sessionID, baseMsg.Data)
 	if err != nil {
 		zLog.Error("Failed to send message to client",
 			zap.Error(err),
@@ -370,14 +330,39 @@ func (gsp *gameServerProxy) SendToGameServer(sessionID zNet.SessionIdType, proto
 		return fmt.Errorf("not connected to GameServer")
 	}
 
+	// 创建基础消息
+	baseMsg := crossserver.BaseMessage{
+		MsgID:     uint32(protoId),
+		SessionID: uint64(sessionID),
+		ServerID:  uint32(gsp.config.Server.ServerID),
+		Timestamp: uint64(time.Now().Unix()),
+		Data:      data,
+	}
+
+	// 创建跨服务器消息
+	crossMsg := crossserver.CrossServerMessage{
+		TraceID:      uint64(time.Now().UnixNano()),
+		FromService:  crossserver.ServiceTypeGateway,
+		ToService:    crossserver.ServiceTypeGame,
+		FromServerID: uint32(gsp.config.Server.ServerID),
+		Message:      baseMsg,
+	}
+
+	// 序列化消息
+	crossMsgData, err := json.Marshal(crossMsg)
+	if err != nil {
+		zLog.Error("Failed to marshal cross server message", zap.Error(err))
+		return err
+	}
+
 	// 编码消息
-	encodedMsg, err := message.Encode(uint32(protoId), data)
+	encodedMsg, err := message.Encode(uint32(protoId), crossMsgData)
 	if err != nil {
 		zLog.Error("Failed to encode message", zap.Error(err))
 		return err
 	}
 
-	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeUnknown, int32(gsp.config.Server.ServerID))
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGateway, int32(gsp.config.Server.ServerID))
 	encodedMsg = crossserver.Wrap(meta, encodedMsg)
 	zLog.Debug("Sending cross-server envelope to GameServer",
 		zap.Uint64("trace_id", meta.TraceID),

@@ -3,12 +3,15 @@ package service
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/config"
@@ -18,12 +21,13 @@ import (
 )
 
 type TCPService struct {
-	config      *config.Config
-	connManager *connection.ConnectionManager
-	mapService  *maps.MapManager
-	listener    net.Listener
-	isRunning   bool
-	wg          sync.WaitGroup
+	config                  *config.Config
+	connManager             *connection.ConnectionManager
+	mapService              *maps.MapManager
+	playerGameServerManager *maps.PlayerGameServerManager
+	listener                net.Listener
+	isRunning               bool
+	wg                      sync.WaitGroup
 }
 
 func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, mapService *maps.MapManager) *TCPService {
@@ -33,6 +37,10 @@ func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager
 		mapService:  mapService,
 		isRunning:   false,
 	}
+}
+
+func (ts *TCPService) SetPlayerGameServerManager(manager *maps.PlayerGameServerManager) {
+	ts.playerGameServerManager = manager
 }
 
 func (ts *TCPService) Name() string {
@@ -199,51 +207,66 @@ func (ts *TCPService) processGameServerData(conn net.Conn, pendingData *[]byte) 
 
 // handleGameServerMessage 处理来自GameServer的消息
 func (ts *TCPService) handleGameServerMessage(conn net.Conn, data []byte) {
-	// 解析zNet格式的消息
 	if len(data) < 16 {
 		zLog.Error("Invalid zNet message format from GameServer", zap.Int("size", len(data)))
 		return
 	}
 
-	// 解析zNet消息头
 	protoId := int(binary.BigEndian.Uint32(data[:4]))
-	_ = int(binary.BigEndian.Uint32(data[4:8])) // version
+	_ = int(binary.BigEndian.Uint32(data[4:8]))
 	dataLen := int(binary.BigEndian.Uint32(data[8:12]))
-	_ = int(binary.BigEndian.Uint32(data[12:16])) // isCompressed
+	_ = int(binary.BigEndian.Uint32(data[12:16]))
 
-	// 检查数据长度
 	if dataLen > 1024*1024 {
 		zLog.Error("Message too long from GameServer", zap.Int("length", dataLen))
 		return
 	}
 
-	// 检查总消息长度
 	totalLen := 16 + dataLen
 	if len(data) < totalLen {
 		zLog.Error("Insufficient data from GameServer", zap.Int("actual", len(data)), zap.Int("expected", totalLen))
 		return
 	}
 
-	// 提取数据部分
-	payload := data[16:totalLen]
+	rawPayload := data[16:totalLen]
+	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(rawPayload)
+	if unwrapErr != nil {
+		zLog.Error("Invalid cross-server envelope from GameServer", zap.Error(unwrapErr))
+		return
+	}
+	if wrapped {
+		zLog.Debug("Received cross-server envelope from GameServer",
+			zap.Uint64("trace_id", meta.TraceID),
+			zap.Uint64("request_id", meta.RequestID),
+			zap.Int("proto_id", protoId))
+	}
 
-	// 根据消息类型处理
+	var crossMsg crossserver.CrossServerMessage
+	if err := json.Unmarshal(payload, &crossMsg); err != nil {
+		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
+		return
+	}
+
+	baseMsg := crossMsg.Message
+
 	switch protoId {
-	case 400: // MSG_INTERNAL_MAP_ENTER_REQUEST
-		ts.handleMapEnterRequest(conn, payload)
-	case 404: // MSG_INTERNAL_MAP_MOVE_SYNC
-		ts.handleMapMoveRequest(conn, payload)
-	case 406: // MSG_INTERNAL_MAP_ATTACK_REQUEST
-		ts.handleMapAttackRequest(conn, payload)
+	case 400:
+		ts.handleMapEnterRequest(conn, &baseMsg, &meta)
+	case 402:
+		ts.handleMapLeaveRequest(conn, &baseMsg, &meta)
+	case 404:
+		ts.handleMapMoveRequest(conn, &baseMsg, &meta)
+	case 406:
+		ts.handleMapAttackRequest(conn, &baseMsg, &meta)
 	default:
 		zLog.Info("Received unknown message from GameServer", zap.Int("proto_id", protoId))
 	}
 }
 
 // handleMapEnterRequest 处理玩家进入地图请求
-func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
+func (ts *TCPService) handleMapEnterRequest(conn net.Conn, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapEnterRequest
-	if err := proto.Unmarshal(payload, &req); err != nil {
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapEnterRequest", zap.Error(err))
 		return
 	}
@@ -251,26 +274,33 @@ func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
 	zLog.Info("Map enter request",
 		zap.Int64("player_id", req.PlayerId),
 		zap.Int64("map_id", req.MapId),
+		zap.Uint32("game_server_id", baseMsg.ServerID),
 		zap.Float32("x", req.X),
 		zap.Float32("y", req.Y),
 		zap.Float32("z", req.Z))
 
-	// 处理玩家进入地图
+	if ts.playerGameServerManager != nil {
+		ts.playerGameServerManager.SetPlayerGameServer(
+			id.PlayerIdType(req.PlayerId),
+			baseMsg.ServerID,
+			"",
+			id.MapIdType(req.MapId),
+		)
+	}
+
 	if ts.mapService != nil {
 		err := ts.mapService.HandlePlayerEnterMap(req.PlayerId, req.MapId, req.X, req.Y, req.Z)
 		if err != nil {
 			zLog.Error("Failed to handle player enter map", zap.Error(err))
-			// 发送失败响应
 			resp := &protocol.MapEnterResponse{
 				Success:  false,
 				ErrorMsg: err.Error(),
 			}
-			ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp)
+			ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp, baseMsg, meta)
 			return
 		}
 	}
 
-	// 发送成功响应
 	resp := &protocol.MapEnterResponse{
 		Success:  true,
 		ObjectId: req.PlayerId,
@@ -279,13 +309,49 @@ func (ts *TCPService) handleMapEnterRequest(conn net.Conn, payload []byte) {
 		Y:        req.Y,
 		Z:        req.Z,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp, baseMsg, meta)
+}
+
+func (ts *TCPService) handleMapLeaveRequest(conn net.Conn, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+	var req protocol.MapLeaveRequest
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
+		zLog.Error("Failed to unmarshal MapLeaveRequest", zap.Error(err))
+		return
+	}
+
+	zLog.Info("Map leave request",
+		zap.Int64("player_id", req.PlayerId),
+		zap.Int64("map_id", req.MapId),
+		zap.Int32("reason", req.Reason))
+
+	if ts.playerGameServerManager != nil {
+		ts.playerGameServerManager.RemovePlayerGameServer(id.PlayerIdType(req.PlayerId))
+	}
+
+	if ts.mapService != nil {
+		err := ts.mapService.HandlePlayerLeaveMap(req.PlayerId, req.MapId)
+		if err != nil {
+			zLog.Error("Failed to handle player leave map", zap.Error(err))
+			resp := &protocol.MapLeaveResponse{
+				Success:  false,
+				ErrorMsg: err.Error(),
+			}
+			ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_LEAVE_RESPONSE), resp, baseMsg, meta)
+			return
+		}
+	}
+
+	resp := &protocol.MapLeaveResponse{
+		Success:  true,
+		PlayerId: req.PlayerId,
+	}
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_LEAVE_RESPONSE), resp, baseMsg, meta)
 }
 
 // handleMapMoveRequest 处理玩家移动请求
-func (ts *TCPService) handleMapMoveRequest(conn net.Conn, payload []byte) {
+func (ts *TCPService) handleMapMoveRequest(conn net.Conn, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapMoveRequest
-	if err := proto.Unmarshal(payload, &req); err != nil {
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapMoveRequest", zap.Error(err))
 		return
 	}
@@ -298,7 +364,6 @@ func (ts *TCPService) handleMapMoveRequest(conn net.Conn, payload []byte) {
 		zap.Float32("y", req.Y),
 		zap.Float32("z", req.Z))
 
-	// 处理玩家移动
 	if ts.mapService != nil {
 		err := ts.mapService.HandlePlayerMove(req.PlayerId, req.ObjectId, req.MapId, req.X, req.Y, req.Z)
 		if err != nil {
@@ -306,7 +371,6 @@ func (ts *TCPService) handleMapMoveRequest(conn net.Conn, payload []byte) {
 		}
 	}
 
-	// 发送成功响应
 	resp := &protocol.MapMoveResponse{
 		Success:  true,
 		PlayerId: req.PlayerId,
@@ -314,13 +378,13 @@ func (ts *TCPService) handleMapMoveRequest(conn net.Conn, payload []byte) {
 		Y:        req.Y,
 		Z:        req.Z,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC), resp, baseMsg, meta)
 }
 
 // handleMapAttackRequest 处理玩家攻击请求
-func (ts *TCPService) handleMapAttackRequest(conn net.Conn, payload []byte) {
+func (ts *TCPService) handleMapAttackRequest(conn net.Conn, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapAttackRequest
-	if err := proto.Unmarshal(payload, &req); err != nil {
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapAttackRequest", zap.Error(err))
 		return
 	}
@@ -338,7 +402,7 @@ func (ts *TCPService) handleMapAttackRequest(conn net.Conn, payload []byte) {
 			PlayerId: req.PlayerId,
 			TargetId: req.TargetId,
 		}
-		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
+		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp, baseMsg, meta)
 		return
 	}
 
@@ -351,7 +415,7 @@ func (ts *TCPService) handleMapAttackRequest(conn net.Conn, payload []byte) {
 			PlayerId: req.PlayerId,
 			TargetId: req.TargetId,
 		}
-		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
+		ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp, baseMsg, meta)
 		return
 	}
 
@@ -362,31 +426,50 @@ func (ts *TCPService) handleMapAttackRequest(conn net.Conn, payload []byte) {
 		Damage:   damage,
 		TargetHp: targetHp,
 	}
-	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp)
+	ts.sendResponse(conn, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp, baseMsg, meta)
 }
 
 // sendResponse 发送响应消息
-func (ts *TCPService) sendResponse(conn net.Conn, msgID int, msg proto.Message) {
+func (ts *TCPService) sendResponse(conn net.Conn, msgID int, msg proto.Message, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		zLog.Error("Failed to marshal response", zap.Error(err))
 		return
 	}
 
-	// 构建zNet格式的消息头：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
+	respBaseMsg := crossserver.BaseMessage{
+		MsgID:       uint32(msgID),
+		SessionID:   baseMsg.SessionID,
+		PlayerID:    baseMsg.PlayerID,
+		ServerID:    uint32(ts.config.Server.ServerID),
+		Timestamp:   uint64(time.Now().Unix()),
+		Data:        data,
+		MapID:       baseMsg.MapID,
+		MapServerID: uint32(ts.config.Server.ServerID),
+	}
+
+	respCrossMsg := crossserver.CrossServerMessage{
+		TraceID:      meta.TraceID,
+		FromService:  crossserver.ServiceTypeMap,
+		ToService:    crossserver.ServiceTypeGame,
+		FromServerID: uint32(ts.config.Server.ServerID),
+		ToServerID:   baseMsg.ServerID,
+		Message:      respBaseMsg,
+	}
+
+	crossMsgData, err := json.Marshal(respCrossMsg)
+	if err != nil {
+		zLog.Error("Failed to marshal cross server message", zap.Error(err))
+		return
+	}
+
 	header := make([]byte, 16)
-	version := 1
-	dataLen := len(data)
-	isCompressed := 0
-
-	// 使用大端序编码
 	binary.BigEndian.PutUint32(header[:4], uint32(msgID))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
+	binary.BigEndian.PutUint32(header[4:8], uint32(1))
+	binary.BigEndian.PutUint32(header[8:12], uint32(len(crossMsgData)))
+	binary.BigEndian.PutUint32(header[12:16], uint32(0))
 
-	// 发送消息
-	responseData := append(header, data...)
+	responseData := append(header, crossMsgData...)
 	_, err = conn.Write(responseData)
 	if err != nil {
 		zLog.Error("Failed to send response", zap.Error(err))

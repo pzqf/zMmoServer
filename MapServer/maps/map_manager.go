@@ -154,6 +154,17 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 	return m.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z)
 }
 
+// HandlePlayerLeaveMap 处理玩家离开地图
+func (mm *MapManager) HandlePlayerLeaveMap(playerID int64, mapID int64) error {
+	m := mm.GetMap(id.MapIdType(mapID))
+	if m == nil {
+		return fmt.Errorf("map not found: %d", mapID)
+	}
+
+	m.RemovePlayer(id.PlayerIdType(playerID))
+	return nil
+}
+
 // HandlePlayerMove 处理玩家移动
 func (mm *MapManager) HandlePlayerMove(playerID, objectID, mapID int64, x, y, z float32) error {
 	m := mm.GetMap(id.MapIdType(mapID))
@@ -267,4 +278,14 @@ func (mm *MapManager) GetMapCount() int {
 		return true
 	})
 	return count
+}
+
+// GetAllMapIDs 获取所有地图ID
+func (mm *MapManager) GetAllMapIDs() []int32 {
+	var mapIDs []int32
+	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
+		mapIDs = append(mapIDs, int32(key))
+		return true
+	})
+	return mapIDs
 }

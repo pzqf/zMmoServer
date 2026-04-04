@@ -8,23 +8,23 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zMmoServer/GatewayServer/client/connection"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
-	"github.com/pzqf/zMmoServer/GatewayServer/connection"
 	"go.uber.org/zap"
 )
 
 // Metrics 监控指标
 type Metrics struct {
 	config      *config.Config
-	connManager *connection.ConnectionManager
+	connMgr     *connection.ClientConnMgr
 	metricsMgr  *metrics.MetricsManager
 }
 
 // NewMetrics 创建监控指标
-func NewMetrics(cfg *config.Config, connManager *connection.ConnectionManager) *Metrics {
+func NewMetrics(cfg *config.Config, connMgr *connection.ClientConnMgr) *Metrics {
 	m := &Metrics{
 		config:      cfg,
-		connManager: connManager,
+		connMgr:     connMgr,
 		metricsMgr:  metrics.NewMetricsManager(),
 	}
 
@@ -96,7 +96,7 @@ func (m *Metrics) IncrementConnections() {
 		counter.Inc()
 	}
 	if gauge, ok := m.metricsMgr.GetGauge("gateway_connections_current"); ok && gauge != nil {
-		gauge.Set(float64(m.connManager.GetConnectionCount()))
+		gauge.Set(float64(m.connMgr.GetConnectionCount()))
 	}
 }
 
@@ -131,6 +131,6 @@ func (m *Metrics) IncrementTokenFailures() {
 // UpdateCurrentConnections 更新当前连接�?
 func (m *Metrics) UpdateCurrentConnections() {
 	if gauge, ok := m.metricsMgr.GetGauge("gateway_connections_current"); ok && gauge != nil {
-		gauge.Set(float64(m.connManager.GetConnectionCount()))
+		gauge.Set(float64(m.connMgr.GetConnectionCount()))
 	}
 }

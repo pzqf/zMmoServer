@@ -13,7 +13,7 @@ import (
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
-	"github.com/pzqf/zMmoServer/GlobalServer/serverstatus"
+	"github.com/pzqf/zMmoServer/GlobalServer/serverregistry"
 	"github.com/pzqf/zUtil/zCrypto"
 	"go.uber.org/zap"
 )
@@ -251,7 +251,7 @@ func HandleAccountLogin(c echo.Context) error {
 	}
 
 	// Get server list from cache (合并MySQL静态数据+Redis动态数据)
-	manager := serverstatus.GetManager()
+	manager := serverregistry.GetServerListManager()
 	var serverInfos []*protocol.ServerInfo
 	if manager != nil {
 		servers := manager.GetOnlineServers()
@@ -303,9 +303,9 @@ func HandleAccountLogin(c echo.Context) error {
 func HandleGetServerList(c echo.Context) error {
 	start := time.Now()
 	// Get server list from cache
-	manager := serverstatus.GetManager()
+	manager := serverregistry.GetServerListManager()
 	if manager == nil {
-		zLog.Error("Failed to get server status manager")
+		zLog.Error("Failed to get server list manager")
 		if m := getMetricsFromContext(c); m != nil {
 			m.RecordServerListResponseTime(time.Since(start))
 		}
@@ -316,7 +316,7 @@ func HandleGetServerList(c echo.Context) error {
 	}
 
 	// Get all server infos (合并静态+动态数据)
-	servers := manager.GetAllServerInfos()
+	servers := manager.GetAllServerFullInfos()
 
 	// Prepare server info
 	serverInfos := make([]*protocol.ServerInfo, 0)
@@ -365,9 +365,9 @@ func HandleGetServerListByGroup(c echo.Context) error {
 	}
 
 	// Get server list from cache by group
-	manager := serverstatus.GetManager()
+	manager := serverregistry.GetServerListManager()
 	if manager == nil {
-		zLog.Error("Failed to get server status manager")
+		zLog.Error("Failed to get server list manager")
 		if m := getMetricsFromContext(c); m != nil {
 			m.RecordServerListResponseTime(time.Since(start))
 		}
@@ -377,7 +377,7 @@ func HandleGetServerListByGroup(c echo.Context) error {
 		})
 	}
 
-	servers := manager.GetServerInfosByGroup(groupID)
+	servers := manager.GetServerFullInfosByGroup(groupID)
 	var serverInfos []*protocol.ServerInfo
 	for _, s := range servers {
 		serverInfos = append(serverInfos, &protocol.ServerInfo{

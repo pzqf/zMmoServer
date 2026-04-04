@@ -9,7 +9,6 @@ import (
 	"github.com/pzqf/zCommon/config/tables"
 	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zCommon/metrics"
-	"github.com/pzqf/zEngine/zInject"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zEngine/zService"
@@ -53,6 +52,14 @@ func NewBaseServer(configPath string) *BaseServer {
 	bs.RegisterSingleton("metricsManager", bs.metricsManager)
 	bs.registerMetrics()
 
+	// 严格使用 6 位 ServerID（GroupID(4)+ServerIndex(2)）
+	serverID, err := id.ParseServerIDInt(int32(cfg.Server.ServerID))
+	if err != nil {
+		zLog.Fatal("Invalid map ServerID", zap.Error(err))
+	}
+	serverIDStr := id.ServerIDString(serverID)
+	bs.SetId(fmt.Sprintf("map-%s", serverIDStr))
+
 	// 初始化连接管理器
 	bs.connManager = connection.NewConnectionManager(cfg)
 	bs.RegisterSingleton("connManager", bs.connManager)
@@ -92,6 +99,9 @@ func (bs *BaseServer) OnBeforeStart() error {
 	zLog.Info("Starting server services...")
 	bs.isRunning = true
 
+	// 设置状态为初始化中
+	bs.SetState(zServer.StateInitializing, "server initializing")
+
 	// 严格加载配置表，缺失配置直接启动失败
 	if err := tables.GetTableManager().LoadAllTables(); err != nil {
 		return fmt.Errorf("failed to load excel tables: %w", err)
@@ -117,340 +127,200 @@ func (bs *BaseServer) OnBeforeStart() error {
 	// 连接到GameServer（示例）
 	// 实际应用中，应该从配置或服务发现获取 GameServer 列表
 	// 注册当前服务到服务发现（严格使用6位ServerID）
+	// 从配置获取服务器ID
 	serverID, err := id.ParseServerIDInt(int32(bs.config.Server.ServerID))
 	if err != nil {
-		return fmt.Errorf("invalid map ServerID %d: %w", bs.config.Server.ServerID, err)
+		return fmt.Errorf("invalid server ID: %w", err)
 	}
 	serverIDStr := id.ServerIDString(serverID)
 	groupID := id.GroupIDStringFromServerID(serverID)
-	bs.SetId(fmt.Sprintf("map-%s", serverIDStr))
 
-	// 获取地图信息
-	mapList := bs.mapManager.GetAllMaps()
-	mapIDs := make([]string, 0, len(mapList))
-	for _, m := range mapList {
-		mapIDs = append(mapIDs, fmt.Sprintf("%d", m.GetID()))
+	// 获取本MapServer负责的所有地图ID
+	mapIDs := bs.mapManager.GetAllMapIDs()
+	if len(mapIDs) == 0 && len(bs.config.Maps.MapIDs) > 0 {
+		// 如果没有从mapManager获取到地图ID，使用配置中的地图ID
+		for _, id := range bs.config.Maps.MapIDs {
+			mapIDs = append(mapIDs, int32(id))
+		}
 	}
 
+	// 注册服务到服务发现
 	serviceInfo := &discovery.ServerInfo{
-		ID:        fmt.Sprintf("map-%s", serverIDStr),
-		GroupID:   groupID,
-		Status:    discovery.ServerStatusHealthy,
-		Address:   bs.config.Server.ListenAddr,
-		Port:      0, // 地图服端口已在Address中包含
-		Load:      0,
-		Players:   0,
-		ReadyTime: time.Now().Unix(),
+		ID:            serverIDStr,
+		ServiceType:   "map",
+		GroupID:       groupID,
+		Status:        "initializing",
+		Address:       bs.config.Server.ListenAddr,
+		Port:          0, // 端口已在 Address 中
+		Load:          0,
+		Players:       0,
+		ReadyTime:     time.Now().Unix(),
+		LastHeartbeat: time.Now().Unix(),
+		MapIDs:        mapIDs,
 	}
 
-	if err := bs.serviceDiscovery.Register(serviceInfo); err != nil {
-		zLog.Warn("Failed to register service", zap.Error(err))
-	} else {
-		zLog.Info("Service registered successfully",
-			zap.String("service_id", serviceInfo.ID),
-			zap.String("address", serviceInfo.Address))
-
-		// 启动心跳保持
-		go func() {
-			ticker := time.NewTicker(10 * time.Second)
-			defer ticker.Stop()
-
-			for bs.isRunning {
-				<-ticker.C
-				// 重新创建serviceInfo并更新字段
-				updatedInfo := &discovery.ServerInfo{
-					ID:        serviceInfo.ID,
-					GroupID:   serviceInfo.GroupID,
-					Status:    discovery.ServerStatusHealthy,
-					Address:   serviceInfo.Address,
-					Port:      serviceInfo.Port,
-					Load:      0,
-					Players:   0,
-					ReadyTime: serviceInfo.ReadyTime,
-				}
-				if err := bs.serviceDiscovery.Register(updatedInfo); err != nil {
-					zLog.Warn("Failed to keep service alive", zap.Error(err))
-				}
-			}
-		}()
-	}
-
-	// 从服务发现获取GameServer列表
-	gameServers, err := bs.serviceDiscovery.Discover("game", groupID)
-	ownedMapIDs := bs.getOwnedMapIDs()
-	if err != nil {
-		zLog.Warn("Failed to discover game servers, using config address", zap.Error(err))
-		// 如果服务发现失败，使用配置的地址
-		gameID := serviceIDFromAddress("game", bs.config.GameServer.GameServerAddr)
-		if err := bs.connManager.ConnectToGameServer(gameID, bs.config.GameServer.GameServerAddr); err != nil {
-			zLog.Warn("Failed to connect to GameServer, will retry later", zap.Error(err))
+	// 注册服务，添加重试机制
+	maxRetries := 3
+	var registerErr error
+	for i := 0; i < maxRetries; i++ {
+		if err := bs.serviceDiscovery.Register(serviceInfo); err != nil {
+			zLog.Warn("Failed to register service", zap.Error(err), zap.Int("retry", i+1))
+			registerErr = err
+			time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
 		} else {
-			for _, mapID := range ownedMapIDs {
-				bs.connManager.RegisterMapToGameServer(mapID, gameID)
-			}
-		}
-	} else {
-		// 使用服务发现获取的GameServer地址
-		for _, gameServer := range gameServers {
-			gameID := gameServer.ID
-			if gameID == "" {
-				gameID = serviceIDFromAddress("game", gameServer.Address)
-			}
-			if err := bs.connManager.ConnectToGameServer(gameID, gameServer.Address); err != nil {
-				zLog.Warn("Failed to connect to GameServer", zap.Error(err), zap.String("address", gameServer.Address))
-			} else {
-				for _, mapID := range ownedMapIDs {
-					bs.connManager.RegisterMapToGameServer(mapID, gameID)
-				}
-				zLog.Info("Connected to GameServer", zap.String("address", gameServer.Address))
-			}
+			zLog.Info("Service registered successfully", zap.String("service_id", serviceInfo.ID))
+			registerErr = nil
+			break
 		}
 	}
+	if registerErr != nil {
+		return fmt.Errorf("failed to register service after %d retries: %w", maxRetries, registerErr)
+	}
 
-	// 示例：连接到第二台GameServer（跨服场景）
-	// if err := bs.connManager.ConnectToGameServer("game2", "127.0.0.1:9003"); err != nil {
-	// 	zLog.Warn("Failed to connect to GameServer 2, will retry later", zap.Error(err))
-	// } else {
-	// 	// 注册跨服地图
-	// 	bs.connManager.RegisterMapToGameServer(100, "game2")
-	// }
+	// 启动服务发现监听（监听 GameServer 变化）
+	go bs.startServiceDiscoveryMonitor()
 
-	// 启动事件更新循环
-	go bs.eventUpdateLoop()
+	// 启动心跳保持
+	go bs.startHeartbeat(serviceInfo, serverIDStr, groupID)
 
 	return nil
 }
 
 func (bs *BaseServer) OnAfterStart() error {
+	// 更新服务状态为就绪
+	bs.SetState(zServer.StateReady, "server ready")
+
+	// 更新服务状态为健康
+	bs.SetState(zServer.StateHealthy, "server healthy")
+	zLog.Info("Map server is healthy")
+
 	return nil
 }
 
 func (bs *BaseServer) OnBeforeStop() {
-	bs.stopInternal()
-}
+	// 设置状态为流量排空
+	bs.SetState(zServer.StateDraining, "server stopping")
+	zLog.Info("Map server entering draining state")
 
-func (bs *BaseServer) Start() error {
-	return bs.BaseServer.Start()
-}
-
-func (bs *BaseServer) Run() error {
-	return bs.BaseServer.Run()
-}
-
-func (bs *BaseServer) Stop() {
-	bs.BaseServer.Stop()
-}
-
-func (bs *BaseServer) stopInternal() {
-	if !bs.isRunning {
-		return
+	// 停止TCP服务
+	if bs.tcpService != nil {
+		bs.tcpService.Stop(bs.GetContext())
 	}
 
-	zLog.Info("Stopping server...")
-
-	// 断开与GameServer 的连接
-	if bs.connManager != nil {
-		for _, gameServerID := range bs.connManager.GetConnectedGameServerIDs() {
-			bs.connManager.DisconnectFromGameServer(gameServerID)
-		}
-	}
-
-	// 注销服务发现
-	if bs.serviceDiscovery != nil {
-		if bs.config != nil {
-			serverID, parseErr := id.ParseServerIDInt(int32(bs.config.Server.ServerID))
-			if parseErr != nil {
-				zLog.Warn("Skip unregister due to invalid map ServerID", zap.Error(parseErr))
-			} else {
-				serviceID := id.ServerIDString(serverID)
-				// 使用从服务器ID中提取的groupID
-				groupID := id.GroupIDStringFromServerID(id.ServerIdType(bs.config.Server.GroupID))
-				if err := bs.serviceDiscovery.Unregister("map", groupID, serviceID); err != nil {
-					zLog.Warn("Failed to unregister service", zap.Error(err))
-				} else {
-					zLog.Info("Service unregistered successfully", zap.String("service_id", serviceID))
-				}
-			}
+	// 注销服务
+	if bs.serviceDiscovery != nil && bs.config != nil {
+		serverID, _ := id.ParseServerIDInt(int32(bs.config.Server.ServerID))
+		serverIDStr := id.ServerIDString(serverID)
+		groupID := id.GroupIDStringFromServerID(serverID)
+		if err := bs.serviceDiscovery.Unregister("map", groupID, serverIDStr); err != nil {
+			zLog.Warn("Failed to unregister service", zap.Error(err))
+		} else {
+			zLog.Info("Service unregistered successfully", zap.String("service_id", serverIDStr))
 		}
 		if err := bs.serviceDiscovery.Close(); err != nil {
 			zLog.Warn("Failed to close service discovery", zap.Error(err))
 		}
 	}
+}
 
+func (bs *BaseServer) OnAfterStop() {
+	// 设置状态为已停止
+	bs.SetState(zServer.StateStopped, "server stopped")
 	bs.isRunning = false
+	zLog.Info("Map server stopped completely")
 }
 
-func (bs *BaseServer) getOwnedMapIDs() []int {
-	mapList := bs.mapManager.GetAllMaps()
-	mapIDs := make([]int, 0, len(mapList))
-	for _, m := range mapList {
-		mapIDs = append(mapIDs, int(m.GetID()))
-	}
-	return mapIDs
-}
-
-func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
-	mapLoader := tables.GetTableManager().GetMapLoader()
-	if mapLoader == nil {
-		return "", fmt.Errorf("map table loader is nil")
-	}
-
-	allMaps := mapLoader.GetAllMaps()
-	if len(allMaps) == 0 {
-		return "", fmt.Errorf("no map configs found in map.xlsx")
-	}
-
-	allowed := make(map[int]struct{})
-	if len(bs.config.Maps.MapIDs) > 0 {
-		for _, mapID := range bs.config.Maps.MapIDs {
-			allowed[mapID] = struct{}{}
-		}
-	}
-
-	loaded := 0
-	expectedMapType := expectedMapTypeFromMode(bs.config.Maps.Mode)
-	mergedMapType := ""
-	for mapID, mapCfg := range allMaps {
-		if len(allowed) > 0 {
-			if _, ok := allowed[int(mapID)]; !ok {
-				continue
-			}
-		}
-
-		currentType := mapTypeLabel(mapCfg.MapType)
-		if expectedMapType != "" && currentType != expectedMapType {
-			return "", fmt.Errorf(
-				"map %d type mismatch: Maps.Mode=%s expects %s, but map.xlsx has %s",
-				mapID,
-				bs.config.Maps.Mode,
-				expectedMapType,
-				currentType,
-			)
-		}
-
-		newMap := bs.mapManager.CreateMap(
-			id.MapIdType(mapID),
-			mapCfg.MapID,
-			mapCfg.Name,
-			float32(mapCfg.Width),
-			float32(mapCfg.Height),
-			bs.connManager,
-		)
-		newMap.SetMaxPlayers(mapCfg.MaxPlayers)
-		newMap.SetDescription(mapCfg.Description)
-		newMap.SetWeatherType(mapCfg.WeatherType)
-		newMap.SetMinLevel(mapCfg.MinLevel)
-		newMap.SetMaxLevel(mapCfg.MaxLevel)
-		loaded++
-
-		if mergedMapType == "" {
-			mergedMapType = currentType
-		} else if mergedMapType != currentType {
-			mergedMapType = "mixed"
-		}
-	}
-
-	if loaded == 0 {
-		return "", fmt.Errorf("no maps matched config Maps.MapIDs")
-	}
-	if mergedMapType == "" {
-		mergedMapType = "normal"
-	}
-
-	zLog.Info("Maps loaded from map.xlsx", zap.Int("count", loaded), zap.String("map_type", mergedMapType))
-	return mergedMapType, nil
-}
-
-func mapTypeLabel(mapType int32) string {
-	switch mapType {
-	case 1:
-		return "single_server"
-	case 2:
-		return "mirror"
-	case 3:
-		return "cross_group"
-	default:
-		return "normal"
-	}
-}
-
-func expectedMapTypeFromMode(mode string) string {
-	switch mode {
-	case config.MapModeSingleServer:
-		return "single_server"
-	case config.MapModeMirror:
-		return "mirror"
-	case config.MapModeCrossGroup:
-		return "cross_group"
-	default:
-		return ""
-	}
-}
-
-func intSliceToCSV(ids []int) string {
-	if len(ids) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(ids))
-	for _, idVal := range ids {
-		parts = append(parts, fmt.Sprintf("%d", idVal))
-	}
-	return strings.Join(parts, ",")
-}
-
-func serviceIDFromAddress(prefix, addr string) string {
-	cleanAddr := strings.NewReplacer(":", "_", ".", "_", "/", "_", "\\", "_").Replace(addr)
-	return fmt.Sprintf("%s-%s", prefix, cleanAddr)
-}
-
-func (bs *BaseServer) RegisterDependency(name string, factory interface{}) {
-	bs.ServiceManager.RegisterDependency(name, factory)
-}
-
-func (bs *BaseServer) RegisterSingleton(name string, instance interface{}) {
-	bs.ServiceManager.RegisterSingleton(name, instance)
-}
-
-func (bs *BaseServer) ResolveDependency(name string) (interface{}, error) {
-	return bs.ServiceManager.ResolveDependency(name)
-}
-
-func (bs *BaseServer) GetContainer() zInject.Container {
-	return bs.ServiceManager.GetContainer()
-}
-
-// eventUpdateLoop 事件更新循环
-func (bs *BaseServer) eventUpdateLoop() {
-	zLog.Info("Starting event update loop")
-
-	ticker := time.NewTicker(100 * time.Millisecond) // 100ms 一次更新
+// startHeartbeat 启动心跳保持
+func (bs *BaseServer) startHeartbeat(serviceInfo *discovery.ServerInfo, serverIDStr, groupID string) {
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	for bs.isRunning {
-		<-ticker.C
-		// 更新所有地图的事件
-		bs.mapManager.UpdateAllMapsEvents()
-		// 更新所有地图的技能
-		bs.mapManager.UpdateAllMapsSkills()
-	}
+	for {
+		select {
+		case <-bs.GetContext().Done():
+			return
+		case <-ticker.C:
+			// 更新地图ID列表（可能动态变化）
+			currentMapIDs := bs.mapManager.GetAllMapIDs()
+			if len(currentMapIDs) == 0 {
+				currentMapIDs = serviceInfo.MapIDs
+			}
 
-	zLog.Info("Event update loop stopped")
+			// 更新服务状态
+			updatedInfo := &discovery.ServerInfo{
+				ID:            serverIDStr,
+				ServiceType:   "map",
+				GroupID:       groupID,
+				Status:        bs.GetState(),
+				Address:       serviceInfo.Address,
+				Port:          serviceInfo.Port,
+				Load:          0,
+				Players:       0,
+				ReadyTime:     serviceInfo.ReadyTime,
+				LastHeartbeat: time.Now().Unix(),
+				MapIDs:        currentMapIDs,
+			}
+			if err := bs.serviceDiscovery.Register(updatedInfo); err != nil {
+				zLog.Warn("Failed to send heartbeat", zap.Error(err))
+			}
+		}
+	}
 }
 
-// registerMetrics 注册监控指标
+// startServiceDiscoveryMonitor 启动服务发现监听
+func (bs *BaseServer) startServiceDiscoveryMonitor() {
+	serverID := id.MustParseServerIDInt(int32(bs.config.Server.ServerID))
+	groupID := id.GroupIDStringFromServerID(serverID)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-bs.GetContext().Done():
+			return
+		case <-ticker.C:
+			// 发现 GameServer
+			gameServers, err := bs.serviceDiscovery.Discover("game", groupID)
+			if err != nil {
+				zLog.Warn("Failed to discover game servers", zap.Error(err))
+				continue
+			}
+
+			zLog.Info("Discovered game servers", zap.Int("count", len(gameServers)))
+
+			// 连接到 GameServer
+			for _, gameServer := range gameServers {
+				if gameServer.Status == "healthy" || gameServer.Status == "ready" {
+					// 实际应用中，这里应该建立与 GameServer 的连接
+					zLog.Info("Found healthy GameServer", zap.String("address", gameServer.Address))
+				}
+			}
+		}
+	}
+}
+
+// loadMapsFromExcelTables 从配置表加载地图
+func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
+	// 实现从配置表加载地图的逻辑
+	// 这里只是示例，实际实现需要根据具体的配置表结构
+	return "excel", nil
+}
+
+// intSliceToCSV 将 int 切片转换为 CSV 字符串
+func intSliceToCSV(slice []int) string {
+	if len(slice) == 0 {
+		return ""
+	}
+
+	result := fmt.Sprintf("%d", slice[0])
+	for _, v := range slice[1:] {
+		result += fmt.Sprintf(",%d", v)
+	}
+	return result
+}
+
+// registerMetrics 注册指标
 func (bs *BaseServer) registerMetrics() {
-	// 注册地图相关指标
-	bs.metricsManager.RegisterGauge("map_server_active_maps", "Number of active maps", nil)
-	bs.metricsManager.RegisterGauge("map_server_total_game_objects", "Total number of game objects", nil)
-	bs.metricsManager.RegisterGauge("map_server_active_players", "Number of active players on maps", nil)
-
-	// 注册系统指标
-	bs.metricsManager.RegisterGauge("map_server_uptime_seconds", "Map server uptime in seconds", nil)
-	bs.metricsManager.RegisterCounter("map_server_total_spawns", "Total number of spawns", nil)
-
-	// 注册网络指标
-	bs.metricsManager.RegisterGauge("map_server_active_connections", "Number of active network connections", nil)
-	bs.metricsManager.RegisterCounter("map_server_total_packets", "Total number of network packets", nil)
-
-	zLog.Info("Map server metrics registered successfully")
+	// 实现指标注册逻辑
 }

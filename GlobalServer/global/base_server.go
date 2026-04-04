@@ -8,6 +8,7 @@ import (
 	"github.com/pzqf/zCommon/common/id"
 	sharedDB "github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/discovery"
+	"github.com/pzqf/zCommon/health"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
@@ -15,7 +16,7 @@ import (
 	"github.com/pzqf/zMmoServer/GlobalServer/handler"
 	"github.com/pzqf/zMmoServer/GlobalServer/http"
 	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
-	"github.com/pzqf/zMmoServer/GlobalServer/serverstatus"
+	"github.com/pzqf/zMmoServer/GlobalServer/serverregistry"
 	"github.com/pzqf/zMmoServer/GlobalServer/version"
 	"go.uber.org/zap"
 )
@@ -33,6 +34,7 @@ type BaseServer struct {
 	HTTPService      *http.HttpService
 	DBService        *db.DBService
 	Metrics          *metrics.Metrics
+	HealthManager    *health.HealthManager
 	ServiceDiscovery *discovery.ServiceDiscovery
 }
 
@@ -62,17 +64,25 @@ func (s *BaseServer) OnBeforeStart() error {
 		return nil
 	}
 
-	// 严格使用 6 位 ServerID（GroupID(4)+ServerIndex(2)）
-	serverID, err := id.ParseServerIDInt(int32(cfg.Server.ServerID))
-	if err != nil {
-		return fmt.Errorf("invalid global ServerID %d: %w", cfg.Server.ServerID, err)
-	}
-	serverIDStr := id.ServerIDString(serverID)
-	s.SetId(fmt.Sprintf("global-%s", serverIDStr))
+	serverIDStr := fmt.Sprintf("global-%d", cfg.Server.ServerID)
+	s.SetId(serverIDStr)
+
+	// 初始化健康管理器
+	healthManager := health.NewHealthManager(serverIDStr, "global")
+	// 注册健康检查
+	healthManager.RegisterCheck(health.NewMemoryChecker())
+	healthManager.RegisterCheck(health.NewGoroutineChecker())
+	healthManager.RegisterCheck(health.NewTimeChecker())
+	s.HealthManager = healthManager
 
 	// 初始化 DBManager（只初始化 GlobalServer 需要的 Repository）
 	dbConfigs := map[string]sharedDB.DBConfig{
 		"global": cfg.Database,
+	}
+
+	// 设置状态为初始化中（使用 BaseServer 的状态管理）
+	if err := s.SetState(zServer.StateInitializing, "server initializing"); err != nil {
+		zLog.Warn("Failed to set initializing state", zap.Error(err))
 	}
 
 	if err := sharedDB.InitDBManagerWithRepos(dbConfigs, sharedDB.RepoTypeGlobalServer); err != nil {
@@ -127,17 +137,14 @@ func (s *BaseServer) OnBeforeStart() error {
 	dbService := db.NewDBService(cfg)
 	s.DBService = dbService
 
+	// 从 MySQL 加载静态服务器配置
+	if err := s.loadStaticServers(); err != nil {
+		zLog.Warn("Failed to load static servers", zap.Error(err))
+	}
+
 	// 初始化服务发现
 	etcdEndpoints := strings.Split(cfg.Etcd.Endpoints, ",")
-	etcdConfig := &discovery.EtcdConfig{
-		Endpoints:      cfg.Etcd.Endpoints,
-		Username:       cfg.Etcd.Username,
-		Password:       cfg.Etcd.Password,
-		CACertPath:     cfg.Etcd.CACertPath,
-		ClientCertPath: cfg.Etcd.ClientCertPath,
-		ClientKeyPath:  cfg.Etcd.ClientKeyPath,
-	}
-	serviceDiscovery, err := discovery.NewServiceDiscoveryWithConfig(etcdEndpoints, etcdConfig)
+	serviceDiscovery, err := discovery.NewServiceDiscoveryWithConfig(etcdEndpoints, &cfg.Etcd)
 	if err != nil {
 		zLog.Error("Failed to create service discovery", zap.Error(err))
 		return fmt.Errorf("failed to create service discovery: %w", err)
@@ -147,27 +154,23 @@ func (s *BaseServer) OnBeforeStart() error {
 	// 注册服务发现组件
 	s.RegisterComponent("ServiceDiscovery", serviceDiscovery)
 
-	// 初始化服务器状态管理器（使用服务发现）
-	if err := serverstatus.InitManager(serviceDiscovery); err != nil {
-		return fmt.Errorf("failed to init server status manager: %w", err)
-	}
-
-	// 从 MySQL 加载静态服务器配置
-	if err := s.loadStaticServers(); err != nil {
-		zLog.Warn("Failed to load static servers", zap.Error(err))
+	// 初始化服务器列表管理器（使用服务发现）
+	if err := serverregistry.InitServerListManager(serviceDiscovery); err != nil {
+		return fmt.Errorf("failed to init server list manager: %w", err)
 	}
 
 	// 注册当前服务
 	serviceInfo := &discovery.ServerInfo{
-		ID:          serverIDStr,
-		ServiceType: "global",
-		GroupID:     DefaultGroupID,
-		Status:      discovery.ServerStatusHealthy,
-		Address:     cfg.HTTP.ListenAddress,
-		Port:        0, // 全局服端口已在Address中包含
-		Load:        0,
-		Players:     0,
-		ReadyTime:   time.Now().Unix(),
+		ID:            serverIDStr,
+		ServiceType:   "global",
+		GroupID:       DefaultGroupID,
+		Status:        zServer.StateInitializing,
+		Address:       cfg.HTTP.ListenAddress,
+		Port:          0, // 全局服端口已在Address中包含
+		Load:          0,
+		Players:       0,
+		ReadyTime:     time.Now().Unix(),
+		LastHeartbeat: time.Now().Unix(),
 	}
 
 	zLog.Info("Attempting to register service",
@@ -212,15 +215,16 @@ func (s *BaseServer) OnBeforeStart() error {
 			case <-ticker.C:
 				// 重新创建serviceInfo并更新字段
 				updatedInfo := &discovery.ServerInfo{
-					ID:          serverIDStr,
-					ServiceType: "global",
-					GroupID:     DefaultGroupID,
-					Status:      discovery.ServerStatusHealthy,
-					Address:     serviceInfo.Address,
-					Port:        serviceInfo.Port,
-					Load:        0,
-					Players:     0,
-					ReadyTime:   serviceInfo.ReadyTime,
+					ID:            serverIDStr,
+					ServiceType:   "global",
+					GroupID:       DefaultGroupID,
+					Status:        s.GetState(),
+					Address:       serviceInfo.Address,
+					Port:          serviceInfo.Port,
+					Load:          0,
+					Players:       0,
+					ReadyTime:     serviceInfo.ReadyTime,
+					LastHeartbeat: time.Now().Unix(),
 				}
 				// 心跳发送，添加重试机制
 				maxRetries := 2
@@ -254,7 +258,8 @@ func (s *BaseServer) OnBeforeStart() error {
 	s.RegisterComponent("HTTPService", httpService)
 	s.RegisterComponent("DBService", dbService)
 	s.RegisterComponent("Metrics", metricsService)
-	s.RegisterComponent("ServerStatusManager", serverstatus.GetManager())
+	s.RegisterComponent("HealthManager", healthManager)
+	s.RegisterComponent("ServerListManager", serverregistry.GetServerListManager())
 
 	return nil
 }
@@ -282,12 +287,34 @@ func (s *BaseServer) OnAfterStart() error {
 		}
 	}
 
+	// 更新服务状态为就绪
+	if err := s.SetState(zServer.StateReady, "server ready"); err != nil {
+		zLog.Warn("Failed to set ready state", zap.Error(err))
+	}
+
+	// 确认健康状态
+	if s.HealthManager != nil && s.HealthManager.IsHealthy() {
+		// 更新服务状态为健康
+		if err := s.SetState(zServer.StateHealthy, "server healthy"); err != nil {
+			zLog.Warn("Failed to set healthy state", zap.Error(err))
+		}
+		zLog.Info("Global server is healthy")
+	} else {
+		zLog.Warn("Global server health check failed")
+	}
+
 	return nil
 }
 
 // OnBeforeStop 停止前的工作 - 实现 LifecycleHooks 接口
 func (s *BaseServer) OnBeforeStop() {
-	// 停止 HTTP 服务
+	// 设置状态为流量排空
+	if err := s.SetState(zServer.StateDraining, "server draining"); err != nil {
+		zLog.Warn("Failed to set draining state", zap.Error(err))
+	}
+	zLog.Info("Global server entering draining state")
+
+	// 停止 HTTP 服务（不再接受新请求）
 	if s.HTTPService != nil {
 		s.HTTPService.Stop()
 	}
@@ -331,35 +358,35 @@ func (s *BaseServer) OnBeforeStop() {
 		}
 	}
 
-	// 关闭服务器状态管理器
-	if manager := serverstatus.GetManager(); manager != nil {
+	// 关闭服务器列表管理器
+	if manager := serverregistry.GetServerListManager(); manager != nil {
 		manager.Close()
-	}
-
-	// 关闭 DBManager
-	dbMgr := sharedDB.GetMgr()
-	if dbMgr != nil {
-		dbMgr.Close()
 	}
 }
 
-// loadStaticServers 从MySQL加载静态服务器配置
+// OnAfterStop 停止后的工作 - 实现 LifecycleHooks 接口
+func (s *BaseServer) OnAfterStop() {
+	// 设置状态为已停止
+	if err := s.SetState(zServer.StateStopped, "server stopped"); err != nil {
+		zLog.Warn("Failed to set stopped state", zap.Error(err))
+	}
+	zLog.Info("Global server stopped completely")
+}
+
+// loadStaticServers 从 MySQL 加载静态服务器配置
 func (s *BaseServer) loadStaticServers() error {
-	dbMgr := sharedDB.GetMgr()
-	if dbMgr == nil {
-		return fmt.Errorf("db manager not initialized")
-	}
+	// 从数据库服务获取静态服务器配置
+	if s.DBService != nil {
+		servers, err := s.DBService.GetGameServers()
+		if err != nil {
+			return fmt.Errorf("failed to get game servers: %w", err)
+		}
 
-	servers, err := dbMgr.GameServerRepository.GetAll()
-	if err != nil {
-		return fmt.Errorf("failed to get game servers: %w", err)
+		// 加载到服务器列表管理器
+		if manager := serverregistry.GetServerListManager(); manager != nil {
+			manager.LoadStaticServers(servers)
+			zLog.Info("Static servers loaded from MySQL", zap.Int("count", len(servers)))
+		}
 	}
-
-	manager := serverstatus.GetManager()
-	if manager == nil {
-		return fmt.Errorf("server status manager not initialized")
-	}
-
-	manager.LoadStaticServers(servers)
 	return nil
 }

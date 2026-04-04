@@ -191,7 +191,7 @@ func (hs *HTTPService) handleProtoRequest(w http.ResponseWriter, r *http.Request
 	}
 
 	// 创建 HTTP 会话
-	session := zNet.NewHttpSession(w, 0)
+	session := zNet.NewHttpSession(w, 0, r.RemoteAddr)
 
 	// 处理请求
 	if hs.packetRouter != nil {

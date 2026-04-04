@@ -6,22 +6,22 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zUtil/zConfig"
 )
 
 // Config 网关服务器配置
 type Config struct {
-	Server         ServerConfig         `ini:"Server"`
-	Security       SecurityConfig       `ini:"Security"`
-	DDoS           zNet.DDoSConfig      `ini:"ddos"`
-	NetCompression NetCompressionConfig `ini:"net_compression"`
-	GameServer     GameServerConfig     `ini:"GameServer"`
-	Etcd           discovery.EtcdConfig `ini:"Etcd"`
-	Log            zLog.Config          `ini:"log"`
-	Metrics        MetricsConfig        `ini:"Metrics"`
+	Server      ServerConfig           `ini:"Server"`
+	Security    SecurityConfig         `ini:"Security"`
+	DDoS        zNet.DDoSConfig        `ini:"ddos"`
+	Compression zNet.CompressionConfig `ini:"compression"`
+	GameServer  GameServerConfig       `ini:"GameServer"`
+	Etcd        discovery.EtcdConfig   `ini:"Etcd"`
+	Log         zLog.Config            `ini:"log"`
+	Metrics     MetricsConfig          `ini:"Metrics"`
 }
 
 // ServerConfig 服务器基本配置
@@ -40,6 +40,7 @@ type ServerConfig struct {
 	WorkerQueueSize   int    `ini:"WorkerQueueSize"`
 	ChanSize          int    `ini:"ChanSize"`
 	MaxPacketDataSize int    `ini:"MaxPacketDataSize"`
+	DisableEncryption bool   `ini:"DisableEncryption"` // 是否禁用加密，默认 false
 }
 
 // SecurityConfig 安全配置
@@ -47,15 +48,6 @@ type SecurityConfig struct {
 	TokenExpiry      int `ini:"TokenExpiry"`
 	MaxLoginAttempts int `ini:"MaxLoginAttempts"`
 	BanDuration      int `ini:"BanDuration"`
-}
-
-// NetCompressionConfig 网络压缩配置
-type NetCompressionConfig struct {
-	Enabled    bool
-	Threshold  int
-	Level      int
-	MinQuality int
-	MaxQuality int
 }
 
 // GameServerConfig 游戏服配置
@@ -108,6 +100,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		WorkerQueueSize:   getConfigInt(zcfg, "Server.WorkerQueueSize", 10000),
 		ChanSize:          getConfigInt(zcfg, "Server.ChanSize", 1024),
 		MaxPacketDataSize: getConfigInt(zcfg, "Server.MaxPacketDataSize", 1024*1024),
+		DisableEncryption: getConfigBool(zcfg, "Server.DisableEncryption", GetEnvAsBool("DISABLE_ENCRYPTION", false)),
 	}
 
 	// 解析安全配置
@@ -129,12 +122,10 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	// 解析网络压缩配置
-	config.NetCompression = NetCompressionConfig{
-		Enabled:    getConfigBool(zcfg, "net_compression.enabled", true),
-		Threshold:  getConfigInt(zcfg, "net_compression.threshold", 1024),
-		Level:      getConfigInt(zcfg, "net_compression.level", 1),
-		MinQuality: getConfigInt(zcfg, "net_compression.min_quality", 0),
-		MaxQuality: getConfigInt(zcfg, "net_compression.max_quality", 100),
+	config.Compression = zNet.CompressionConfig{
+		Enabled:              getConfigBool(zcfg, "compression.enabled", false),
+		CompressionThreshold: getConfigInt(zcfg, "compression.threshold", 1024),
+		MaxCompressSize:      getConfigInt(zcfg, "compression.max_compress_size", 1024*1024),
 	}
 
 	// 解析游戏服配置
@@ -222,17 +213,11 @@ func (c *Config) Validate() error {
 	}
 
 	// 验证压缩配置
-	if c.NetCompression.Threshold <= 0 {
-		c.NetCompression.Threshold = 1024
+	if c.Compression.CompressionThreshold <= 0 {
+		c.Compression.CompressionThreshold = 1024
 	}
-	if c.NetCompression.Level < 1 || c.NetCompression.Level > 9 {
-		c.NetCompression.Level = 1
-	}
-	if c.NetCompression.MinQuality < 0 || c.NetCompression.MinQuality > 100 {
-		c.NetCompression.MinQuality = 0
-	}
-	if c.NetCompression.MaxQuality < 0 || c.NetCompression.MaxQuality > 100 {
-		c.NetCompression.MaxQuality = 100
+	if c.Compression.MaxCompressSize <= 0 {
+		c.Compression.MaxCompressSize = 1024 * 1024
 	}
 
 	return nil

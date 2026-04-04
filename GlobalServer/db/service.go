@@ -8,6 +8,8 @@ import (
 
 	"github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/db/connector"
+	"github.com/pzqf/zCommon/db/dao"
+	"github.com/pzqf/zCommon/db/models"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
 	"go.uber.org/zap"
@@ -109,6 +111,38 @@ func (s *DBService) GetConnector() connector.DBConnector {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.connector
+}
+
+// GetGameServers 获取所有游戏服务器
+func (s *DBService) GetGameServers() ([]*models.GameServer, error) {
+	s.mu.RLock()
+	connector := s.connector
+	s.mu.RUnlock()
+
+	if connector == nil {
+		return nil, fmt.Errorf("database connector not initialized")
+	}
+
+	// 创建 GameServerDAO 实例
+	gameServerDAO := dao.NewGameServerDAO(connector)
+
+	// 使用通道等待回调结果
+	resultChan := make(chan struct {
+		servers []*models.GameServer
+		err     error
+	})
+
+	// 异步获取游戏服务器列表
+	gameServerDAO.GetAll(func(servers []*models.GameServer, err error) {
+		resultChan <- struct {
+			servers []*models.GameServer
+			err     error
+		}{servers, err}
+	})
+
+	// 等待结果
+	result := <-resultChan
+	return result.servers, result.err
 }
 
 // monitorLoop 监控数据库连接池

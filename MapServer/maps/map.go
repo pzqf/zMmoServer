@@ -1398,11 +1398,15 @@ func (m *Map) UpdateEvents() {
 
 // AddPlayer 添加玩家到地图
 func (m *Map) AddPlayer(playerID id.PlayerIdType, objectID id.ObjectIdType, x, y, z float32) error {
-	// 添加玩家到地图的逻辑
 	position := common.Vector3{X: x, Y: y, Z: z}
 	player := object.NewPlayer(objectID, playerID, "Player", position, 1)
 	m.AddObject(player)
 	return nil
+}
+
+// RemovePlayer 移除玩家
+func (m *Map) RemovePlayer(playerID id.PlayerIdType) {
+	m.RemoveObject(id.ObjectIdType(playerID))
 }
 
 // MovePlayer 移动玩家
