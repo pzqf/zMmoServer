@@ -2,7 +2,7 @@ package handler
 
 import (
 	"github.com/pzqf/zEngine/zLog"
-	playerservice "github.com/pzqf/zMmoServer/GameServer/service"
+	playerservice "github.com/pzqf/zMmoServer/GameServer/services"
 	"github.com/pzqf/zMmoServer/GameServer/session"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/protocol"

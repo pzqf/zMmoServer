@@ -707,7 +707,7 @@ var File_player_proto protoreflect.FileDescriptor
 
 const file_player_proto_rawDesc = "" +
 	"\n" +
-	"\fplayer.proto\x12\bprotocol\x1a\fcommon.proto\"\x81\x02\n" +
+	"\fplayer.proto\x12\bprotocol\"\x81\x02\n" +
 	"\x0fPlayerBasicInfo\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -805,7 +805,6 @@ func file_player_proto_init() {
 	if File_player_proto != nil {
 		return
 	}
-	file_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

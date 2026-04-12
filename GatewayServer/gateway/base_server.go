@@ -67,15 +67,21 @@ func (s *BaseServer) OnBeforeStart() error {
 
 	// 初始化网络服务器
 	tcpConfig := &zNet.TcpConfig{
-		ListenAddress:     cfg.Server.ListenAddr,
-		MaxClientCount:    cfg.Server.MaxConnections,
-		HeartbeatDuration: cfg.Server.HeartbeatInterval,
-		ChanSize:          cfg.Server.ChanSize,
-		MaxPacketDataSize: int32(cfg.Server.MaxPacketDataSize),
-		UseWorkerPool:     cfg.Server.UseWorkerPool,
-		WorkerPoolSize:    cfg.Server.WorkerPoolSize,
-		WorkerQueueSize:   cfg.Server.WorkerQueueSize,
-		DisableEncryption: cfg.Server.DisableEncryption,
+		ListenAddress:       cfg.Server.ListenAddr,
+		MaxClientCount:      cfg.Server.MaxConnections,
+		HeartbeatDuration:   cfg.Server.HeartbeatInterval,
+		ChanSize:            cfg.Server.ChanSize,
+		MaxPacketDataSize:   int32(cfg.Server.MaxPacketDataSize),
+		UseWorkerPool:       cfg.Server.UseWorkerPool,
+		WorkerPoolSize:      cfg.Server.WorkerPoolSize,
+		WorkerQueueSize:     cfg.Server.WorkerQueueSize,
+		DisableEncryption:   cfg.Server.DisableEncryption,
+		EnableKeyRotation:   cfg.Server.EnableKeyRotation,
+		KeyRotationInterval: time.Duration(cfg.Server.KeyRotationInterval) * time.Second,
+		MaxHistoryKeys:      cfg.Server.MaxHistoryKeys,
+		EnableSequenceCheck: cfg.Server.EnableSequenceCheck,
+		SequenceWindowSize:  cfg.Server.SequenceWindowSize,
+		TimestampTolerance:  cfg.Server.TimestampTolerance,
 	}
 
 	s.NetServer = zNet.NewTcpServer(tcpConfig,

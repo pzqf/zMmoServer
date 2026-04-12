@@ -40,19 +40,15 @@ const (
 	InternalMsgId_MSG_INTERNAL_PLAYER_BIND_SERVER   InternalMsgId = 301
 	InternalMsgId_MSG_INTERNAL_PLAYER_UNBIND_SERVER InternalMsgId = 302
 	InternalMsgId_MSG_INTERNAL_PLAYER_TRANSFER      InternalMsgId = 303
-	// 地图服务器相关 400-499
+	// 地图服务间通信 400-499
 	InternalMsgId_MSG_INTERNAL_MAP_ENTER_REQUEST  InternalMsgId = 400
 	InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE InternalMsgId = 401
 	InternalMsgId_MSG_INTERNAL_MAP_LEAVE_REQUEST  InternalMsgId = 402
 	InternalMsgId_MSG_INTERNAL_MAP_LEAVE_RESPONSE InternalMsgId = 403
-	InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC      InternalMsgId = 404
-	InternalMsgId_MSG_INTERNAL_MAP_AOI_ENTER      InternalMsgId = 405
-	InternalMsgId_MSG_INTERNAL_MAP_AOI_LEAVE      InternalMsgId = 406
-	InternalMsgId_MSG_INTERNAL_MAP_AOI_UPDATE     InternalMsgId = 407
-	// 战斗相关 500-599
-	InternalMsgId_MSG_INTERNAL_COMBAT_START  InternalMsgId = 500
-	InternalMsgId_MSG_INTERNAL_COMBAT_ACTION InternalMsgId = 501
-	InternalMsgId_MSG_INTERNAL_COMBAT_END    InternalMsgId = 502
+	InternalMsgId_MSG_INTERNAL_MAP_MOVE_REQUEST   InternalMsgId = 404
+	InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC      InternalMsgId = 405
+	InternalMsgId_MSG_INTERNAL_MAP_ATTACK_REQUEST InternalMsgId = 406
+	InternalMsgId_MSG_INTERNAL_COMBAT_ACTION      InternalMsgId = 407
 	// 跨服相关 600-699
 	InternalMsgId_MSG_INTERNAL_CROSS_SERVER_REQUEST  InternalMsgId = 600
 	InternalMsgId_MSG_INTERNAL_CROSS_SERVER_RESPONSE InternalMsgId = 601
@@ -77,13 +73,10 @@ var (
 		401: "MSG_INTERNAL_MAP_ENTER_RESPONSE",
 		402: "MSG_INTERNAL_MAP_LEAVE_REQUEST",
 		403: "MSG_INTERNAL_MAP_LEAVE_RESPONSE",
-		404: "MSG_INTERNAL_MAP_MOVE_SYNC",
-		405: "MSG_INTERNAL_MAP_AOI_ENTER",
-		406: "MSG_INTERNAL_MAP_AOI_LEAVE",
-		407: "MSG_INTERNAL_MAP_AOI_UPDATE",
-		500: "MSG_INTERNAL_COMBAT_START",
-		501: "MSG_INTERNAL_COMBAT_ACTION",
-		502: "MSG_INTERNAL_COMBAT_END",
+		404: "MSG_INTERNAL_MAP_MOVE_REQUEST",
+		405: "MSG_INTERNAL_MAP_MOVE_SYNC",
+		406: "MSG_INTERNAL_MAP_ATTACK_REQUEST",
+		407: "MSG_INTERNAL_COMBAT_ACTION",
 		600: "MSG_INTERNAL_CROSS_SERVER_REQUEST",
 		601: "MSG_INTERNAL_CROSS_SERVER_RESPONSE",
 	}
@@ -104,13 +97,10 @@ var (
 		"MSG_INTERNAL_MAP_ENTER_RESPONSE":    401,
 		"MSG_INTERNAL_MAP_LEAVE_REQUEST":     402,
 		"MSG_INTERNAL_MAP_LEAVE_RESPONSE":    403,
-		"MSG_INTERNAL_MAP_MOVE_SYNC":         404,
-		"MSG_INTERNAL_MAP_AOI_ENTER":         405,
-		"MSG_INTERNAL_MAP_AOI_LEAVE":         406,
-		"MSG_INTERNAL_MAP_AOI_UPDATE":        407,
-		"MSG_INTERNAL_COMBAT_START":          500,
-		"MSG_INTERNAL_COMBAT_ACTION":         501,
-		"MSG_INTERNAL_COMBAT_END":            502,
+		"MSG_INTERNAL_MAP_MOVE_REQUEST":      404,
+		"MSG_INTERNAL_MAP_MOVE_SYNC":         405,
+		"MSG_INTERNAL_MAP_ATTACK_REQUEST":    406,
+		"MSG_INTERNAL_COMBAT_ACTION":         407,
 		"MSG_INTERNAL_CROSS_SERVER_REQUEST":  600,
 		"MSG_INTERNAL_CROSS_SERVER_RESPONSE": 601,
 	}
@@ -494,9 +484,9 @@ type ServiceHeartbeatRequest struct {
 	OnlineCount   int32                  `protobuf:"varint,3,opt,name=online_count,json=onlineCount,proto3" json:"online_count,omitempty"`
 	Status        int32                  `protobuf:"varint,4,opt,name=status,proto3" json:"status,omitempty"`
 	Load          float32                `protobuf:"fixed32,5,opt,name=load,proto3" json:"load,omitempty"`
-	ExternalIp    string                 `protobuf:"bytes,6,opt,name=external_ip,json=externalIp,proto3" json:"external_ip,omitempty"`        // 对外服务IP
-	ExternalPort  int32                  `protobuf:"varint,7,opt,name=external_port,json=externalPort,proto3" json:"external_port,omitempty"` // 对外服务端口
-	Version       string                 `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`                                // 服务版本
+	ExternalIp    string                 `protobuf:"bytes,6,opt,name=external_ip,json=externalIp,proto3" json:"external_ip,omitempty"`
+	ExternalPort  int32                  `protobuf:"varint,7,opt,name=external_port,json=externalPort,proto3" json:"external_port,omitempty"`
+	Version       string                 `protobuf:"bytes,8,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1314,1740 +1304,6 @@ func (x *PlayerTransferResponse) GetErrorMsg() string {
 	return ""
 }
 
-// 地图进入请求（GameServer -> MapServer）
-type MapEnterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	SessionId     int64                  `protobuf:"varint,2,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
-	GameServerId  int32                  `protobuf:"varint,7,opt,name=game_server_id,json=gameServerId,proto3" json:"game_server_id,omitempty"`
-	PlayerData    []byte                 `protobuf:"bytes,8,opt,name=player_data,json=playerData,proto3" json:"player_data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapEnterRequest) Reset() {
-	*x = MapEnterRequest{}
-	mi := &file_internal_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapEnterRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapEnterRequest) ProtoMessage() {}
-
-func (x *MapEnterRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapEnterRequest.ProtoReflect.Descriptor instead.
-func (*MapEnterRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{16}
-}
-
-func (x *MapEnterRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetSessionId() int64 {
-	if x != nil {
-		return x.SessionId
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetGameServerId() int32 {
-	if x != nil {
-		return x.GameServerId
-	}
-	return 0
-}
-
-func (x *MapEnterRequest) GetPlayerData() []byte {
-	if x != nil {
-		return x.PlayerData
-	}
-	return nil
-}
-
-// 地图进入响应（MapServer -> GameServer）
-type MapEnterResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	ObjectId      int64                  `protobuf:"varint,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,4,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,5,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,6,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,7,opt,name=z,proto3" json:"z,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapEnterResponse) Reset() {
-	*x = MapEnterResponse{}
-	mi := &file_internal_proto_msgTypes[17]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapEnterResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapEnterResponse) ProtoMessage() {}
-
-func (x *MapEnterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[17]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapEnterResponse.ProtoReflect.Descriptor instead.
-func (*MapEnterResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{17}
-}
-
-func (x *MapEnterResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapEnterResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapEnterResponse) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapEnterResponse) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapEnterResponse) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapEnterResponse) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapEnterResponse) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-// 地图离开请求（GameServer -> MapServer）
-type MapLeaveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	ObjectId      int64                  `protobuf:"varint,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Reason        int32                  `protobuf:"varint,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapLeaveRequest) Reset() {
-	*x = MapLeaveRequest{}
-	mi := &file_internal_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapLeaveRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapLeaveRequest) ProtoMessage() {}
-
-func (x *MapLeaveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapLeaveRequest.ProtoReflect.Descriptor instead.
-func (*MapLeaveRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *MapLeaveRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapLeaveRequest) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapLeaveRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapLeaveRequest) GetReason() int32 {
-	if x != nil {
-		return x.Reason
-	}
-	return 0
-}
-
-// 地图离开响应（MapServer -> GameServer）
-type MapLeaveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapLeaveResponse) Reset() {
-	*x = MapLeaveResponse{}
-	mi := &file_internal_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapLeaveResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapLeaveResponse) ProtoMessage() {}
-
-func (x *MapLeaveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapLeaveResponse.ProtoReflect.Descriptor instead.
-func (*MapLeaveResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *MapLeaveResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapLeaveResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapLeaveResponse) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-// 地图移动同步（MapServer -> Gateway -> Client）
-type MapMoveSync struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,5,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,6,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	Speed         float32                `protobuf:"fixed32,7,opt,name=speed,proto3" json:"speed,omitempty"`
-	MoveType      int32                  `protobuf:"varint,8,opt,name=move_type,json=moveType,proto3" json:"move_type,omitempty"`
-	Timestamp     int64                  `protobuf:"varint,9,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveSync) Reset() {
-	*x = MapMoveSync{}
-	mi := &file_internal_proto_msgTypes[20]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveSync) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveSync) ProtoMessage() {}
-
-func (x *MapMoveSync) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[20]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveSync.ProtoReflect.Descriptor instead.
-func (*MapMoveSync) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *MapMoveSync) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetSpeed() float32 {
-	if x != nil {
-		return x.Speed
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetMoveType() int32 {
-	if x != nil {
-		return x.MoveType
-	}
-	return 0
-}
-
-func (x *MapMoveSync) GetTimestamp() int64 {
-	if x != nil {
-		return x.Timestamp
-	}
-	return 0
-}
-
-// 地图移动请求（GameServer -> MapServer）
-type MapMoveRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	ObjectId      int64                  `protobuf:"varint,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,7,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	MoveType      int32                  `protobuf:"varint,8,opt,name=move_type,json=moveType,proto3" json:"move_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveRequest) Reset() {
-	*x = MapMoveRequest{}
-	mi := &file_internal_proto_msgTypes[21]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveRequest) ProtoMessage() {}
-
-func (x *MapMoveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[21]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveRequest.ProtoReflect.Descriptor instead.
-func (*MapMoveRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *MapMoveRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-func (x *MapMoveRequest) GetMoveType() int32 {
-	if x != nil {
-		return x.MoveType
-	}
-	return 0
-}
-
-// 地图移动响应（MapServer -> GameServer）
-type MapMoveResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapMoveResponse) Reset() {
-	*x = MapMoveResponse{}
-	mi := &file_internal_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapMoveResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapMoveResponse) ProtoMessage() {}
-
-func (x *MapMoveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapMoveResponse.ProtoReflect.Descriptor instead.
-func (*MapMoveResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *MapMoveResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapMoveResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapMoveResponse) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *MapMoveResponse) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-// 地图攻击请求（GameServer -> MapServer）
-type MapAttackRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	ObjectId      int64                  `protobuf:"varint,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	AttackType    int32                  `protobuf:"varint,5,opt,name=attack_type,json=attackType,proto3" json:"attack_type,omitempty"`
-	SkillId       int32                  `protobuf:"varint,6,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapAttackRequest) Reset() {
-	*x = MapAttackRequest{}
-	mi := &file_internal_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapAttackRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapAttackRequest) ProtoMessage() {}
-
-func (x *MapAttackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapAttackRequest.ProtoReflect.Descriptor instead.
-func (*MapAttackRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *MapAttackRequest) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapAttackRequest) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *MapAttackRequest) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *MapAttackRequest) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-func (x *MapAttackRequest) GetAttackType() int32 {
-	if x != nil {
-		return x.AttackType
-	}
-	return 0
-}
-
-func (x *MapAttackRequest) GetSkillId() int32 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-// MapServer认证请求（MapServer -> GameServer）
-type MapServerAuthRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MapServerId   string                 `protobuf:"bytes,1,opt,name=map_server_id,json=mapServerId,proto3" json:"map_server_id,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapServerAuthRequest) Reset() {
-	*x = MapServerAuthRequest{}
-	mi := &file_internal_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapServerAuthRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapServerAuthRequest) ProtoMessage() {}
-
-func (x *MapServerAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapServerAuthRequest.ProtoReflect.Descriptor instead.
-func (*MapServerAuthRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *MapServerAuthRequest) GetMapServerId() string {
-	if x != nil {
-		return x.MapServerId
-	}
-	return ""
-}
-
-func (x *MapServerAuthRequest) GetVersion() string {
-	if x != nil {
-		return x.Version
-	}
-	return ""
-}
-
-// MapServer认证响应（GameServer -> MapServer）
-type MapServerAuthResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	GameServerId  string                 `protobuf:"bytes,3,opt,name=game_server_id,json=gameServerId,proto3" json:"game_server_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapServerAuthResponse) Reset() {
-	*x = MapServerAuthResponse{}
-	mi := &file_internal_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapServerAuthResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapServerAuthResponse) ProtoMessage() {}
-
-func (x *MapServerAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapServerAuthResponse.ProtoReflect.Descriptor instead.
-func (*MapServerAuthResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *MapServerAuthResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapServerAuthResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapServerAuthResponse) GetGameServerId() string {
-	if x != nil {
-		return x.GameServerId
-	}
-	return ""
-}
-
-// 地图攻击响应（MapServer -> GameServer）
-type MapAttackResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
-	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	TargetId      int64                  `protobuf:"varint,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	Damage        int64                  `protobuf:"varint,5,opt,name=damage,proto3" json:"damage,omitempty"`
-	TargetHp      int64                  `protobuf:"varint,6,opt,name=target_hp,json=targetHp,proto3" json:"target_hp,omitempty"`
-	TargetMaxHp   int64                  `protobuf:"varint,7,opt,name=target_max_hp,json=targetMaxHp,proto3" json:"target_max_hp,omitempty"`
-	Exp           int32                  `protobuf:"varint,8,opt,name=exp,proto3" json:"exp,omitempty"`
-	Items         []*InternalItemInfo    `protobuf:"bytes,9,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MapAttackResponse) Reset() {
-	*x = MapAttackResponse{}
-	mi := &file_internal_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MapAttackResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MapAttackResponse) ProtoMessage() {}
-
-func (x *MapAttackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MapAttackResponse.ProtoReflect.Descriptor instead.
-func (*MapAttackResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *MapAttackResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *MapAttackResponse) GetErrorMsg() string {
-	if x != nil {
-		return x.ErrorMsg
-	}
-	return ""
-}
-
-func (x *MapAttackResponse) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetDamage() int64 {
-	if x != nil {
-		return x.Damage
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetTargetHp() int64 {
-	if x != nil {
-		return x.TargetHp
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetTargetMaxHp() int64 {
-	if x != nil {
-		return x.TargetMaxHp
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetExp() int32 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-func (x *MapAttackResponse) GetItems() []*InternalItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-// AOI进入通知（MapServer -> GameServer）
-type AoiEnterNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Objects       []*AoiObjectInfo       `protobuf:"bytes,3,rep,name=objects,proto3" json:"objects,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiEnterNotify) Reset() {
-	*x = AoiEnterNotify{}
-	mi := &file_internal_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiEnterNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiEnterNotify) ProtoMessage() {}
-
-func (x *AoiEnterNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiEnterNotify.ProtoReflect.Descriptor instead.
-func (*AoiEnterNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *AoiEnterNotify) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AoiEnterNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *AoiEnterNotify) GetObjects() []*AoiObjectInfo {
-	if x != nil {
-		return x.Objects
-	}
-	return nil
-}
-
-// AOI离开通知（MapServer -> GameServer）
-type AoiLeaveNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	ObjectIds     []int64                `protobuf:"varint,3,rep,packed,name=object_ids,json=objectIds,proto3" json:"object_ids,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiLeaveNotify) Reset() {
-	*x = AoiLeaveNotify{}
-	mi := &file_internal_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiLeaveNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiLeaveNotify) ProtoMessage() {}
-
-func (x *AoiLeaveNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiLeaveNotify.ProtoReflect.Descriptor instead.
-func (*AoiLeaveNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *AoiLeaveNotify) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AoiLeaveNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *AoiLeaveNotify) GetObjectIds() []int64 {
-	if x != nil {
-		return x.ObjectIds
-	}
-	return nil
-}
-
-// AOI更新通知（MapServer -> GameServer）
-type AoiUpdateNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Objects       []*AoiObjectInfo       `protobuf:"bytes,3,rep,name=objects,proto3" json:"objects,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiUpdateNotify) Reset() {
-	*x = AoiUpdateNotify{}
-	mi := &file_internal_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiUpdateNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiUpdateNotify) ProtoMessage() {}
-
-func (x *AoiUpdateNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiUpdateNotify.ProtoReflect.Descriptor instead.
-func (*AoiUpdateNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *AoiUpdateNotify) GetPlayerId() int64 {
-	if x != nil {
-		return x.PlayerId
-	}
-	return 0
-}
-
-func (x *AoiUpdateNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *AoiUpdateNotify) GetObjects() []*AoiObjectInfo {
-	if x != nil {
-		return x.Objects
-	}
-	return nil
-}
-
-// AOI对象信息
-type AoiObjectInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ObjectId      int64                  `protobuf:"varint,1,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
-	ObjectType    int32                  `protobuf:"varint,2,opt,name=object_type,json=objectType,proto3" json:"object_type,omitempty"`
-	EntityId      int64                  `protobuf:"varint,3,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Name          string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	X             float32                `protobuf:"fixed32,5,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,6,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,7,opt,name=z,proto3" json:"z,omitempty"`
-	Orientation   float32                `protobuf:"fixed32,8,opt,name=orientation,proto3" json:"orientation,omitempty"`
-	Status        int32                  `protobuf:"varint,9,opt,name=status,proto3" json:"status,omitempty"`
-	Attributes    map[int32]int64        `protobuf:"bytes,10,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AoiObjectInfo) Reset() {
-	*x = AoiObjectInfo{}
-	mi := &file_internal_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AoiObjectInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AoiObjectInfo) ProtoMessage() {}
-
-func (x *AoiObjectInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AoiObjectInfo.ProtoReflect.Descriptor instead.
-func (*AoiObjectInfo) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *AoiObjectInfo) GetObjectId() int64 {
-	if x != nil {
-		return x.ObjectId
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetObjectType() int32 {
-	if x != nil {
-		return x.ObjectType
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetEntityId() int64 {
-	if x != nil {
-		return x.EntityId
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *AoiObjectInfo) GetX() float32 {
-	if x != nil {
-		return x.X
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetY() float32 {
-	if x != nil {
-		return x.Y
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetZ() float32 {
-	if x != nil {
-		return x.Z
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetOrientation() float32 {
-	if x != nil {
-		return x.Orientation
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetStatus() int32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *AoiObjectInfo) GetAttributes() map[int32]int64 {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-// 战斗开始通知
-type CombatStartNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CombatId      int64                  `protobuf:"varint,1,opt,name=combat_id,json=combatId,proto3" json:"combat_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	Attackers     []*CombatUnitInfo      `protobuf:"bytes,3,rep,name=attackers,proto3" json:"attackers,omitempty"`
-	Defenders     []*CombatUnitInfo      `protobuf:"bytes,4,rep,name=defenders,proto3" json:"defenders,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatStartNotify) Reset() {
-	*x = CombatStartNotify{}
-	mi := &file_internal_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatStartNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatStartNotify) ProtoMessage() {}
-
-func (x *CombatStartNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatStartNotify.ProtoReflect.Descriptor instead.
-func (*CombatStartNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *CombatStartNotify) GetCombatId() int64 {
-	if x != nil {
-		return x.CombatId
-	}
-	return 0
-}
-
-func (x *CombatStartNotify) GetMapId() int64 {
-	if x != nil {
-		return x.MapId
-	}
-	return 0
-}
-
-func (x *CombatStartNotify) GetAttackers() []*CombatUnitInfo {
-	if x != nil {
-		return x.Attackers
-	}
-	return nil
-}
-
-func (x *CombatStartNotify) GetDefenders() []*CombatUnitInfo {
-	if x != nil {
-		return x.Defenders
-	}
-	return nil
-}
-
-// 战斗单位信息
-type CombatUnitInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UnitId        int64                  `protobuf:"varint,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
-	UnitType      int32                  `protobuf:"varint,2,opt,name=unit_type,json=unitType,proto3" json:"unit_type,omitempty"`
-	EntityId      int64                  `protobuf:"varint,3,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
-	Hp            int32                  `protobuf:"varint,4,opt,name=hp,proto3" json:"hp,omitempty"`
-	MaxHp         int32                  `protobuf:"varint,5,opt,name=max_hp,json=maxHp,proto3" json:"max_hp,omitempty"`
-	Mp            int32                  `protobuf:"varint,6,opt,name=mp,proto3" json:"mp,omitempty"`
-	MaxMp         int32                  `protobuf:"varint,7,opt,name=max_mp,json=maxMp,proto3" json:"max_mp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatUnitInfo) Reset() {
-	*x = CombatUnitInfo{}
-	mi := &file_internal_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatUnitInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatUnitInfo) ProtoMessage() {}
-
-func (x *CombatUnitInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatUnitInfo.ProtoReflect.Descriptor instead.
-func (*CombatUnitInfo) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *CombatUnitInfo) GetUnitId() int64 {
-	if x != nil {
-		return x.UnitId
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetUnitType() int32 {
-	if x != nil {
-		return x.UnitType
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetEntityId() int64 {
-	if x != nil {
-		return x.EntityId
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetHp() int32 {
-	if x != nil {
-		return x.Hp
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetMaxHp() int32 {
-	if x != nil {
-		return x.MaxHp
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetMp() int32 {
-	if x != nil {
-		return x.Mp
-	}
-	return 0
-}
-
-func (x *CombatUnitInfo) GetMaxMp() int32 {
-	if x != nil {
-		return x.MaxMp
-	}
-	return 0
-}
-
-// 战斗行动通知
-type CombatActionNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CombatId      int64                  `protobuf:"varint,1,opt,name=combat_id,json=combatId,proto3" json:"combat_id,omitempty"`
-	ActorId       int64                  `protobuf:"varint,2,opt,name=actor_id,json=actorId,proto3" json:"actor_id,omitempty"`
-	ActionType    int32                  `protobuf:"varint,3,opt,name=action_type,json=actionType,proto3" json:"action_type,omitempty"`
-	SkillId       int32                  `protobuf:"varint,4,opt,name=skill_id,json=skillId,proto3" json:"skill_id,omitempty"`
-	Effects       []*CombatEffect        `protobuf:"bytes,5,rep,name=effects,proto3" json:"effects,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatActionNotify) Reset() {
-	*x = CombatActionNotify{}
-	mi := &file_internal_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatActionNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatActionNotify) ProtoMessage() {}
-
-func (x *CombatActionNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatActionNotify.ProtoReflect.Descriptor instead.
-func (*CombatActionNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *CombatActionNotify) GetCombatId() int64 {
-	if x != nil {
-		return x.CombatId
-	}
-	return 0
-}
-
-func (x *CombatActionNotify) GetActorId() int64 {
-	if x != nil {
-		return x.ActorId
-	}
-	return 0
-}
-
-func (x *CombatActionNotify) GetActionType() int32 {
-	if x != nil {
-		return x.ActionType
-	}
-	return 0
-}
-
-func (x *CombatActionNotify) GetSkillId() int32 {
-	if x != nil {
-		return x.SkillId
-	}
-	return 0
-}
-
-func (x *CombatActionNotify) GetEffects() []*CombatEffect {
-	if x != nil {
-		return x.Effects
-	}
-	return nil
-}
-
-// 战斗效果
-type CombatEffect struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TargetId      int64                  `protobuf:"varint,1,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
-	EffectType    int32                  `protobuf:"varint,2,opt,name=effect_type,json=effectType,proto3" json:"effect_type,omitempty"`
-	Value         int32                  `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
-	CurrentHp     int32                  `protobuf:"varint,4,opt,name=current_hp,json=currentHp,proto3" json:"current_hp,omitempty"`
-	CurrentMp     int32                  `protobuf:"varint,5,opt,name=current_mp,json=currentMp,proto3" json:"current_mp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatEffect) Reset() {
-	*x = CombatEffect{}
-	mi := &file_internal_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatEffect) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatEffect) ProtoMessage() {}
-
-func (x *CombatEffect) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatEffect.ProtoReflect.Descriptor instead.
-func (*CombatEffect) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *CombatEffect) GetTargetId() int64 {
-	if x != nil {
-		return x.TargetId
-	}
-	return 0
-}
-
-func (x *CombatEffect) GetEffectType() int32 {
-	if x != nil {
-		return x.EffectType
-	}
-	return 0
-}
-
-func (x *CombatEffect) GetValue() int32 {
-	if x != nil {
-		return x.Value
-	}
-	return 0
-}
-
-func (x *CombatEffect) GetCurrentHp() int32 {
-	if x != nil {
-		return x.CurrentHp
-	}
-	return 0
-}
-
-func (x *CombatEffect) GetCurrentMp() int32 {
-	if x != nil {
-		return x.CurrentMp
-	}
-	return 0
-}
-
-// 战斗结束通知
-type CombatEndNotify struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CombatId      int64                  `protobuf:"varint,1,opt,name=combat_id,json=combatId,proto3" json:"combat_id,omitempty"`
-	Result        int32                  `protobuf:"varint,2,opt,name=result,proto3" json:"result,omitempty"`
-	Rewards       []*CombatReward        `protobuf:"bytes,3,rep,name=rewards,proto3" json:"rewards,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatEndNotify) Reset() {
-	*x = CombatEndNotify{}
-	mi := &file_internal_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatEndNotify) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatEndNotify) ProtoMessage() {}
-
-func (x *CombatEndNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatEndNotify.ProtoReflect.Descriptor instead.
-func (*CombatEndNotify) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *CombatEndNotify) GetCombatId() int64 {
-	if x != nil {
-		return x.CombatId
-	}
-	return 0
-}
-
-func (x *CombatEndNotify) GetResult() int32 {
-	if x != nil {
-		return x.Result
-	}
-	return 0
-}
-
-func (x *CombatEndNotify) GetRewards() []*CombatReward {
-	if x != nil {
-		return x.Rewards
-	}
-	return nil
-}
-
-// 战斗奖励
-type CombatReward struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UnitId        int64                  `protobuf:"varint,1,opt,name=unit_id,json=unitId,proto3" json:"unit_id,omitempty"`
-	Exp           int64                  `protobuf:"varint,2,opt,name=exp,proto3" json:"exp,omitempty"`
-	Gold          int64                  `protobuf:"varint,3,opt,name=gold,proto3" json:"gold,omitempty"`
-	Items         []*InternalItemInfo    `protobuf:"bytes,4,rep,name=items,proto3" json:"items,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CombatReward) Reset() {
-	*x = CombatReward{}
-	mi := &file_internal_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CombatReward) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CombatReward) ProtoMessage() {}
-
-func (x *CombatReward) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CombatReward.ProtoReflect.Descriptor instead.
-func (*CombatReward) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *CombatReward) GetUnitId() int64 {
-	if x != nil {
-		return x.UnitId
-	}
-	return 0
-}
-
-func (x *CombatReward) GetExp() int64 {
-	if x != nil {
-		return x.Exp
-	}
-	return 0
-}
-
-func (x *CombatReward) GetGold() int64 {
-	if x != nil {
-		return x.Gold
-	}
-	return 0
-}
-
-func (x *CombatReward) GetItems() []*InternalItemInfo {
-	if x != nil {
-		return x.Items
-	}
-	return nil
-}
-
-// 内部物品信息（服务间通信使用）
-type InternalItemInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        int64                  `protobuf:"varint,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	ConfigId      int32                  `protobuf:"varint,2,opt,name=config_id,json=configId,proto3" json:"config_id,omitempty"`
-	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InternalItemInfo) Reset() {
-	*x = InternalItemInfo{}
-	mi := &file_internal_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InternalItemInfo) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InternalItemInfo) ProtoMessage() {}
-
-func (x *InternalItemInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InternalItemInfo.ProtoReflect.Descriptor instead.
-func (*InternalItemInfo) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *InternalItemInfo) GetItemId() int64 {
-	if x != nil {
-		return x.ItemId
-	}
-	return 0
-}
-
-func (x *InternalItemInfo) GetConfigId() int32 {
-	if x != nil {
-		return x.ConfigId
-	}
-	return 0
-}
-
-func (x *InternalItemInfo) GetCount() int32 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
 // 跨服请求
 type CrossServerRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3063,7 +1319,7 @@ type CrossServerRequest struct {
 
 func (x *CrossServerRequest) Reset() {
 	*x = CrossServerRequest{}
-	mi := &file_internal_proto_msgTypes[38]
+	mi := &file_internal_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3075,7 +1331,7 @@ func (x *CrossServerRequest) String() string {
 func (*CrossServerRequest) ProtoMessage() {}
 
 func (x *CrossServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[38]
+	mi := &file_internal_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3088,7 +1344,7 @@ func (x *CrossServerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CrossServerRequest.ProtoReflect.Descriptor instead.
 func (*CrossServerRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{38}
+	return file_internal_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CrossServerRequest) GetRequestId() int64 {
@@ -3148,7 +1404,7 @@ type CrossServerResponse struct {
 
 func (x *CrossServerResponse) Reset() {
 	*x = CrossServerResponse{}
-	mi := &file_internal_proto_msgTypes[39]
+	mi := &file_internal_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3160,7 +1416,7 @@ func (x *CrossServerResponse) String() string {
 func (*CrossServerResponse) ProtoMessage() {}
 
 func (x *CrossServerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[39]
+	mi := &file_internal_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3173,7 +1429,7 @@ func (x *CrossServerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CrossServerResponse.ProtoReflect.Descriptor instead.
 func (*CrossServerResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{39}
+	return file_internal_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CrossServerResponse) GetRequestId() int64 {
@@ -3218,6 +1474,192 @@ func (x *CrossServerResponse) GetData() []byte {
 	return nil
 }
 
+// 跨服消息包装
+type CrossServerMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TraceId       uint64                 `protobuf:"varint,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
+	FromServerId  uint32                 `protobuf:"varint,2,opt,name=from_server_id,json=fromServerId,proto3" json:"from_server_id,omitempty"`
+	ToServerId    uint32                 `protobuf:"varint,3,opt,name=to_server_id,json=toServerId,proto3" json:"to_server_id,omitempty"`
+	FromService   uint32                 `protobuf:"varint,4,opt,name=from_service,json=fromService,proto3" json:"from_service,omitempty"`
+	ToService     uint32                 `protobuf:"varint,5,opt,name=to_service,json=toService,proto3" json:"to_service,omitempty"`
+	Message       *BaseMessage           `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CrossServerMessage) Reset() {
+	*x = CrossServerMessage{}
+	mi := &file_internal_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CrossServerMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CrossServerMessage) ProtoMessage() {}
+
+func (x *CrossServerMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CrossServerMessage.ProtoReflect.Descriptor instead.
+func (*CrossServerMessage) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CrossServerMessage) GetTraceId() uint64 {
+	if x != nil {
+		return x.TraceId
+	}
+	return 0
+}
+
+func (x *CrossServerMessage) GetFromServerId() uint32 {
+	if x != nil {
+		return x.FromServerId
+	}
+	return 0
+}
+
+func (x *CrossServerMessage) GetToServerId() uint32 {
+	if x != nil {
+		return x.ToServerId
+	}
+	return 0
+}
+
+func (x *CrossServerMessage) GetFromService() uint32 {
+	if x != nil {
+		return x.FromService
+	}
+	return 0
+}
+
+func (x *CrossServerMessage) GetToService() uint32 {
+	if x != nil {
+		return x.ToService
+	}
+	return 0
+}
+
+func (x *CrossServerMessage) GetMessage() *BaseMessage {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
+// 基础消息结构
+type BaseMessage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     uint64                 `protobuf:"varint,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	PlayerId      uint64                 `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Timestamp     uint64                 `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	MsgId         uint32                 `protobuf:"varint,4,opt,name=msg_id,json=msgId,proto3" json:"msg_id,omitempty"`
+	ServerId      uint32                 `protobuf:"varint,5,opt,name=server_id,json=serverId,proto3" json:"server_id,omitempty"`
+	MapId         uint32                 `protobuf:"varint,6,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	MapServerId   uint32                 `protobuf:"varint,7,opt,name=map_server_id,json=mapServerId,proto3" json:"map_server_id,omitempty"`
+	Data          []byte                 `protobuf:"bytes,8,opt,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BaseMessage) Reset() {
+	*x = BaseMessage{}
+	mi := &file_internal_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BaseMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BaseMessage) ProtoMessage() {}
+
+func (x *BaseMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BaseMessage.ProtoReflect.Descriptor instead.
+func (*BaseMessage) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *BaseMessage) GetSessionId() uint64 {
+	if x != nil {
+		return x.SessionId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetPlayerId() uint64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetTimestamp() uint64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetMsgId() uint32 {
+	if x != nil {
+		return x.MsgId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetServerId() uint32 {
+	if x != nil {
+		return x.ServerId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetMapId() uint32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetMapServerId() uint32 {
+	if x != nil {
+		return x.MapServerId
+	}
+	return 0
+}
+
+func (x *BaseMessage) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 // 内部消息包装
 type InternalMessage struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -3232,7 +1674,7 @@ type InternalMessage struct {
 
 func (x *InternalMessage) Reset() {
 	*x = InternalMessage{}
-	mi := &file_internal_proto_msgTypes[40]
+	mi := &file_internal_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3244,7 +1686,7 @@ func (x *InternalMessage) String() string {
 func (*InternalMessage) ProtoMessage() {}
 
 func (x *InternalMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[40]
+	mi := &file_internal_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3257,7 +1699,7 @@ func (x *InternalMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InternalMessage.ProtoReflect.Descriptor instead.
 func (*InternalMessage) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{40}
+	return file_internal_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *InternalMessage) GetMsgId() int32 {
@@ -3291,6 +1733,622 @@ func (x *InternalMessage) GetSourceServerId() int32 {
 func (x *InternalMessage) GetTargetServerId() int32 {
 	if x != nil {
 		return x.TargetServerId
+	}
+	return 0
+}
+
+// 地图进入请求
+type MapEnterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	X             float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
+	Z             float32                `protobuf:"fixed32,5,opt,name=z,proto3" json:"z,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapEnterRequest) Reset() {
+	*x = MapEnterRequest{}
+	mi := &file_internal_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapEnterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapEnterRequest) ProtoMessage() {}
+
+func (x *MapEnterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapEnterRequest.ProtoReflect.Descriptor instead.
+func (*MapEnterRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *MapEnterRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetMapId() int64 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetZ() float32 {
+	if x != nil {
+		return x.Z
+	}
+	return 0
+}
+
+// 地图进入响应
+type MapEnterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	ObjectId      int64                  `protobuf:"varint,3,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	MapId         int64                  `protobuf:"varint,4,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	X             float32                `protobuf:"fixed32,5,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,6,opt,name=y,proto3" json:"y,omitempty"`
+	Z             float32                `protobuf:"fixed32,7,opt,name=z,proto3" json:"z,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapEnterResponse) Reset() {
+	*x = MapEnterResponse{}
+	mi := &file_internal_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapEnterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapEnterResponse) ProtoMessage() {}
+
+func (x *MapEnterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapEnterResponse.ProtoReflect.Descriptor instead.
+func (*MapEnterResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *MapEnterResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MapEnterResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *MapEnterResponse) GetObjectId() int64 {
+	if x != nil {
+		return x.ObjectId
+	}
+	return 0
+}
+
+func (x *MapEnterResponse) GetMapId() int64 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *MapEnterResponse) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *MapEnterResponse) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *MapEnterResponse) GetZ() float32 {
+	if x != nil {
+		return x.Z
+	}
+	return 0
+}
+
+// 地图离开请求
+type MapLeaveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	Reason        int32                  `protobuf:"varint,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapLeaveRequest) Reset() {
+	*x = MapLeaveRequest{}
+	mi := &file_internal_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapLeaveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapLeaveRequest) ProtoMessage() {}
+
+func (x *MapLeaveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapLeaveRequest.ProtoReflect.Descriptor instead.
+func (*MapLeaveRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *MapLeaveRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapLeaveRequest) GetMapId() int64 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *MapLeaveRequest) GetReason() int32 {
+	if x != nil {
+		return x.Reason
+	}
+	return 0
+}
+
+// 地图离开响应
+type MapLeaveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapLeaveResponse) Reset() {
+	*x = MapLeaveResponse{}
+	mi := &file_internal_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapLeaveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapLeaveResponse) ProtoMessage() {}
+
+func (x *MapLeaveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapLeaveResponse.ProtoReflect.Descriptor instead.
+func (*MapLeaveResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *MapLeaveResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MapLeaveResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *MapLeaveResponse) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+// 地图移动请求
+type MapMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	ObjectId      int64                  `protobuf:"varint,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
+	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapMoveRequest) Reset() {
+	*x = MapMoveRequest{}
+	mi := &file_internal_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapMoveRequest) ProtoMessage() {}
+
+func (x *MapMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapMoveRequest.ProtoReflect.Descriptor instead.
+func (*MapMoveRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *MapMoveRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapMoveRequest) GetObjectId() int64 {
+	if x != nil {
+		return x.ObjectId
+	}
+	return 0
+}
+
+func (x *MapMoveRequest) GetMapId() int64 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *MapMoveRequest) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *MapMoveRequest) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *MapMoveRequest) GetZ() float32 {
+	if x != nil {
+		return x.Z
+	}
+	return 0
+}
+
+// 地图移动响应
+type MapMoveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	X             float32                `protobuf:"fixed32,4,opt,name=x,proto3" json:"x,omitempty"`
+	Y             float32                `protobuf:"fixed32,5,opt,name=y,proto3" json:"y,omitempty"`
+	Z             float32                `protobuf:"fixed32,6,opt,name=z,proto3" json:"z,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapMoveResponse) Reset() {
+	*x = MapMoveResponse{}
+	mi := &file_internal_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapMoveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapMoveResponse) ProtoMessage() {}
+
+func (x *MapMoveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapMoveResponse.ProtoReflect.Descriptor instead.
+func (*MapMoveResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *MapMoveResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MapMoveResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *MapMoveResponse) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapMoveResponse) GetX() float32 {
+	if x != nil {
+		return x.X
+	}
+	return 0
+}
+
+func (x *MapMoveResponse) GetY() float32 {
+	if x != nil {
+		return x.Y
+	}
+	return 0
+}
+
+func (x *MapMoveResponse) GetZ() float32 {
+	if x != nil {
+		return x.Z
+	}
+	return 0
+}
+
+// 地图攻击请求
+type MapAttackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	ObjectId      int64                  `protobuf:"varint,2,opt,name=object_id,json=objectId,proto3" json:"object_id,omitempty"`
+	MapId         int64                  `protobuf:"varint,3,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	TargetId      int64                  `protobuf:"varint,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapAttackRequest) Reset() {
+	*x = MapAttackRequest{}
+	mi := &file_internal_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapAttackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapAttackRequest) ProtoMessage() {}
+
+func (x *MapAttackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapAttackRequest.ProtoReflect.Descriptor instead.
+func (*MapAttackRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *MapAttackRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapAttackRequest) GetObjectId() int64 {
+	if x != nil {
+		return x.ObjectId
+	}
+	return 0
+}
+
+func (x *MapAttackRequest) GetMapId() int64 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *MapAttackRequest) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+// 地图攻击响应
+type MapAttackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,3,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	TargetId      int64                  `protobuf:"varint,4,opt,name=target_id,json=targetId,proto3" json:"target_id,omitempty"`
+	Damage        int64                  `protobuf:"varint,5,opt,name=damage,proto3" json:"damage,omitempty"`
+	TargetHp      int64                  `protobuf:"varint,6,opt,name=target_hp,json=targetHp,proto3" json:"target_hp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MapAttackResponse) Reset() {
+	*x = MapAttackResponse{}
+	mi := &file_internal_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MapAttackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MapAttackResponse) ProtoMessage() {}
+
+func (x *MapAttackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MapAttackResponse.ProtoReflect.Descriptor instead.
+func (*MapAttackResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *MapAttackResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MapAttackResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *MapAttackResponse) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MapAttackResponse) GetTargetId() int64 {
+	if x != nil {
+		return x.TargetId
+	}
+	return 0
+}
+
+func (x *MapAttackResponse) GetDamage() int64 {
+	if x != nil {
+		return x.Damage
+	}
+	return 0
+}
+
+func (x *MapAttackResponse) GetTargetHp() int64 {
+	if x != nil {
+		return x.TargetHp
 	}
 	return 0
 }
@@ -3396,159 +2454,7 @@ const file_internal_proto_rawDesc = "" +
 	"playerData\"O\n" +
 	"\x16PlayerTransferResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"\xd5\x01\n" +
-	"\x0fMapEnterRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x02 \x01(\x03R\tsessionId\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x06 \x01(\x02R\x01z\x12$\n" +
-	"\x0egame_server_id\x18\a \x01(\x05R\fgameServerId\x12\x1f\n" +
-	"\vplayer_data\x18\b \x01(\fR\n" +
-	"playerData\"\xa7\x01\n" +
-	"\x10MapEnterResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tobject_id\x18\x03 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x04 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x05 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x06 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\a \x01(\x02R\x01z\"z\n" +
-	"\x0fMapLeaveRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\x05R\x06reason\"f\n" +
-	"\x10MapLeaveResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\"\xde\x01\n" +
-	"\vMapMoveSync\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x04 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x05 \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\x06 \x01(\x02R\vorientation\x12\x14\n" +
-	"\x05speed\x18\a \x01(\x02R\x05speed\x12\x1b\n" +
-	"\tmove_type\x18\b \x01(\x05R\bmoveType\x12\x1c\n" +
-	"\ttimestamp\x18\t \x01(\x03R\ttimestamp\"\xca\x01\n" +
-	"\x0eMapMoveRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\f\n" +
-	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x06 \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\a \x01(\x02R\vorientation\x12\x1b\n" +
-	"\tmove_type\x18\b \x01(\x05R\bmoveType\"\x8f\x01\n" +
-	"\x0fMapMoveResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\f\n" +
-	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x06 \x01(\x02R\x01z\"\xbc\x01\n" +
-	"\x10MapAttackRequest\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1b\n" +
-	"\tobject_id\x18\x02 \x01(\x03R\bobjectId\x12\x15\n" +
-	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\x1b\n" +
-	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\x12\x1f\n" +
-	"\vattack_type\x18\x05 \x01(\x05R\n" +
-	"attackType\x12\x19\n" +
-	"\bskill_id\x18\x06 \x01(\x05R\askillId\"T\n" +
-	"\x14MapServerAuthRequest\x12\"\n" +
-	"\rmap_server_id\x18\x01 \x01(\tR\vmapServerId\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"t\n" +
-	"\x15MapServerAuthResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12$\n" +
-	"\x0egame_server_id\x18\x03 \x01(\tR\fgameServerId\"\xa1\x02\n" +
-	"\x11MapAttackResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
-	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\x1b\n" +
-	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\x12\x16\n" +
-	"\x06damage\x18\x05 \x01(\x03R\x06damage\x12\x1b\n" +
-	"\ttarget_hp\x18\x06 \x01(\x03R\btargetHp\x12\"\n" +
-	"\rtarget_max_hp\x18\a \x01(\x03R\vtargetMaxHp\x12\x10\n" +
-	"\x03exp\x18\b \x01(\x05R\x03exp\x120\n" +
-	"\x05items\x18\t \x03(\v2\x1a.protocol.InternalItemInfoR\x05items\"w\n" +
-	"\x0eAoiEnterNotify\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x121\n" +
-	"\aobjects\x18\x03 \x03(\v2\x17.protocol.AoiObjectInfoR\aobjects\"c\n" +
-	"\x0eAoiLeaveNotify\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\x1d\n" +
-	"\n" +
-	"object_ids\x18\x03 \x03(\x03R\tobjectIds\"x\n" +
-	"\x0fAoiUpdateNotify\x12\x1b\n" +
-	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x121\n" +
-	"\aobjects\x18\x03 \x03(\v2\x17.protocol.AoiObjectInfoR\aobjects\"\xea\x02\n" +
-	"\rAoiObjectInfo\x12\x1b\n" +
-	"\tobject_id\x18\x01 \x01(\x03R\bobjectId\x12\x1f\n" +
-	"\vobject_type\x18\x02 \x01(\x05R\n" +
-	"objectType\x12\x1b\n" +
-	"\tentity_id\x18\x03 \x01(\x03R\bentityId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12\f\n" +
-	"\x01x\x18\x05 \x01(\x02R\x01x\x12\f\n" +
-	"\x01y\x18\x06 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\a \x01(\x02R\x01z\x12 \n" +
-	"\vorientation\x18\b \x01(\x02R\vorientation\x12\x16\n" +
-	"\x06status\x18\t \x01(\x05R\x06status\x12G\n" +
-	"\n" +
-	"attributes\x18\n" +
-	" \x03(\v2'.protocol.AoiObjectInfo.AttributesEntryR\n" +
-	"attributes\x1a=\n" +
-	"\x0fAttributesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\x05R\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01\"\xb7\x01\n" +
-	"\x11CombatStartNotify\x12\x1b\n" +
-	"\tcombat_id\x18\x01 \x01(\x03R\bcombatId\x12\x15\n" +
-	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x126\n" +
-	"\tattackers\x18\x03 \x03(\v2\x18.protocol.CombatUnitInfoR\tattackers\x126\n" +
-	"\tdefenders\x18\x04 \x03(\v2\x18.protocol.CombatUnitInfoR\tdefenders\"\xb1\x01\n" +
-	"\x0eCombatUnitInfo\x12\x17\n" +
-	"\aunit_id\x18\x01 \x01(\x03R\x06unitId\x12\x1b\n" +
-	"\tunit_type\x18\x02 \x01(\x05R\bunitType\x12\x1b\n" +
-	"\tentity_id\x18\x03 \x01(\x03R\bentityId\x12\x0e\n" +
-	"\x02hp\x18\x04 \x01(\x05R\x02hp\x12\x15\n" +
-	"\x06max_hp\x18\x05 \x01(\x05R\x05maxHp\x12\x0e\n" +
-	"\x02mp\x18\x06 \x01(\x05R\x02mp\x12\x15\n" +
-	"\x06max_mp\x18\a \x01(\x05R\x05maxMp\"\xba\x01\n" +
-	"\x12CombatActionNotify\x12\x1b\n" +
-	"\tcombat_id\x18\x01 \x01(\x03R\bcombatId\x12\x19\n" +
-	"\bactor_id\x18\x02 \x01(\x03R\aactorId\x12\x1f\n" +
-	"\vaction_type\x18\x03 \x01(\x05R\n" +
-	"actionType\x12\x19\n" +
-	"\bskill_id\x18\x04 \x01(\x05R\askillId\x120\n" +
-	"\aeffects\x18\x05 \x03(\v2\x16.protocol.CombatEffectR\aeffects\"\xa0\x01\n" +
-	"\fCombatEffect\x12\x1b\n" +
-	"\ttarget_id\x18\x01 \x01(\x03R\btargetId\x12\x1f\n" +
-	"\veffect_type\x18\x02 \x01(\x05R\n" +
-	"effectType\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\x05R\x05value\x12\x1d\n" +
-	"\n" +
-	"current_hp\x18\x04 \x01(\x05R\tcurrentHp\x12\x1d\n" +
-	"\n" +
-	"current_mp\x18\x05 \x01(\x05R\tcurrentMp\"x\n" +
-	"\x0fCombatEndNotify\x12\x1b\n" +
-	"\tcombat_id\x18\x01 \x01(\x03R\bcombatId\x12\x16\n" +
-	"\x06result\x18\x02 \x01(\x05R\x06result\x120\n" +
-	"\arewards\x18\x03 \x03(\v2\x16.protocol.CombatRewardR\arewards\"\x7f\n" +
-	"\fCombatReward\x12\x17\n" +
-	"\aunit_id\x18\x01 \x01(\x03R\x06unitId\x12\x10\n" +
-	"\x03exp\x18\x02 \x01(\x03R\x03exp\x12\x12\n" +
-	"\x04gold\x18\x03 \x01(\x03R\x04gold\x120\n" +
-	"\x05items\x18\x04 \x03(\v2\x1a.protocol.InternalItemInfoR\x05items\"^\n" +
-	"\x10InternalItemInfo\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\x03R\x06itemId\x12\x1b\n" +
-	"\tconfig_id\x18\x02 \x01(\x05R\bconfigId\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x05R\x05count\"\xc4\x01\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"\xc4\x01\n" +
 	"\x12CrossServerRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x03R\trequestId\x12$\n" +
@@ -3566,13 +2472,80 @@ const file_internal_proto_rawDesc = "" +
 	"toServerId\x12\x18\n" +
 	"\asuccess\x18\x04 \x01(\bR\asuccess\x12\x1b\n" +
 	"\terror_msg\x18\x05 \x01(\tR\berrorMsg\x12\x12\n" +
-	"\x04data\x18\x06 \x01(\fR\x04data\"\xae\x01\n" +
+	"\x04data\x18\x06 \x01(\fR\x04data\"\xea\x01\n" +
+	"\x12CrossServerMessage\x12\x19\n" +
+	"\btrace_id\x18\x01 \x01(\x04R\atraceId\x12$\n" +
+	"\x0efrom_server_id\x18\x02 \x01(\rR\ffromServerId\x12 \n" +
+	"\fto_server_id\x18\x03 \x01(\rR\n" +
+	"toServerId\x12!\n" +
+	"\ffrom_service\x18\x04 \x01(\rR\vfromService\x12\x1d\n" +
+	"\n" +
+	"to_service\x18\x05 \x01(\rR\ttoService\x12/\n" +
+	"\amessage\x18\x06 \x01(\v2\x15.protocol.BaseMessageR\amessage\"\xea\x01\n" +
+	"\vBaseMessage\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\x04R\tsessionId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x04R\bplayerId\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x04R\ttimestamp\x12\x15\n" +
+	"\x06msg_id\x18\x04 \x01(\rR\x05msgId\x12\x1b\n" +
+	"\tserver_id\x18\x05 \x01(\rR\bserverId\x12\x15\n" +
+	"\x06map_id\x18\x06 \x01(\rR\x05mapId\x12\"\n" +
+	"\rmap_server_id\x18\a \x01(\rR\vmapServerId\x12\x12\n" +
+	"\x04data\x18\b \x01(\fR\x04data\"\xae\x01\n" +
 	"\x0fInternalMessage\x12\x15\n" +
 	"\x06msg_id\x18\x01 \x01(\x05R\x05msgId\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x1c\n" +
 	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12(\n" +
 	"\x10source_server_id\x18\x04 \x01(\x05R\x0esourceServerId\x12(\n" +
-	"\x10target_server_id\x18\x05 \x01(\x05R\x0etargetServerId*\xfa\x06\n" +
+	"\x10target_server_id\x18\x05 \x01(\x05R\x0etargetServerId\"o\n" +
+	"\x0fMapEnterRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\f\n" +
+	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x04 \x01(\x02R\x01y\x12\f\n" +
+	"\x01z\x18\x05 \x01(\x02R\x01z\"\xa7\x01\n" +
+	"\x10MapEnterResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
+	"\tobject_id\x18\x03 \x01(\x03R\bobjectId\x12\x15\n" +
+	"\x06map_id\x18\x04 \x01(\x03R\x05mapId\x12\f\n" +
+	"\x01x\x18\x05 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x06 \x01(\x02R\x01y\x12\f\n" +
+	"\x01z\x18\a \x01(\x02R\x01z\"]\n" +
+	"\x0fMapLeaveRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\x05R\x06reason\"f\n" +
+	"\x10MapLeaveResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
+	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\"\x8b\x01\n" +
+	"\x0eMapMoveRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1b\n" +
+	"\tobject_id\x18\x02 \x01(\x03R\bobjectId\x12\x15\n" +
+	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\f\n" +
+	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
+	"\x01z\x18\x06 \x01(\x02R\x01z\"\x8f\x01\n" +
+	"\x0fMapMoveResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
+	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\f\n" +
+	"\x01x\x18\x04 \x01(\x02R\x01x\x12\f\n" +
+	"\x01y\x18\x05 \x01(\x02R\x01y\x12\f\n" +
+	"\x01z\x18\x06 \x01(\x02R\x01z\"\x80\x01\n" +
+	"\x10MapAttackRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1b\n" +
+	"\tobject_id\x18\x02 \x01(\x03R\bobjectId\x12\x15\n" +
+	"\x06map_id\x18\x03 \x01(\x03R\x05mapId\x12\x1b\n" +
+	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\"\xb9\x01\n" +
+	"\x11MapAttackResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +
+	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\x1b\n" +
+	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\x12\x16\n" +
+	"\x06damage\x18\x05 \x01(\x03R\x06damage\x12\x1b\n" +
+	"\ttarget_hp\x18\x06 \x01(\x03R\btargetHp*\xa2\x06\n" +
 	"\rInternalMsgId\x12\x18\n" +
 	"\x14MSG_INTERNAL_INVALID\x10\x00\x12!\n" +
 	"\x1dMSG_INTERNAL_SERVICE_REGISTER\x10d\x12#\n" +
@@ -3589,14 +2562,11 @@ const file_internal_proto_rawDesc = "" +
 	"\x1eMSG_INTERNAL_MAP_ENTER_REQUEST\x10\x90\x03\x12$\n" +
 	"\x1fMSG_INTERNAL_MAP_ENTER_RESPONSE\x10\x91\x03\x12#\n" +
 	"\x1eMSG_INTERNAL_MAP_LEAVE_REQUEST\x10\x92\x03\x12$\n" +
-	"\x1fMSG_INTERNAL_MAP_LEAVE_RESPONSE\x10\x93\x03\x12\x1f\n" +
-	"\x1aMSG_INTERNAL_MAP_MOVE_SYNC\x10\x94\x03\x12\x1f\n" +
-	"\x1aMSG_INTERNAL_MAP_AOI_ENTER\x10\x95\x03\x12\x1f\n" +
-	"\x1aMSG_INTERNAL_MAP_AOI_LEAVE\x10\x96\x03\x12 \n" +
-	"\x1bMSG_INTERNAL_MAP_AOI_UPDATE\x10\x97\x03\x12\x1e\n" +
-	"\x19MSG_INTERNAL_COMBAT_START\x10\xf4\x03\x12\x1f\n" +
-	"\x1aMSG_INTERNAL_COMBAT_ACTION\x10\xf5\x03\x12\x1c\n" +
-	"\x17MSG_INTERNAL_COMBAT_END\x10\xf6\x03\x12&\n" +
+	"\x1fMSG_INTERNAL_MAP_LEAVE_RESPONSE\x10\x93\x03\x12\"\n" +
+	"\x1dMSG_INTERNAL_MAP_MOVE_REQUEST\x10\x94\x03\x12\x1f\n" +
+	"\x1aMSG_INTERNAL_MAP_MOVE_SYNC\x10\x95\x03\x12$\n" +
+	"\x1fMSG_INTERNAL_MAP_ATTACK_REQUEST\x10\x96\x03\x12\x1f\n" +
+	"\x1aMSG_INTERNAL_COMBAT_ACTION\x10\x97\x03\x12&\n" +
 	"!MSG_INTERNAL_CROSS_SERVER_REQUEST\x10\xd8\x04\x12'\n" +
 	"\"MSG_INTERNAL_CROSS_SERVER_RESPONSE\x10\xd9\x04*\x9f\x01\n" +
 	"\vServiceType\x12\x18\n" +
@@ -3620,7 +2590,7 @@ func file_internal_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_internal_proto_goTypes = []any{
 	(InternalMsgId)(0),                // 0: protocol.InternalMsgId
 	(ServiceType)(0),                  // 1: protocol.ServiceType
@@ -3640,57 +2610,36 @@ var file_internal_proto_goTypes = []any{
 	(*PlayerUnbindServerRequest)(nil), // 15: protocol.PlayerUnbindServerRequest
 	(*PlayerTransferRequest)(nil),     // 16: protocol.PlayerTransferRequest
 	(*PlayerTransferResponse)(nil),    // 17: protocol.PlayerTransferResponse
-	(*MapEnterRequest)(nil),           // 18: protocol.MapEnterRequest
-	(*MapEnterResponse)(nil),          // 19: protocol.MapEnterResponse
-	(*MapLeaveRequest)(nil),           // 20: protocol.MapLeaveRequest
-	(*MapLeaveResponse)(nil),          // 21: protocol.MapLeaveResponse
-	(*MapMoveSync)(nil),               // 22: protocol.MapMoveSync
-	(*MapMoveRequest)(nil),            // 23: protocol.MapMoveRequest
-	(*MapMoveResponse)(nil),           // 24: protocol.MapMoveResponse
-	(*MapAttackRequest)(nil),          // 25: protocol.MapAttackRequest
-	(*MapServerAuthRequest)(nil),      // 26: protocol.MapServerAuthRequest
-	(*MapServerAuthResponse)(nil),     // 27: protocol.MapServerAuthResponse
-	(*MapAttackResponse)(nil),         // 28: protocol.MapAttackResponse
-	(*AoiEnterNotify)(nil),            // 29: protocol.AoiEnterNotify
-	(*AoiLeaveNotify)(nil),            // 30: protocol.AoiLeaveNotify
-	(*AoiUpdateNotify)(nil),           // 31: protocol.AoiUpdateNotify
-	(*AoiObjectInfo)(nil),             // 32: protocol.AoiObjectInfo
-	(*CombatStartNotify)(nil),         // 33: protocol.CombatStartNotify
-	(*CombatUnitInfo)(nil),            // 34: protocol.CombatUnitInfo
-	(*CombatActionNotify)(nil),        // 35: protocol.CombatActionNotify
-	(*CombatEffect)(nil),              // 36: protocol.CombatEffect
-	(*CombatEndNotify)(nil),           // 37: protocol.CombatEndNotify
-	(*CombatReward)(nil),              // 38: protocol.CombatReward
-	(*InternalItemInfo)(nil),          // 39: protocol.InternalItemInfo
-	(*CrossServerRequest)(nil),        // 40: protocol.CrossServerRequest
-	(*CrossServerResponse)(nil),       // 41: protocol.CrossServerResponse
-	(*InternalMessage)(nil),           // 42: protocol.InternalMessage
-	nil,                               // 43: protocol.ServiceInfo.MetadataEntry
-	nil,                               // 44: protocol.AoiObjectInfo.AttributesEntry
+	(*CrossServerRequest)(nil),        // 18: protocol.CrossServerRequest
+	(*CrossServerResponse)(nil),       // 19: protocol.CrossServerResponse
+	(*CrossServerMessage)(nil),        // 20: protocol.CrossServerMessage
+	(*BaseMessage)(nil),               // 21: protocol.BaseMessage
+	(*InternalMessage)(nil),           // 22: protocol.InternalMessage
+	(*MapEnterRequest)(nil),           // 23: protocol.MapEnterRequest
+	(*MapEnterResponse)(nil),          // 24: protocol.MapEnterResponse
+	(*MapLeaveRequest)(nil),           // 25: protocol.MapLeaveRequest
+	(*MapLeaveResponse)(nil),          // 26: protocol.MapLeaveResponse
+	(*MapMoveRequest)(nil),            // 27: protocol.MapMoveRequest
+	(*MapMoveResponse)(nil),           // 28: protocol.MapMoveResponse
+	(*MapAttackRequest)(nil),          // 29: protocol.MapAttackRequest
+	(*MapAttackResponse)(nil),         // 30: protocol.MapAttackResponse
+	nil,                               // 31: protocol.ServiceInfo.MetadataEntry
 }
 var file_internal_proto_depIdxs = []int32{
 	1,  // 0: protocol.ServiceInfo.service_type:type_name -> protocol.ServiceType
-	43, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
+	31, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
 	2,  // 2: protocol.ServiceRegisterRequest.service:type_name -> protocol.ServiceInfo
 	1,  // 3: protocol.ServiceDeregisterRequest.service_type:type_name -> protocol.ServiceType
 	1,  // 4: protocol.ServiceHeartbeatRequest.service_type:type_name -> protocol.ServiceType
 	1,  // 5: protocol.ServiceDiscoverRequest.service_type:type_name -> protocol.ServiceType
 	2,  // 6: protocol.ServiceDiscoverResponse.services:type_name -> protocol.ServiceInfo
 	12, // 7: protocol.PlayerBindServerResponse.route_info:type_name -> protocol.PlayerRouteInfo
-	39, // 8: protocol.MapAttackResponse.items:type_name -> protocol.InternalItemInfo
-	32, // 9: protocol.AoiEnterNotify.objects:type_name -> protocol.AoiObjectInfo
-	32, // 10: protocol.AoiUpdateNotify.objects:type_name -> protocol.AoiObjectInfo
-	44, // 11: protocol.AoiObjectInfo.attributes:type_name -> protocol.AoiObjectInfo.AttributesEntry
-	34, // 12: protocol.CombatStartNotify.attackers:type_name -> protocol.CombatUnitInfo
-	34, // 13: protocol.CombatStartNotify.defenders:type_name -> protocol.CombatUnitInfo
-	36, // 14: protocol.CombatActionNotify.effects:type_name -> protocol.CombatEffect
-	38, // 15: protocol.CombatEndNotify.rewards:type_name -> protocol.CombatReward
-	39, // 16: protocol.CombatReward.items:type_name -> protocol.InternalItemInfo
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	21, // 8: protocol.CrossServerMessage.message:type_name -> protocol.BaseMessage
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_init() }
@@ -3704,7 +2653,7 @@ func file_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_rawDesc), len(file_internal_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   43,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

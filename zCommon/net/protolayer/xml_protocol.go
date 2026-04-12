@@ -24,7 +24,7 @@ func (xp *XMLProtocol) Encode(protoId int32, version int32, data interface{}) (*
 
 	// 创建NetPacket
 	packet := &zNet.NetPacket{
-		ProtoId:  protoId,
+		ProtoId:  zNet.ProtoIdType(protoId),
 		Version:  version,
 		DataSize: int32(len(body)),
 		Data:     body,

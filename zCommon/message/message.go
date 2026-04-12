@@ -1,9 +1,10 @@
 package message
 
 import (
-	"encoding/binary"
 	"errors"
 	"sync"
+
+	"github.com/pzqf/zEngine/zNet"
 )
 
 // MessageHeader 消息头
@@ -43,14 +44,15 @@ func PutMessage(msg *Message) {
 func Encode(msgID uint32, data []byte) ([]byte, error) {
 	totalLen := 8 + len(data)
 	buffer := make([]byte, totalLen)
-	
+
 	// 编码长度
-	binary.LittleEndian.PutUint32(buffer[0:4], uint32(totalLen))
+	order := zNet.GetByteOrder()
+	order.PutUint32(buffer[0:4], uint32(totalLen))
 	// 编码消息ID
-	binary.LittleEndian.PutUint32(buffer[4:8], msgID)
+	order.PutUint32(buffer[4:8], msgID)
 	// 编码数据
 	copy(buffer[8:], data)
-	
+
 	return buffer, nil
 }
 
@@ -59,19 +61,19 @@ func Decode(data []byte) (*Message, error) {
 	if len(data) < 8 {
 		return nil, errors.New("invalid message format: insufficient data for header")
 	}
-	
+
 	// 从对象池获取消息对象
 	message := GetMessage()
-	
-	message.Header.Length = binary.LittleEndian.Uint32(data[0:4])
-	message.Header.MsgID = binary.LittleEndian.Uint32(data[4:8])
-	
+	order := zNet.GetByteOrder()
+	message.Header.Length = order.Uint32(data[0:4])
+	message.Header.MsgID = order.Uint32(data[4:8])
+
 	if len(data) < int(message.Header.Length) {
 		PutMessage(message)
 		return nil, errors.New("invalid message format: insufficient data for message")
 	}
-	
+
 	message.Data = data[8:message.Header.Length]
-	
+
 	return message, nil
 }

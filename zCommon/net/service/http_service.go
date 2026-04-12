@@ -200,7 +200,7 @@ func (hs *HTTPService) handleProtoRequest(w http.ResponseWriter, r *http.Request
 
 		// 创建 NetPacket
 		packet := &zNet.NetPacket{
-			ProtoId:  req.MsgID,
+			ProtoId:  zNet.ProtoIdType(req.MsgID),
 			Data:     data,
 			DataSize: int32(len(data)),
 		}

@@ -1,4 +1,4 @@
-﻿package router
+package router
 
 import (
 	"github.com/pzqf/zEngine/zLog"
@@ -39,9 +39,9 @@ func (pr *PacketRouter) UnregisterHandler(cmd int32) {
 // Route 路由数据包到相应的处理程序
 func (pr *PacketRouter) Route(session zNet.Session, packet *zNet.NetPacket) error {
 	// 查找对应的处理函数
-	handler, exists := pr.handlers[packet.ProtoId]
+	handler, exists := pr.handlers[int32(packet.ProtoId)]
 	if !exists {
-		zLog.Warn("No handler found for command", zap.Int32("cmd", packet.ProtoId))
+		zLog.Warn("No handler found for command", zap.Int32("cmd", int32(packet.ProtoId)))
 		return nil
 	}
 

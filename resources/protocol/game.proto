@@ -24,15 +24,6 @@ enum SystemMsgId {
   MSG_SYSTEM_MAINTENANCE = 5;
 }
 
-// 账号认证消息 100-199
-enum AuthMsgId {
-  MSG_AUTH_INVALID = 0;
-  MSG_AUTH_LOGIN = 100;
-  MSG_AUTH_LOGIN_RESPONSE = 101;
-  MSG_AUTH_LOGOUT = 102;
-  MSG_AUTH_TOKEN_REFRESH = 103;
-}
-
 // 玩家消息 200-299
 enum PlayerMsgId {
   MSG_PLAYER_INVALID = 0;
@@ -41,136 +32,6 @@ enum PlayerMsgId {
   MSG_PLAYER_ENTER_GAME = 202;
   MSG_PLAYER_ENTER_GAME_RESPONSE = 203;
   MSG_PLAYER_LEAVE_GAME = 204;
-  MSG_PLAYER_INFO_UPDATE = 205;
-  MSG_PLAYER_LEVEL_UP = 206;
-}
-
-// 背包消息 300-399
-enum BagMsgId {
-  MSG_BAG_INVALID = 0;
-  MSG_BAG_GET_ITEMS = 300;
-  MSG_BAG_GET_ITEMS_RESPONSE = 301;
-  MSG_BAG_USE_ITEM = 302;
-  MSG_BAG_USE_ITEM_RESPONSE = 303;
-  MSG_BAG_ADD_ITEM = 304;
-  MSG_BAG_REMOVE_ITEM = 305;
-  MSG_BAG_ITEM_UPDATE = 306;
-  MSG_BAG_SORT = 307;
-  MSG_BAG_EXPAND = 308;
-}
-
-// 装备消息 400-499
-enum EquipMsgId {
-  MSG_EQUIP_INVALID = 0;
-  MSG_EQUIP_GET_LIST = 400;
-  MSG_EQUIP_GET_LIST_RESPONSE = 401;
-  MSG_EQUIP_PUT_ON = 402;
-  MSG_EQUIP_PUT_ON_RESPONSE = 403;
-  MSG_EQUIP_TAKE_OFF = 404;
-  MSG_EQUIP_TAKE_OFF_RESPONSE = 405;
-  MSG_EQUIP_STRENGTHEN = 406;
-  MSG_EQUIP_STRENGTHEN_RESPONSE = 407;
-  MSG_EQUIP_UPGRADE = 408;
-  MSG_EQUIP_UPGRADE_RESPONSE = 409;
-}
-
-// 技能消息 500-599
-enum SkillMsgId {
-  MSG_SKILL_INVALID = 0;
-  MSG_SKILL_GET_LIST = 500;
-  MSG_SKILL_GET_LIST_RESPONSE = 501;
-  MSG_SKILL_LEARN = 502;
-  MSG_SKILL_LEARN_RESPONSE = 503;
-  MSG_SKILL_UPGRADE = 504;
-  MSG_SKILL_UPGRADE_RESPONSE = 505;
-  MSG_SKILL_USE = 506;
-  MSG_SKILL_USE_RESPONSE = 507;
-  MSG_SKILL_CAST = 508;
-  MSG_SKILL_CAST_RESULT = 509;
-  MSG_SKILL_COOLDOWN = 510;
-}
-
-// 任务消息 600-699
-enum TaskMsgId {
-  MSG_TASK_INVALID = 0;
-  MSG_TASK_GET_LIST = 600;
-  MSG_TASK_GET_LIST_RESPONSE = 601;
-  MSG_TASK_ACCEPT = 602;
-  MSG_TASK_ACCEPT_RESPONSE = 603;
-  MSG_TASK_SUBMIT = 604;
-  MSG_TASK_SUBMIT_RESPONSE = 605;
-  MSG_TASK_GIVE_UP = 606;
-  MSG_TASK_GIVE_UP_RESPONSE = 607;
-  MSG_TASK_UPDATE = 608;
-  MSG_TASK_COMPLETE_NOTIFY = 609;
-}
-
-// 邮件消息 700-799
-enum MailMsgId {
-  MSG_MAIL_INVALID = 0;
-  MSG_MAIL_GET_LIST = 700;
-  MSG_MAIL_GET_LIST_RESPONSE = 701;
-  MSG_MAIL_READ = 702;
-  MSG_MAIL_READ_RESPONSE = 703;
-  MSG_MAIL_GET_ATTACHMENT = 704;
-  MSG_MAIL_GET_ATTACHMENT_RESPONSE = 705;
-  MSG_MAIL_DELETE = 706;
-  MSG_MAIL_DELETE_RESPONSE = 707;
-  MSG_MAIL_NEW_NOTIFY = 708;
-}
-
-// 聊天消息 800-899
-enum ChatMsgId {
-  MSG_CHAT_INVALID = 0;
-  MSG_CHAT_SEND = 800;
-  MSG_CHAT_SEND_RESPONSE = 801;
-  MSG_CHAT_RECEIVE = 802;
-  MSG_CHAT_HISTORY = 803;
-  MSG_CHAT_HISTORY_RESPONSE = 804;
-}
-
-// 公会消息 900-999
-enum GuildMsgId {
-  MSG_GUILD_INVALID = 0;
-  MSG_GUILD_GET_LIST = 900;
-  MSG_GUILD_GET_LIST_RESPONSE = 901;
-  MSG_GUILD_CREATE = 902;
-  MSG_GUILD_CREATE_RESPONSE = 903;
-  MSG_GUILD_JOIN = 904;
-  MSG_GUILD_JOIN_RESPONSE = 905;
-  MSG_GUILD_LEAVE = 906;
-  MSG_GUILD_LEAVE_RESPONSE = 907;
-  MSG_GUILD_INFO = 908;
-  MSG_GUILD_INFO_RESPONSE = 909;
-  MSG_GUILD_MEMBERS = 910;
-  MSG_GUILD_MEMBERS_RESPONSE = 911;
-  MSG_GUILD_KICK = 912;
-  MSG_GUILD_KICK_RESPONSE = 913;
-}
-
-// 商城消息 1000-1099
-enum ShopMsgId {
-  MSG_SHOP_INVALID = 0;
-  MSG_SHOP_GET_ITEMS = 1000;
-  MSG_SHOP_GET_ITEMS_RESPONSE = 1001;
-  MSG_SHOP_BUY = 1002;
-  MSG_SHOP_BUY_RESPONSE = 1003;
-  MSG_SHOP_REFRESH = 1004;
-  MSG_SHOP_REFRESH_RESPONSE = 1005;
-}
-
-// 副本消息 1100-1199
-enum DungeonMsgId {
-  MSG_DUNGEON_INVALID = 0;
-  MSG_DUNGEON_GET_LIST = 1100;
-  MSG_DUNGEON_GET_LIST_RESPONSE = 1101;
-  MSG_DUNGEON_ENTER = 1102;
-  MSG_DUNGEON_ENTER_RESPONSE = 1103;
-  MSG_DUNGEON_EXIT = 1104;
-  MSG_DUNGEON_EXIT_RESPONSE = 1105;
-  MSG_DUNGEON_COMPLETE = 1106;
-  MSG_DUNGEON_COMPLETE_RESPONSE = 1107;
-  MSG_DUNGEON_FAIL = 1108;
 }
 
 // 地图消息 1200-1299
@@ -184,102 +45,6 @@ enum MapMsgId {
   MSG_MAP_MOVE_RESPONSE = 1205;
   MSG_MAP_ATTACK = 1206;
   MSG_MAP_ATTACK_RESPONSE = 1207;
-  MSG_MAP_SYNC = 1208;
-  MSG_MAP_SYNC_RESPONSE = 1209;
-  MSG_MAP_TELEPORT = 1210;
-  MSG_MAP_TELEPORT_RESPONSE = 1211;
-  MSG_MAP_GET_OBJECTS = 1212;
-  MSG_MAP_GET_OBJECTS_RESPONSE = 1213;
-}
-
-// AOI消息 1300-1399
-enum AoiMsgId {
-  MSG_AOI_INVALID = 0;
-  MSG_AOI_ENTER = 1300;
-  MSG_AOI_LEAVE = 1301;
-  MSG_AOI_MOVE = 1302;
-  MSG_AOI_UPDATE = 1303;
-}
-
-// 战斗消息 1400-1499
-enum CombatMsgId {
-  MSG_COMBAT_INVALID = 0;
-  MSG_COMBAT_ATTACK = 1400;
-  MSG_COMBAT_ATTACK_RESPONSE = 1401;
-  MSG_COMBAT_DAMAGE = 1402;
-  MSG_COMBAT_HEAL = 1403;
-  MSG_COMBAT_BUFF_APPLY = 1404;
-  MSG_COMBAT_BUFF_REMOVE = 1405;
-  MSG_COMBAT_DEATH = 1406;
-  MSG_COMBAT_REVIVE = 1407;
-}
-
-// 活动消息 1500-1599
-enum ActivityMsgId {
-  MSG_ACTIVITY_INVALID = 0;
-  MSG_ACTIVITY_GET_LIST = 1500;
-  MSG_ACTIVITY_GET_LIST_RESPONSE = 1501;
-  MSG_ACTIVITY_JOIN = 1502;
-  MSG_ACTIVITY_JOIN_RESPONSE = 1503;
-  MSG_ACTIVITY_PROGRESS = 1504;
-  MSG_ACTIVITY_PROGRESS_RESPONSE = 1505;
-  MSG_ACTIVITY_GET_REWARD = 1506;
-  MSG_ACTIVITY_GET_REWARD_RESPONSE = 1507;
-}
-
-// 交易/拍卖消息 1600-1699
-enum TradeMsgId {
-  MSG_TRADE_INVALID = 0;
-  MSG_TRADE_REQUEST = 1600;
-  MSG_TRADE_REQUEST_RESPONSE = 1601;
-  MSG_TRADE_ACCEPT = 1602;
-  MSG_TRADE_ACCEPT_RESPONSE = 1603;
-  MSG_TRADE_PUT_ITEM = 1604;
-  MSG_TRADE_PUT_ITEM_RESPONSE = 1605;
-  MSG_TRADE_CONFIRM = 1606;
-  MSG_TRADE_CONFIRM_RESPONSE = 1607;
-  MSG_TRADE_CANCEL = 1608;
-  MSG_TRADE_CANCEL_RESPONSE = 1609;
-  MSG_AUCTION_GET_LIST = 1610;
-  MSG_AUCTION_GET_LIST_RESPONSE = 1611;
-  MSG_AUCTION_CREATE = 1612;
-  MSG_AUCTION_CREATE_RESPONSE = 1613;
-  MSG_AUCTION_BID = 1614;
-  MSG_AUCTION_BID_RESPONSE = 1615;
-}
-
-// 组队消息 1700-1799
-enum TeamMsgId {
-  MSG_TEAM_INVALID = 0;
-  MSG_TEAM_CREATE = 1700;
-  MSG_TEAM_CREATE_RESPONSE = 1701;
-  MSG_TEAM_INVITE = 1702;
-  MSG_TEAM_INVITE_RESPONSE = 1703;
-  MSG_TEAM_JOIN = 1704;
-  MSG_TEAM_JOIN_RESPONSE = 1705;
-  MSG_TEAM_LEAVE = 1706;
-  MSG_TEAM_LEAVE_RESPONSE = 1707;
-  MSG_TEAM_KICK = 1708;
-  MSG_TEAM_KICK_RESPONSE = 1709;
-  MSG_TEAM_DISBAND = 1710;
-  MSG_TEAM_DISBAND_RESPONSE = 1711;
-  MSG_TEAM_INFO = 1712;
-  MSG_TEAM_INFO_RESPONSE = 1713;
-}
-
-// 好友消息 1800-1899
-enum FriendMsgId {
-  MSG_FRIEND_INVALID = 0;
-  MSG_FRIEND_GET_LIST = 1800;
-  MSG_FRIEND_GET_LIST_RESPONSE = 1801;
-  MSG_FRIEND_ADD = 1802;
-  MSG_FRIEND_ADD_RESPONSE = 1803;
-  MSG_FRIEND_REMOVE = 1804;
-  MSG_FRIEND_REMOVE_RESPONSE = 1805;
-  MSG_FRIEND_APPLY = 1806;
-  MSG_FRIEND_APPLY_RESPONSE = 1807;
-  MSG_FRIEND_SEARCH = 1808;
-  MSG_FRIEND_SEARCH_RESPONSE = 1809;
 }
 
 // ============================================
@@ -317,95 +82,6 @@ message HeartbeatResponse {
 }
 
 // ============================================
-// 物品相关结构
-// ============================================
-
-// 物品信息
-message ItemInfo {
-  int64 item_id = 1;
-  int32 config_id = 2;
-  int32 count = 3;
-  int32 level = 4;
-  int32 quality = 5;
-  int32 bind_type = 6;
-  int32 position = 7;
-  repeated ItemAttribute attributes = 8;
-}
-
-// 物品属性
-message ItemAttribute {
-  int32 attr_id = 1;
-  int64 attr_value = 2;
-}
-
-// ============================================
-// 技能相关结构
-// ============================================
-
-// 技能信息
-message SkillInfo {
-  int32 skill_id = 1;
-  int32 level = 2;
-  int32 exp = 3;
-  int64 cooldown_end_time = 4;
-}
-
-// 技能释放请求
-message SkillCastRequest {
-  int32 skill_id = 1;
-  int64 target_id = 2;
-  Position target_pos = 3;
-  int32 target_type = 4;
-}
-
-// 技能释放结果
-message SkillCastResult {
-  int32 skill_id = 1;
-  int64 caster_id = 2;
-  int32 result = 3;
-  repeated SkillEffect effects = 4;
-}
-
-// 技能效果
-message SkillEffect {
-  int32 effect_type = 1;
-  int64 target_id = 2;
-  int64 value = 3;
-  Position pos = 4;
-}
-
-// ============================================
-// 地图相关结构
-// ============================================
-
-// 地图对象
-message MapObject {
-  int64 object_id = 1;
-  int32 object_type = 2;  // 1=玩家, 2=NPC, 3=怪物, 4=道具
-  string name = 3;
-  Position pos = 4;
-  int32 level = 5;
-  int64 hp = 6;
-  int64 max_hp = 7;
-  int32 status = 8;
-}
-
-// 移动请求
-message MoveRequest {
-  Position target_pos = 1;
-  int32 move_type = 2;  // 1=步行, 2=跑步, 3=传送
-  repeated Position path = 3;
-}
-
-// 移动响应/通知
-message MoveNotify {
-  int64 object_id = 1;
-  Position pos = 2;
-  int32 move_type = 3;
-  int64 timestamp = 4;
-}
-
-// ============================================
 // 地图相关结构
 // ============================================
 
@@ -436,6 +112,18 @@ message ClientMapMoveResponse {
   Position pos = 2;
 }
 
+// 离开地图请求
+message ClientMapLeaveRequest {
+  int64 player_id = 1;
+  int32 map_id = 2;
+}
+
+// 离开地图响应
+message ClientMapLeaveResponse {
+  int32 result = 1;
+  string error_msg = 2;
+}
+
 // 地图攻击请求
 message ClientMapAttackRequest {
   int64 player_id = 1;
@@ -449,115 +137,4 @@ message ClientMapAttackResponse {
   int64 target_id = 2;
   int64 damage = 3;
   int64 target_hp = 4;
-}
-
-// ============================================
-// 战斗相关结构
-// ============================================
-
-// 攻击请求
-message AttackRequest {
-  int64 target_id = 1;
-  int32 attack_type = 2;  // 1=普通攻击, 2=技能攻击
-  int32 skill_id = 3;
-}
-
-// 伤害信息
-message DamageInfo {
-  int64 attacker_id = 1;
-  int64 target_id = 2;
-  int64 damage = 3;
-  int32 damage_type = 4;  // 1=物理, 2=魔法, 3=真实
-  bool is_critical = 5;
-  bool is_miss = 6;
-}
-
-// Buff信息
-message BuffInfo {
-  int32 buff_id = 1;
-  int64 caster_id = 2;
-  int64 target_id = 3;
-  int64 start_time = 4;
-  int64 end_time = 5;
-  int32 layer = 6;
-}
-
-// ============================================
-// 聊天相关结构
-// ============================================
-
-// 聊天消息
-message ChatMessage {
-  int32 channel = 1;  // 1=附近, 2=地图, 3=世界, 4=公会, 5=队伍, 6=私聊
-  int64 sender_id = 2;
-  string sender_name = 3;
-  string content = 4;
-  int64 timestamp = 5;
-  int64 target_id = 6;  // 私聊目标
-}
-
-// 发送聊天请求
-message ChatSendRequest {
-  int32 channel = 1;
-  string content = 2;
-  int64 target_id = 3;
-}
-
-// ============================================
-// 邮件相关结构
-// ============================================
-
-// 邮件信息
-message MailInfo {
-  int64 mail_id = 1;
-  string title = 2;
-  string content = 3;
-  int64 sender_id = 4;
-  string sender_name = 5;
-  int64 send_time = 6;
-  bool is_read = 7;
-  bool has_attachment = 8;
-  repeated ItemInfo attachments = 9;
-}
-
-// ============================================
-// 任务相关结构
-// ============================================
-
-// 任务信息
-message TaskInfo {
-  int32 task_id = 1;
-  int32 status = 2;  // 1=未接受, 2=进行中, 3=可完成, 4=已完成
-  int32 progress = 3;
-  int32 target_progress = 4;
-  int64 accept_time = 5;
-  int64 complete_time = 6;
-  repeated ItemInfo rewards = 7;
-}
-
-// ============================================
-// 公会相关结构
-// ============================================
-
-// 公会信息
-message GuildInfo {
-  int64 guild_id = 1;
-  string name = 2;
-  int64 leader_id = 3;
-  string leader_name = 4;
-  int32 level = 5;
-  int32 member_count = 6;
-  int32 max_member_count = 7;
-  string notice = 8;
-  int64 create_time = 9;
-}
-
-// 公会成员
-message GuildMember {
-  int64 player_id = 1;
-  string name = 2;
-  int32 level = 3;
-  int32 position = 4;  // 1=会长, 2=副会长, 3=精英, 4=普通
-  int64 join_time = 5;
-  int64 last_login_time = 6;
 }

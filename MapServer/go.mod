@@ -3,7 +3,6 @@ module github.com/pzqf/zMmoServer/MapServer
 go 1.25.5
 
 require (
-	github.com/golang/protobuf v1.5.4
 	github.com/pzqf/zCommon v0.0.0-00010101000000-000000000000
 	github.com/pzqf/zEngine v0.0.2
 	github.com/pzqf/zUtil v0.0.1
@@ -17,6 +16,9 @@ require (
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.5.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/golang/snappy v1.0.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect

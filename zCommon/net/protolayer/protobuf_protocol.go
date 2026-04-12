@@ -3,8 +3,8 @@ package protolayer
 import (
 	"time"
 
-	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zCommon/metrics"
+	"github.com/pzqf/zEngine/zNet"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -89,7 +89,7 @@ func (pp *ProtobufProtocol) Encode(protoId int32, version int32, data interface{
 		isCompressedInt = 1
 	}
 	packet := &zNet.NetPacket{
-		ProtoId:      protoId,
+		ProtoId:      zNet.ProtoIdType(protoId),
 		Version:      version,
 		DataSize:     int32(len(compressedData)),
 		Data:         compressedData,
@@ -137,7 +137,7 @@ func (pp *ProtobufProtocol) Decode(packet *zNet.NetPacket) (interface{}, error) 
 	}
 
 	// 根据protoId创建对应的消息实例
-	creator, ok := MessageRegistry[packet.ProtoId]
+	creator, ok := MessageRegistry[int32(packet.ProtoId)]
 	if !ok {
 		if globalNetworkMetrics != nil {
 			globalNetworkMetrics.IncDecodingErrors()
@@ -161,4 +161,3 @@ func (pp *ProtobufProtocol) Decode(packet *zNet.NetPacket) (interface{}, error) 
 
 	return msg, nil
 }
-

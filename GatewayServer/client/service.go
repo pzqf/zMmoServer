@@ -15,6 +15,49 @@ import (
 	"go.uber.org/zap"
 )
 
+// TcpSessionWrapper 会话包装器，用于在会话移除时提供会话信息
+type TcpSessionWrapper struct {
+	sessionID zNet.SessionIdType
+	server    *zNet.TcpServer
+}
+
+// GetSid 获取会话ID
+func (w *TcpSessionWrapper) GetSid() zNet.SessionIdType {
+	return w.sessionID
+}
+
+// GetObj 获取附加对象
+func (w *TcpSessionWrapper) GetObj() interface{} {
+	return nil
+}
+
+// SetObj 设置附加对象
+func (w *TcpSessionWrapper) SetObj(obj interface{}) {
+}
+
+// GetClientIP 获取客户端IP地址
+func (w *TcpSessionWrapper) GetClientIP() string {
+	// 由于会话已经被移除，无法获取客户端IP
+	// 这里返回空字符串，实际使用中可能需要从其他地方获取
+	return ""
+}
+
+// Send 发送数据
+func (w *TcpSessionWrapper) Send(protoId zNet.ProtoIdType, data []byte) error {
+	// 会话已经被移除，无法发送数据
+	return nil
+}
+
+// Close 关闭会话
+func (w *TcpSessionWrapper) Close() {
+	// 会话已经被移除，无需操作
+}
+
+// Start 启动会话
+func (w *TcpSessionWrapper) Start() {
+	// 会话已经被移除，无需操作
+}
+
 // Service 客户端服务
 type Service struct {
 	config           *config.Config
@@ -51,7 +94,20 @@ func NewService(cfg *config.Config, netServer *zNet.TcpServer, etcdClient *clien
 	// 创建客户端处理器
 	s.clientHandler = connection.NewClientHandler(connMgr, ipManager)
 
-	// 连接事件处理由TcpServer内部处理
+	// 注册连接事件处理
+	netServer.SetOnAddSession(func(sessionID zNet.SessionIdType) {
+		if session := netServer.GetSession(sessionID); session != nil {
+			s.clientHandler.OnConnect(session)
+		}
+	})
+
+	// 注册会话移除回调
+	netServer.SetOnRemoveSession(func(sessionID zNet.SessionIdType) {
+		// 当会话被移除时，处理客户端断开连接
+		s.clientHandler.OnClose(&TcpSessionWrapper{sessionID: sessionID, server: netServer})
+	})
+
+	// 注意：TcpServer的OnRemoveSession在会话关闭时调用
 
 	return s
 }

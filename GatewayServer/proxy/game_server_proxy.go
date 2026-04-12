@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/discovery"
@@ -331,25 +331,25 @@ func (gsp *gameServerProxy) SendToGameServer(sessionID zNet.SessionIdType, proto
 	}
 
 	// 创建基础消息
-	baseMsg := crossserver.BaseMessage{
-		MsgID:     uint32(protoId),
-		SessionID: uint64(sessionID),
-		ServerID:  uint32(gsp.config.Server.ServerID),
+	baseMsg := &protocol.BaseMessage{
+		MsgId:     uint32(protoId),
+		SessionId: uint64(sessionID),
+		ServerId:  uint32(gsp.config.Server.ServerID),
 		Timestamp: uint64(time.Now().Unix()),
 		Data:      data,
 	}
 
 	// 创建跨服务器消息
-	crossMsg := crossserver.CrossServerMessage{
-		TraceID:      uint64(time.Now().UnixNano()),
-		FromService:  crossserver.ServiceTypeGateway,
-		ToService:    crossserver.ServiceTypeGame,
-		FromServerID: uint32(gsp.config.Server.ServerID),
+	crossMsg := &protocol.CrossServerMessage{
+		TraceId:      uint64(time.Now().UnixNano()),
+		FromServerId: uint32(gsp.config.Server.ServerID),
+		FromService:  uint32(crossserver.ServiceTypeGateway),
+		ToService:    uint32(crossserver.ServiceTypeGame),
 		Message:      baseMsg,
 	}
 
-	// 序列化消息
-	crossMsgData, err := json.Marshal(crossMsg)
+	// 使用Protocol Buffers序列化消息
+	crossMsgData, err := proto.Marshal(crossMsg)
 	if err != nil {
 		zLog.Error("Failed to marshal cross server message", zap.Error(err))
 		return err
@@ -371,7 +371,7 @@ func (gsp *gameServerProxy) SendToGameServer(sessionID zNet.SessionIdType, proto
 		zap.Int("server_id", gsp.config.Server.ServerID))
 
 	// 使用Send方法发送消息
-	err = gsp.tcpClient.Send(protoId, encodedMsg)
+	err = gsp.tcpClient.Send(zNet.ProtoIdType(protoId), encodedMsg)
 	if err != nil {
 		zLog.Error("Failed to send message to GameServer", zap.Error(err))
 		return err

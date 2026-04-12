@@ -2,7 +2,6 @@ package game
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -14,13 +13,17 @@ import (
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/GameServer/config"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
+	"github.com/pzqf/zMmoServer/GameServer/container"
+	gsDiscovery "github.com/pzqf/zMmoServer/GameServer/discovery"
 	"github.com/pzqf/zMmoServer/GameServer/game/maps"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
+	"github.com/pzqf/zMmoServer/GameServer/gateway"
 	"github.com/pzqf/zMmoServer/GameServer/handler"
+	"github.com/pzqf/zMmoServer/GameServer/health"
 	"github.com/pzqf/zMmoServer/GameServer/metrics"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
 	tcpservice "github.com/pzqf/zMmoServer/GameServer/net/service"
-	playerservice "github.com/pzqf/zMmoServer/GameServer/service"
+	playerservice "github.com/pzqf/zMmoServer/GameServer/services"
 	"github.com/pzqf/zMmoServer/GameServer/session"
 	"go.uber.org/zap"
 )
@@ -33,6 +36,7 @@ const ServerTypeGame zServer.ServerType = "game"
 type BaseServer struct {
 	*zServer.BaseServer
 	Config            *config.Config
+	Container         *container.Container
 	TCPService        *tcpservice.TCPService
 	ConnectionManager *connection.ConnectionManager
 	SessionManager    *session.SessionManager
@@ -44,13 +48,19 @@ type BaseServer struct {
 	DBConnector       connector.DBConnector
 	PlayerDAO         *dao.PlayerDAO
 	Metrics           *metrics.Metrics
-	ServiceDiscovery  *discovery.ServiceDiscovery
+	ServiceDiscovery  gsDiscovery.ServiceDiscovery
+	GatewayService    *gateway.ConnectionService
+	HealthChecker     *health.Checker
 }
 
 // NewBaseServer 创建游戏服基础服务
 func NewBaseServer() *BaseServer {
 	// 先创建子类实例
 	gs := &BaseServer{}
+
+	// 创建依赖注入容器
+	container := container.NewContainer()
+	gs.Container = container
 
 	// 创建基础服务器，传入子类作为 hooks
 	baseServer := zServer.NewBaseServer(
@@ -154,46 +164,26 @@ func (s *BaseServer) OnBeforeStart() error {
 	tcpService := tcpservice.NewTCPService(cfg, connManager, sessionManager, playerManager, playerService, playerHandler, mapService, protocol)
 	s.TCPService = tcpService
 
+	// 初始化Gateway连接服务
+	gatewayService := gateway.NewConnectionService(cfg)
+	if err := gatewayService.Init(); err != nil {
+		zLog.Error("Failed to initialize Gateway connection service", zap.Error(err))
+		return err
+	}
+	s.GatewayService = gatewayService
+
 	// 初始化服务发现
-	etcdEndpoints := strings.Split(cfg.Etcd.Endpoints, ",")
-	serviceDiscovery, err := discovery.NewServiceDiscoveryWithConfig(etcdEndpoints, &cfg.Etcd)
+	gameServiceDiscovery, err := gsDiscovery.NewServiceDiscovery(cfg)
 	if err != nil {
 		zLog.Error("Failed to create service discovery", zap.Error(err))
 		return fmt.Errorf("failed to create service discovery: %w", err)
 	}
-	s.ServiceDiscovery = serviceDiscovery
+	s.ServiceDiscovery = gameServiceDiscovery
 
 	// 注册服务
-	groupID := id.GroupIDStringFromServerID(serverID)
-	serviceInfo := &discovery.ServerInfo{
-		ID:            serverIDStr,
-		ServiceType:   "game",
-		GroupID:       groupID,
-		Status:        "initializing",
-		Address:       cfg.Server.ListenAddr,
-		Port:          0,
-		Load:          0,
-		Players:       0,
-		ReadyTime:     time.Now().Unix(),
-		LastHeartbeat: time.Now().Unix(),
-	}
-
-	// 注册服务，添加重试机制
-	maxRetries := 3
-	var registerErr error
-	for i := 0; i < maxRetries; i++ {
-		if err := serviceDiscovery.Register(serviceInfo); err != nil {
-			zLog.Warn("Failed to register service", zap.Error(err), zap.Int("retry", i+1))
-			registerErr = err
-			time.Sleep(time.Duration(i+1) * time.Second)
-		} else {
-			zLog.Info("Service registered successfully", zap.String("service_id", serviceInfo.ID))
-			registerErr = nil
-			break
-		}
-	}
-	if registerErr != nil {
-		return fmt.Errorf("failed to register service after %d retries: %w", maxRetries, registerErr)
+	if err := gameServiceDiscovery.Register(); err != nil {
+		zLog.Error("Failed to register service", zap.Error(err))
+		return fmt.Errorf("failed to register service: %w", err)
 	}
 
 	// 启动心跳保持
@@ -208,20 +198,10 @@ func (s *BaseServer) OnBeforeStart() error {
 			case <-ticker.C:
 				// 更新服务发现中的状态
 				state := s.GetState()
-				updatedInfo := &discovery.ServerInfo{
-					ID:            serverIDStr,
-					ServiceType:   "game",
-					GroupID:       groupID,
-					Status:        state,
-					Address:       serviceInfo.Address,
-					Port:          serviceInfo.Port,
-					Load:          0,
-					Players:       0,
-					ReadyTime:     serviceInfo.ReadyTime,
-					LastHeartbeat: time.Now().Unix(),
-				}
-				if err := serviceDiscovery.Register(updatedInfo); err != nil {
-					zLog.Warn("Failed to update service status", zap.Error(err))
+				if s.ServiceDiscovery != nil {
+					if err := s.ServiceDiscovery.UpdateHeartbeat(string(state), 0); err != nil {
+						zLog.Warn("Failed to update service status", zap.Error(err))
+					}
 				}
 			}
 		}
@@ -230,7 +210,28 @@ func (s *BaseServer) OnBeforeStart() error {
 	// 启动服务发现监听
 	go s.discoverAndConnectMapServers()
 
-	// 注册组件
+	// 初始化健康检查器
+	healthChecker := health.NewGameServerChecker(connManager, playerManager, gatewayService)
+	s.HealthChecker = healthChecker
+
+	// 注册组件到依赖注入容器
+	s.Container.Register("Config", cfg)
+	s.Container.Register("TCPService", tcpService)
+	s.Container.Register("ConnectionManager", connManager)
+	s.Container.Register("SessionManager", sessionManager)
+	s.Container.Register("PlayerManager", playerManager)
+	s.Container.Register("PlayerHandler", playerHandler)
+	s.Container.Register("MapService", mapService)
+	s.Container.Register("Protocol", protocol)
+	s.Container.Register("PlayerService", playerService)
+	s.Container.Register("DBConnector", dbConnector)
+	s.Container.Register("PlayerDAO", playerDAO)
+	s.Container.Register("Metrics", metricsService)
+	s.Container.Register("ServiceDiscovery", gameServiceDiscovery)
+	s.Container.Register("GatewayService", gatewayService)
+	s.Container.Register("HealthChecker", healthChecker)
+
+	// 注册组件到基础服务器（保持兼容性）
 	s.RegisterComponent("Config", cfg)
 	s.RegisterComponent("TCPService", tcpService)
 	s.RegisterComponent("ConnectionManager", connManager)
@@ -243,7 +244,9 @@ func (s *BaseServer) OnBeforeStart() error {
 	s.RegisterComponent("DBConnector", dbConnector)
 	s.RegisterComponent("PlayerDAO", playerDAO)
 	s.RegisterComponent("Metrics", metricsService)
-	s.RegisterComponent("ServiceDiscovery", serviceDiscovery)
+	s.RegisterComponent("ServiceDiscovery", gameServiceDiscovery)
+	s.RegisterComponent("GatewayService", gatewayService)
+	s.RegisterComponent("HealthChecker", healthChecker)
 
 	return nil
 }
@@ -269,6 +272,18 @@ func (s *BaseServer) OnAfterStart() error {
 		if err := s.MapService.Start(s.GetContext()); err != nil {
 			return err
 		}
+	}
+
+	// 启动Gateway连接服务
+	if s.GatewayService != nil {
+		if err := s.GatewayService.Start(s.GetContext()); err != nil {
+			return err
+		}
+	}
+
+	// 启动健康检查器
+	if s.HealthChecker != nil {
+		go s.HealthChecker.Start(s.GetContext())
 	}
 
 	// 更新服务状态为就绪
@@ -310,14 +325,11 @@ func (s *BaseServer) OnBeforeStop() {
 	}
 
 	// 注销服务
-	if s.ServiceDiscovery != nil && s.Config != nil {
-		serverID, _ := id.ParseServerIDInt(int32(s.Config.Server.ServerID))
-		serverIDStr := id.ServerIDString(serverID)
-		groupID := id.GroupIDStringFromServerID(serverID)
-		if err := s.ServiceDiscovery.Unregister("game", groupID, serverIDStr); err != nil {
+	if s.ServiceDiscovery != nil {
+		if err := s.ServiceDiscovery.Unregister(); err != nil {
 			zLog.Warn("Failed to unregister service", zap.Error(err))
 		} else {
-			zLog.Info("Service unregistered successfully", zap.String("service_id", serverIDStr))
+			zLog.Info("Service unregistered successfully")
 		}
 		if err := s.ServiceDiscovery.Close(); err != nil {
 			zLog.Warn("Failed to close service discovery", zap.Error(err))

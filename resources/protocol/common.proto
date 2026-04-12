@@ -23,8 +23,6 @@ enum ErrorCode {
   // 账号相关错误 100-199
   ERR_ACCOUNT_NOT_FOUND = 100;
   ERR_ACCOUNT_ALREADY_EXISTS = 101;
-  ERR_ACCOUNT_PASSWORD_WRONG = 102;
-  ERR_ACCOUNT_BANNED = 103;
   ERR_ACCOUNT_TOKEN_INVALID = 104;
   ERR_ACCOUNT_TOKEN_EXPIRED = 105;
   
@@ -34,41 +32,14 @@ enum ErrorCode {
   ERR_PLAYER_LEVEL_LIMIT = 202;
   ERR_PLAYER_OFFLINE = 203;
   
-  // 背包相关错误 300-399
-  ERR_BAG_FULL = 300;
-  ERR_ITEM_NOT_FOUND = 301;
-  ERR_ITEM_COUNT_NOT_ENOUGH = 302;
-  ERR_ITEM_CANNOT_USE = 303;
-  
-  // 金币相关错误 400-499
-  ERR_GOLD_NOT_ENOUGH = 400;
-  ERR_DIAMOND_NOT_ENOUGH = 401;
+  // 账号密码错误
+  ERR_ACCOUNT_PASSWORD_WRONG = 102;
 }
 
 // 通用响应结构
 message CommonResponse {
   int32 result = 1;  // ErrorCode
   string error_msg = 2;
-}
-
-// 分页请求
-message PageRequest {
-  int32 page = 1;
-  int32 page_size = 2;
-}
-
-// 分页响应
-message PageResponse {
-  int32 total = 1;
-  int32 page = 2;
-  int32 page_size = 3;
-  int32 total_pages = 4;
-}
-
-// 时间范围
-message TimeRange {
-  int64 start_time = 1;
-  int64 end_time = 2;
 }
 
 // 坐标信息
@@ -79,138 +50,3 @@ message Position {
   float orientation = 4;
 }
 
-// Buff详细信息
-message BuffDetail {
-  int32 buff_id = 1;
-  string buff_name = 2;
-  string buff_desc = 3;
-  int32 buff_type = 4;
-  int32 duration = 5;
-  int32 remaining_time = 6;
-  int32 stacks = 7;
-  bool is_beneficial = 8;
-}
-
-// 活动详细信息
-message ActivityDetail {
-  int32 activity_id = 1;
-  string activity_name = 2;
-  string activity_desc = 3;
-  int64 start_time = 4;
-  int64 end_time = 5;
-  int32 status = 6;
-  map<string, string> config = 7;
-}
-
-// Buff列表响应
-message BuffListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated BuffDetail buffs = 3;
-}
-
-// 活动列表响应
-message ActivityListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated ActivityDetail activities = 3;
-}
-
-// 掉落物品信息
-message DropItemInfo {
-  int64 item_id = 1;
-  int32 count = 2;
-  bool is_rare = 3;
-  int32 bind_type = 4;
-}
-
-// 掉落实体信息
-message DropEntityInfo {
-  int64 entity_id = 1;
-  repeated DropItemInfo items = 2;
-  int64 gold = 3;
-  int64 exp = 4;
-  int64 owner_id = 5;
-  bool is_protected = 6;
-  int32 protect_time = 7;
-  float position_x = 8;
-  float position_y = 9;
-  float position_z = 10;
-}
-
-// 掉落拾取响应
-message DropPickupResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated DropItemInfo items = 3;
-  int64 gold = 4;
-  int64 exp = 5;
-}
-
-// 掉落列表响应
-message DropListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated DropEntityInfo drops = 3;
-}
-
-// 副本信息
-message DungeonInfo {
-  int32 dungeon_id = 1;
-  string dungeon_name = 2;
-  string dungeon_desc = 3;
-  int32 level_requirement = 4;
-  int32 recommended_level = 5;
-  int32 max_players = 6;
-  int32 difficulty = 7;
-  int64 entry_cost = 8;
-  int64 gold_reward = 9;
-  int64 exp_reward = 10;
-  int32 cooldown_hours = 11;
-  bool is_unlocked = 12;
-}
-
-// 副本列表响应
-message DungeonListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated DungeonInfo dungeons = 3;
-}
-
-// 商店物品信息
-message ShopItemInfo {
-  int32 item_id = 1;
-  int32 shop_id = 2;
-  int32 category_id = 3;
-  string item_name = 4;
-  string item_desc = 5;
-  int32 price = 6;
-  int32 currency_type = 7;  // 1=金币, 2=钻石, 3=积分
-  int32 stock = 8;
-  int32 max_stock = 9;
-  bool is_limited = 10;
-  int64 refresh_time = 11;
-}
-
-// 商店分类信息
-message ShopCategoryInfo {
-  int32 category_id = 1;
-  int32 shop_id = 2;
-  string category_name = 3;
-  string category_desc = 4;
-  int32 sort_order = 5;
-}
-
-// 商店物品列表响应
-message ShopItemListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated ShopItemInfo items = 3;
-}
-
-// 商店分类列表响应
-message ShopCategoryListResponse {
-  int32 result = 1;
-  string error_msg = 2;
-  repeated ShopCategoryInfo categories = 3;
-}

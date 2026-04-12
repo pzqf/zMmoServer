@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"time"
 
-	redisv8 "github.com/go-redis/redis/v8"
+	"github.com/redis/go-redis/v9"
 	"github.com/pzqf/zEngine/zLog"
 	"go.uber.org/zap"
 )
 
 // Client Redis客户端
 type Client struct {
-	client *redisv8.Client
+	client *redis.Client
 	ctx    context.Context
 }
 
@@ -39,7 +39,7 @@ func DefaultConfig() RedisConfig {
 // NewClient 创建Redis客户端
 func NewClient(cfg RedisConfig) (*Client, error) {
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	rdb := redisv8.NewClient(&redisv8.Options{
+	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: cfg.Password,
 		DB:       cfg.DB,
@@ -48,7 +48,6 @@ func NewClient(cfg RedisConfig) (*Client, error) {
 
 	ctx := context.Background()
 
-	// 测试连接
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("failed to connect to redis: %w", err)
 	}
@@ -73,7 +72,7 @@ func (c *Client) Close() error {
 }
 
 // GetClient 获取原生Redis客户端
-func (c *Client) GetClient() *redisv8.Client {
+func (c *Client) GetClient() *redis.Client {
 	return c.client
 }
 
@@ -118,7 +117,7 @@ func (c *Client) Expire(key string, expiration time.Duration) error {
 }
 
 // ZAdd 添加有序集合成员
-func (c *Client) ZAdd(key string, members ...*redisv8.Z) error {
+func (c *Client) ZAdd(key string, members ...redis.Z) error {
 	return c.client.ZAdd(c.ctx, key, members...).Err()
 }
 

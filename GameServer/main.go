@@ -18,10 +18,6 @@ func main() {
 		return
 	}
 
-	// 打印配置信息
-	fmt.Printf("GatewayAddr: %s\n", cfg.Gateway.GatewayAddr)
-	fmt.Printf("ListenAddr: %s\n", cfg.Server.ListenAddr)
-
 	// ========== 第二步：初始化日志 ==========
 	if err := zLog.InitLogger(cfg.GetLogConfig()); err != nil {
 		fmt.Printf("Failed to initialize logger: %v\n", err)

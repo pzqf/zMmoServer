@@ -4,8 +4,6 @@ package protocol;
 
 option go_package = "./;protocol";
 
-import "common.proto";
-
 // ============================================
 // 玩家相关协议
 // 消息ID范围: 1100-1199

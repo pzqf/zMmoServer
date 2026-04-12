@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/db"
@@ -18,11 +18,38 @@ import (
 	"go.uber.org/zap"
 )
 
+type TokenClaims struct {
+	AccountID   int64  `json:"account_id"`
+	AccountName string `json:"account_name"`
+	jwt.RegisteredClaims
+}
+
 var jwtSecret string
 
 // InitJWTSecret 初始化JWT密钥
 func InitJWTSecret(secret string) {
 	jwtSecret = secret
+}
+
+// generateToken 生成JWT token
+func generateToken(accountID int64, accountName string) (string, error) {
+	claims := TokenClaims{
+		AccountID:   accountID,
+		AccountName: accountName,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * 7)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(jwtSecret))
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
 }
 
 // getMetricsFromContext 从Echo上下文中获取 metrics 实例
@@ -31,25 +58,6 @@ func getMetricsFromContext(c echo.Context) *metrics.Metrics {
 		return m
 	}
 	return nil
-}
-
-// 生成JWT token
-func generateToken(accountID int64, accountName string) (string, error) {
-	// 创建token
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"account_id":   accountID,
-		"account_name": accountName,
-		"exp":          time.Now().Add(time.Hour * 24 * 7).Unix(), // 7天过期
-		"iat":          time.Now().Unix(),
-	})
-
-	// 签名token
-	tokenString, err := token.SignedString([]byte(jwtSecret))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
 }
 
 // HandleAccountCreate handles account creation requests

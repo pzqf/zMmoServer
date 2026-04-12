@@ -16,12 +16,23 @@ import (
 
 // TcpServiceConfig TCP服务配置
 type TcpServiceConfig struct {
-	ListenAddress     string
-	ChanSize          int
-	MaxClientCount    int
-	HeartbeatDuration int
-	Protocol          string
-	DDoS              zNet.DDoSConfig
+	ListenAddress       string
+	ChanSize            int
+	MaxClientCount      int
+	HeartbeatDuration   int
+	Protocol            string
+	DDoS                zNet.DDoSConfig
+	UseWorkerPool       bool
+	WorkerPoolSize      int
+	WorkerQueueSize     int
+	MaxPacketDataSize   int
+	DisableEncryption   bool
+	EnableKeyRotation   bool
+	KeyRotationInterval int
+	MaxHistoryKeys      int
+	EnableSequenceCheck bool
+	SequenceWindowSize  uint64
+	TimestampTolerance  int64
 }
 
 type TcpService struct {
@@ -50,10 +61,21 @@ func (ts *TcpService) Init() error {
 	ts.SetState(zService.ServiceStateInit)
 
 	ts.netConfig = &zNet.TcpConfig{
-		ListenAddress:     ts.serviceConfig.ListenAddress,
-		ChanSize:          ts.serviceConfig.ChanSize,
-		MaxClientCount:    ts.serviceConfig.MaxClientCount,
-		HeartbeatDuration: ts.serviceConfig.HeartbeatDuration,
+		ListenAddress:       ts.serviceConfig.ListenAddress,
+		ChanSize:            ts.serviceConfig.ChanSize,
+		MaxClientCount:      ts.serviceConfig.MaxClientCount,
+		HeartbeatDuration:   ts.serviceConfig.HeartbeatDuration,
+		MaxPacketDataSize:   int32(ts.serviceConfig.MaxPacketDataSize),
+		UseWorkerPool:       ts.serviceConfig.UseWorkerPool,
+		WorkerPoolSize:      ts.serviceConfig.WorkerPoolSize,
+		WorkerQueueSize:     ts.serviceConfig.WorkerQueueSize,
+		DisableEncryption:   ts.serviceConfig.DisableEncryption,
+		EnableKeyRotation:   ts.serviceConfig.EnableKeyRotation,
+		KeyRotationInterval: time.Duration(ts.serviceConfig.KeyRotationInterval) * time.Second,
+		MaxHistoryKeys:      ts.serviceConfig.MaxHistoryKeys,
+		EnableSequenceCheck: ts.serviceConfig.EnableSequenceCheck,
+		SequenceWindowSize:  ts.serviceConfig.SequenceWindowSize,
+		TimestampTolerance:  ts.serviceConfig.TimestampTolerance,
 	}
 	zLog.Info("Initializing TCP service...", zap.String("listen_address", ts.netConfig.ListenAddress))
 

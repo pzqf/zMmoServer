@@ -4,8 +4,6 @@ package protocol;
 
 option go_package = "./;protocol";
 
-import "common.proto";
-
 // ============================================
 // 认证相关协议 (HTTP协议，用于GlobalServer)
 // 消息ID范围: 1000-1099

@@ -795,7 +795,7 @@ var File_mmo_auth_proto protoreflect.FileDescriptor
 
 const file_mmo_auth_proto_rawDesc = "" +
 	"\n" +
-	"\x0emmo_auth.proto\x12\bprotocol\x1a\fcommon.proto\"b\n" +
+	"\x0emmo_auth.proto\x12\bprotocol\"b\n" +
 	"\x14AccountCreateRequest\x12\x18\n" +
 	"\aaccount\x18\x01 \x01(\tR\aaccount\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\x14\n" +
@@ -903,7 +903,6 @@ func file_mmo_auth_proto_init() {
 	if File_mmo_auth_proto != nil {
 		return
 	}
-	file_common_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

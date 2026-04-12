@@ -27,7 +27,7 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/handler"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
-	"github.com/pzqf/zMmoServer/GameServer/service"
+	playerservice "github.com/pzqf/zMmoServer/GameServer/services"
 	"github.com/pzqf/zMmoServer/GameServer/session"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -39,7 +39,7 @@ type TCPService struct {
 	connManager       *connection.ConnectionManager
 	sessionManager    *session.SessionManager
 	playerManager     *player.PlayerManager
-	playerService     *service.PlayerService
+	playerService     *playerservice.PlayerService
 	playerHandler     *handler.PlayerHandler
 	mapService        *maps.MapService
 	protocol          protolayer.Protocol
@@ -52,7 +52,7 @@ type TCPService struct {
 	onDedupeHit       func(total uint64)
 }
 
-func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *service.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, protocol protolayer.Protocol) *TCPService {
+func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *playerservice.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, protocol protolayer.Protocol) *TCPService {
 	return &TCPService{
 		config:         cfg,
 		connManager:    connManager,
@@ -92,13 +92,21 @@ func (ts *TCPService) Start(ctx context.Context) error {
 
 	// 创建zNet.TcpServer配置（用于Gateway连接）
 	tcpConfig := &zNet.TcpConfig{
-		ListenAddress:     ts.config.Server.ListenAddr,
-		MaxClientCount:    10000,
-		ChanSize:          1024,
-		HeartbeatDuration: 30,
-		MaxPacketDataSize: 1024 * 1024,
-		UseWorkerPool:     false,
-		DisableEncryption: true, // 服务器之间禁用加密，提高响应速度
+		ListenAddress:       ts.config.Server.ListenAddr,
+		MaxClientCount:      ts.config.Server.MaxConnections,
+		HeartbeatDuration:   ts.config.Server.HeartbeatInterval,
+		ChanSize:            ts.config.Server.ChanSize,
+		MaxPacketDataSize:   int32(ts.config.Server.MaxPacketDataSize),
+		UseWorkerPool:       ts.config.Server.UseWorkerPool,
+		WorkerPoolSize:      ts.config.Server.WorkerPoolSize,
+		WorkerQueueSize:     ts.config.Server.WorkerQueueSize,
+		DisableEncryption:   ts.config.Server.DisableEncryption,
+		EnableKeyRotation:   ts.config.Server.EnableKeyRotation,
+		KeyRotationInterval: time.Duration(ts.config.Server.KeyRotationInterval) * time.Second,
+		MaxHistoryKeys:      ts.config.Server.MaxHistoryKeys,
+		EnableSequenceCheck: ts.config.Server.EnableSequenceCheck,
+		SequenceWindowSize:  ts.config.Server.SequenceWindowSize,
+		TimestampTolerance:  ts.config.Server.TimestampTolerance,
 	}
 
 	// 创建zNet.TcpServer（用于Gateway连接）
@@ -293,101 +301,95 @@ func (ts *TCPService) handleMapServerMessage(conn net.Conn, data []byte) {
 			zap.Int("server_id", ts.config.Server.ServerID))
 	}
 
-	var crossMsg crossserver.CrossServerMessage
-	if err := json.Unmarshal(payload, &crossMsg); err != nil {
+	// 解析跨服务器消息
+	crossMsg := &protocol.CrossServerMessage{}
+	if err := proto.Unmarshal(payload, crossMsg); err != nil {
 		zLog.Error("Failed to unmarshal cross server message from MapServer", zap.Error(err))
 		return
 	}
 
+	// 提取基础消息
 	baseMsg := crossMsg.Message
-	actualPayload := baseMsg.Data
 
-	playerID := id.PlayerIdType(baseMsg.PlayerID)
+	// 提取数据部分
+	actualPayload := baseMsg.GetData()
 
-	switch protoId {
-	case 401: // MSG_INTERNAL_MAP_ENTER_RESPONSE
-		var resp protocol.MapEnterResponse
+	// 获取消息ID
+	forwardProtoId := int32(baseMsg.GetMsgId())
+
+	playerID := id.PlayerIdType(baseMsg.GetPlayerId())
+
+	switch forwardProtoId {
+	case int32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):
+		// 处理地图进入响应
+		var resp protocol.ClientMapEnterResponse
 		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
 			zLog.Error("Failed to unmarshal map enter response", zap.Error(err))
 			return
 		}
 		zLog.Info("Received map enter response from MapServer",
-			zap.Uint64("player_id", baseMsg.PlayerID),
-			zap.Int64("map_id", resp.MapId),
-			zap.Bool("success", resp.Success))
+			zap.Uint64("player_id", baseMsg.GetPlayerId()),
+			zap.Int32("map_id", resp.MapId),
+			zap.Int32("result", resp.Result))
 
-		if resp.Success {
-			forwardProtoId := int32(1201) // MSG_MAP_ENTER_RESPONSE
-			if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-				zLog.Error("Failed to forward map enter response to Gateway", zap.Error(err))
-			}
+		// 转发到Gateway
+		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
+			zLog.Error("Failed to forward map enter response to Gateway", zap.Error(err))
 		}
 
-	case 403: // MSG_INTERNAL_MAP_LEAVE_RESPONSE
-		var resp protocol.MapLeaveResponse
+	case int32(protocol.MapMsgId_MSG_MAP_LEAVE_RESPONSE):
+		// 处理地图离开响应
+		var resp protocol.ClientMapLeaveResponse
 		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
 			zLog.Error("Failed to unmarshal map leave response", zap.Error(err))
 			return
 		}
 		zLog.Info("Received map leave response from MapServer",
-			zap.Uint64("player_id", baseMsg.PlayerID),
-			zap.Bool("success", resp.Success))
+			zap.Uint64("player_id", baseMsg.GetPlayerId()),
+			zap.Int32("result", resp.Result))
 
-		if resp.Success {
-			forwardProtoId := int32(1203) // MSG_MAP_LEAVE_RESPONSE
-			if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-				zLog.Error("Failed to forward map leave response to Gateway", zap.Error(err))
-			}
+		// 转发到Gateway
+		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
+			zLog.Error("Failed to forward map leave response to Gateway", zap.Error(err))
 		}
 
-	case 405: // MSG_INTERNAL_MAP_MOVE_RESPONSE
-		var resp protocol.MapMoveResponse
+	case int32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE):
+		// 处理地图移动响应
+		var resp protocol.ClientMapMoveResponse
 		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
 			zLog.Error("Failed to unmarshal map move response", zap.Error(err))
 			return
 		}
 		zLog.Info("Received map move response from MapServer",
-			zap.Uint64("player_id", baseMsg.PlayerID),
-			zap.Bool("success", resp.Success))
+			zap.Uint64("player_id", baseMsg.GetPlayerId()),
+			zap.Int32("result", resp.Result))
 
-		if resp.Success {
-			forwardProtoId := int32(1205) // MSG_MAP_MOVE_RESPONSE
-			if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-				zLog.Error("Failed to forward map move response to Gateway", zap.Error(err))
-			}
+		// 转发到Gateway
+		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
+			zLog.Error("Failed to forward map move response to Gateway", zap.Error(err))
 		}
 
-	case 407: // MSG_INTERNAL_MAP_ATTACK_RESPONSE
-		var resp protocol.MapAttackResponse
+	case int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE):
+		// 处理地图攻击响应
+		var resp protocol.ClientMapAttackResponse
 		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
 			zLog.Error("Failed to unmarshal map attack response", zap.Error(err))
 			return
 		}
-		if ts.mapService != nil {
-			ts.mapService.HandleMapAttackResponse(
-				meta.RequestID,
-				id.PlayerIdType(resp.PlayerId),
-				id.ObjectIdType(resp.TargetId),
-				resp.Damage,
-				resp.TargetHp,
-				resp.Success,
-				resp.ErrorMsg,
-			)
-		}
 		zLog.Info("Received map attack response from MapServer",
-			zap.Int64("player_id", resp.PlayerId),
+			zap.Uint64("player_id", baseMsg.GetPlayerId()),
 			zap.Int64("target_id", resp.TargetId),
-			zap.Bool("success", resp.Success),
+			zap.Int32("result", resp.Result),
 			zap.Int64("damage", resp.Damage),
 			zap.Int64("target_hp", resp.TargetHp))
 
-		forwardProtoId := int32(1207) // MSG_MAP_ATTACK_RESPONSE
+		// 转发到Gateway
 		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
 			zLog.Error("Failed to forward map attack response to Gateway", zap.Error(err))
 		}
 
 	default:
-		zLog.Info("Received unknown message from MapServer", zap.Int("proto_id", protoId))
+		zLog.Info("Received unknown message from MapServer", zap.Int32("proto_id", forwardProtoId))
 	}
 }
 
@@ -449,11 +451,11 @@ func (ts *TCPService) forwardToGateway(playerID id.PlayerIdType, protoId int32, 
 func (ts *TCPService) handleConnectionMessage(session zNet.Session, packet *zNet.NetPacket) error {
 	// 处理消息
 	sessionID := session.GetSid()
-	zLog.Info("Received message", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", packet.ProtoId), zap.Int("data_size", len(packet.Data)))
+	zLog.Info("Received message", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", int32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
 
 	// 暂时统一处理，后续需要区分Gateway和MapServer连接
 	// 注意：MapServer连接应该使用单独的处理逻辑，而不是通过zNet
-	ts.handleGatewayMessage(session, packet.ProtoId, packet.Data)
+	ts.handleGatewayMessage(session, int32(packet.ProtoId), packet.Data)
 
 	return nil
 }
@@ -533,8 +535,8 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 	zLog.Info("Received message from Gateway", zap.Int32("proto_id", protoId), zap.Int("data_size", len(data)))
 
 	// 解析跨服务器消息
-	var crossMsg crossserver.CrossServerMessage
-	if err := json.Unmarshal(msg.Data, &crossMsg); err != nil {
+	crossMsg := &protocol.CrossServerMessage{}
+	if err := proto.Unmarshal(msg.Data, crossMsg); err != nil {
 		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
 		return
 	}
@@ -543,7 +545,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 	baseMsg := crossMsg.Message
 
 	// 提取数据部分
-	payload := baseMsg.Data
+	payload := baseMsg.GetData()
 
 	// 根据消息类型处理
 	switch protoId {
@@ -576,7 +578,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 				zLog.Error("Failed to marshal player enter game response", zap.Error(err))
 				return
 			}
-			err = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
+			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
 			if err != nil {
 				zLog.Error("Failed to send player enter game response to Gateway", zap.Error(err))
 				return
@@ -606,7 +608,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			return
 		}
 		// 发送响应到Gateway
-		err = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
+		err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
 		if err != nil {
 			zLog.Error("Failed to send player enter game response to Gateway", zap.Error(err))
 			return
@@ -647,7 +649,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 				zLog.Error("Failed to marshal player create response", zap.Error(err))
 				return
 			}
-			err = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
+			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
 			if err != nil {
 				zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
 				return
@@ -668,7 +670,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 				zLog.Error("Failed to marshal player create response", zap.Error(err))
 				return
 			}
-			err = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
+			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
 			if err != nil {
 				zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
 				return
@@ -698,7 +700,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			return
 		}
 		// 发送响应到Gateway
-		err = session.Send(int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
+		err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
 		if err != nil {
 			zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
 			return
@@ -735,7 +737,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 					zLog.Error("Failed to marshal map enter response", zap.Error(err))
 					return
 				}
-				err = session.Send(int32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
+				err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
 				if err != nil {
 					zLog.Error("Failed to send map enter response to Gateway", zap.Error(err))
 					return
@@ -759,7 +761,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			zLog.Error("Failed to marshal map enter response", zap.Error(err))
 			return
 		}
-		err = session.Send(int32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
+		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
 		if err != nil {
 			zLog.Error("Failed to send map enter response to Gateway", zap.Error(err))
 			return
@@ -804,7 +806,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			zLog.Error("Failed to marshal map move response", zap.Error(err))
 			return
 		}
-		err = session.Send(int32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE), respData)
+		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE), respData)
 		if err != nil {
 			zLog.Error("Failed to send map move response to Gateway", zap.Error(err))
 			return
@@ -840,7 +842,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 					zLog.Error("Failed to marshal map attack error response", zap.Error(marshalErr))
 					return
 				}
-				if sendErr := session.Send(int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData); sendErr != nil {
+				if sendErr := session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData); sendErr != nil {
 					zLog.Error("Failed to send map attack error response to Gateway", zap.Error(sendErr))
 				}
 				return
@@ -860,7 +862,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 			zLog.Error("Failed to marshal map attack response", zap.Error(err))
 			return
 		}
-		err = session.Send(int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData)
+		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData)
 		if err != nil {
 			zLog.Error("Failed to send map attack response to Gateway", zap.Error(err))
 			return
@@ -1121,7 +1123,7 @@ func (ts *TCPService) SendResponseToGateway(session zNet.Session, protoId int32,
 	encodedMsg = crossserver.Wrap(meta, encodedMsg)
 
 	// 发送消息
-	err = session.Send(protoId, encodedMsg)
+	err = session.Send(zNet.ProtoIdType(protoId), encodedMsg)
 	if err != nil {
 		zLog.Error("Failed to send response to Gateway", zap.Error(err))
 		return err

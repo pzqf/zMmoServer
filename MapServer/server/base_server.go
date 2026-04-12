@@ -2,20 +2,23 @@ package server
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/config/tables"
-	"github.com/pzqf/zCommon/discovery"
-	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zMmoServer/MapServer/config"
 	"github.com/pzqf/zMmoServer/MapServer/connection"
+	"github.com/pzqf/zMmoServer/MapServer/container"
+	"github.com/pzqf/zMmoServer/MapServer/discovery"
+	"github.com/pzqf/zMmoServer/MapServer/health"
 	"github.com/pzqf/zMmoServer/MapServer/maps"
+	"github.com/pzqf/zMmoServer/MapServer/metrics"
 	"github.com/pzqf/zMmoServer/MapServer/net/service"
+	"github.com/pzqf/zMmoServer/MapServer/request"
+	"github.com/pzqf/zMmoServer/MapServer/utils"
 	"github.com/pzqf/zMmoServer/MapServer/version"
 	"go.uber.org/zap"
 )
@@ -26,7 +29,11 @@ type BaseServer struct {
 	*zServer.BaseServer
 	*zService.ServiceManager
 	isRunning        bool
+	container        *container.Container
 	metricsManager   *metrics.MetricsManager
+	healthChecker    *health.Checker
+	dedupManager     *request.DedupManager
+	timeoutManager   *request.TimeoutManager
 	config           *config.Config
 	connManager      *connection.ConnectionManager
 	mapManager       *maps.MapManager
@@ -41,15 +48,27 @@ func NewBaseServer(configPath string) *BaseServer {
 		zLog.Fatal("Failed to load config", zap.Error(err))
 	}
 
+	// 创建依赖注入容器
+	container := container.NewContainer()
+
 	bs := &BaseServer{
 		ServiceManager: zService.NewServiceManager(),
+		container:      container,
 		metricsManager: metrics.NewMetricsManager(),
+		healthChecker:  health.NewChecker(),
+		dedupManager:   request.NewDedupManager(5 * time.Minute),
+		timeoutManager: request.NewTimeoutManager(),
 		config:         cfg,
 	}
 	bs.BaseServer = zServer.NewBaseServer(ServerTypeMap, "", "Map Server", version.Version, bs)
 
-	bs.RegisterSingleton("config", cfg)
-	bs.RegisterSingleton("metricsManager", bs.metricsManager)
+	// 注册单例到容器
+	container.Register("config", cfg)
+	container.Register("metricsManager", bs.metricsManager)
+	container.Register("healthChecker", bs.healthChecker)
+	container.Register("dedupManager", bs.dedupManager)
+	container.Register("timeoutManager", bs.timeoutManager)
+
 	bs.registerMetrics()
 
 	// 严格使用 6 位 ServerID（GroupID(4)+ServerIndex(2)）
@@ -62,35 +81,26 @@ func NewBaseServer(configPath string) *BaseServer {
 
 	// 初始化连接管理器
 	bs.connManager = connection.NewConnectionManager(cfg)
-	bs.RegisterSingleton("connManager", bs.connManager)
+	container.Register("connManager", bs.connManager)
 
 	// 初始化地图管理器
 	bs.mapManager = maps.NewMapManager()
-	bs.RegisterSingleton("mapManager", bs.mapManager)
+	container.Register("mapManager", bs.mapManager)
 	bs.connManager.SetMapHandler(bs.mapManager)
 
 	// 初始化TCP服务
 	bs.tcpService = service.NewTCPService(cfg, bs.connManager, bs.mapManager)
-	bs.RegisterSingleton("tcpService", bs.tcpService)
+	container.Register("tcpService", bs.tcpService)
 
 	// 初始化服务发现（基于 etcd，适配 k8s）
-	etcdEndpoints := strings.Split(cfg.Etcd.Endpoints, ",")
-	etcdConfig := &discovery.EtcdConfig{
-		Endpoints:      cfg.Etcd.Endpoints,
-		Username:       cfg.Etcd.Username,
-		Password:       cfg.Etcd.Password,
-		CACertPath:     cfg.Etcd.CACertPath,
-		ClientCertPath: cfg.Etcd.ClientCertPath,
-		ClientKeyPath:  cfg.Etcd.ClientKeyPath,
-	}
-	serviceDiscovery, err := discovery.NewServiceDiscoveryWithConfig(etcdEndpoints, etcdConfig)
+	serviceDiscovery, err := discovery.NewServiceDiscovery(cfg)
 	if err != nil {
 		zLog.Error("Failed to create service discovery", zap.Error(err))
 		return nil
 	}
 	bs.serviceDiscovery = serviceDiscovery
-	bs.RegisterSingleton("serviceDiscovery", serviceDiscovery)
-	zLog.Info("Using etcd service discovery", zap.Strings("endpoints", etcdEndpoints))
+	container.Register("serviceDiscovery", serviceDiscovery)
+	zLog.Info("Using etcd service discovery", zap.String("endpoints", cfg.Etcd.Endpoints))
 
 	return bs
 }
@@ -102,15 +112,27 @@ func (bs *BaseServer) OnBeforeStart() error {
 	// 设置状态为初始化中
 	bs.SetState(zServer.StateInitializing, "server initializing")
 
+	// 更新健康检查状态
+	bs.healthChecker.UpdateComponentStatus(health.ComponentConfig, health.StatusStarting, "Loading configuration")
+	bs.healthChecker.UpdateComponentStatus(health.ComponentContainer, health.StatusStarting, "Initializing container")
+
 	// 严格加载配置表，缺失配置直接启动失败
 	if err := tables.GetTableManager().LoadAllTables(); err != nil {
-		return fmt.Errorf("failed to load excel tables: %w", err)
+		bs.healthChecker.UpdateComponentStatus(health.ComponentConfig, health.StatusUnhealthy, err.Error())
+		return utils.WrapError(err, "failed to load excel tables")
 	}
+	bs.healthChecker.UpdateComponentStatus(health.ComponentConfig, health.StatusHealthy, "Configuration loaded successfully")
+
+	// 启动监控指标服务
+	zLog.Info("Metrics manager initialized")
 
 	mapType, err := bs.loadMapsFromExcelTables()
 	if err != nil {
-		return fmt.Errorf("failed to load maps from map.xlsx: %w", err)
+		bs.healthChecker.UpdateComponentStatus(health.ComponentMap, health.StatusUnhealthy, err.Error())
+		return utils.WrapError(err, "failed to load maps from map.xlsx")
 	}
+	bs.healthChecker.UpdateComponentStatus(health.ComponentMap, health.StatusHealthy, "Maps loaded successfully")
+
 	zLog.Info(
 		"Map configuration validated",
 		zap.String("maps_mode", bs.config.Maps.Mode),
@@ -120,68 +142,36 @@ func (bs *BaseServer) OnBeforeStart() error {
 	)
 
 	// 启动TCP服务
+	bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusStarting, "Starting TCP service")
 	if err := bs.tcpService.Start(bs.GetContext()); err != nil {
+		bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusUnhealthy, err.Error())
 		zLog.Error("Failed to start TCP service", zap.Error(err))
+	} else {
+		bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusHealthy, "TCP service started successfully")
 	}
 
-	// 连接到GameServer（示例）
-	// 实际应用中，应该从配置或服务发现获取 GameServer 列表
-	// 注册当前服务到服务发现（严格使用6位ServerID）
-	// 从配置获取服务器ID
-	serverID, err := id.ParseServerIDInt(int32(bs.config.Server.ServerID))
-	if err != nil {
-		return fmt.Errorf("invalid server ID: %w", err)
-	}
-	serverIDStr := id.ServerIDString(serverID)
-	groupID := id.GroupIDStringFromServerID(serverID)
+	// 注册当前服务到服务发现
+	bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusStarting, "Registering service")
 
-	// 获取本MapServer负责的所有地图ID
 	mapIDs := bs.mapManager.GetAllMapIDs()
 	if len(mapIDs) == 0 && len(bs.config.Maps.MapIDs) > 0 {
-		// 如果没有从mapManager获取到地图ID，使用配置中的地图ID
 		for _, id := range bs.config.Maps.MapIDs {
 			mapIDs = append(mapIDs, int32(id))
 		}
 	}
+	bs.serviceDiscovery.UpdateMapIDs(mapIDs)
 
-	// 注册服务到服务发现
-	serviceInfo := &discovery.ServerInfo{
-		ID:            serverIDStr,
-		ServiceType:   "map",
-		GroupID:       groupID,
-		Status:        "initializing",
-		Address:       bs.config.Server.ListenAddr,
-		Port:          0, // 端口已在 Address 中
-		Load:          0,
-		Players:       0,
-		ReadyTime:     time.Now().Unix(),
-		LastHeartbeat: time.Now().Unix(),
-		MapIDs:        mapIDs,
+	if err := bs.serviceDiscovery.Register(); err != nil {
+		bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusUnhealthy, err.Error())
+		return utils.WrapError(err, "failed to register service")
 	}
+	bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusHealthy, "Service registered successfully")
+	zLog.Info("Service registered successfully", zap.String("service_id", bs.serviceDiscovery.GetServerID()))
 
-	// 注册服务，添加重试机制
-	maxRetries := 3
-	var registerErr error
-	for i := 0; i < maxRetries; i++ {
-		if err := bs.serviceDiscovery.Register(serviceInfo); err != nil {
-			zLog.Warn("Failed to register service", zap.Error(err), zap.Int("retry", i+1))
-			registerErr = err
-			time.Sleep(time.Duration(i+1) * time.Second) // 指数退避
-		} else {
-			zLog.Info("Service registered successfully", zap.String("service_id", serviceInfo.ID))
-			registerErr = nil
-			break
-		}
-	}
-	if registerErr != nil {
-		return fmt.Errorf("failed to register service after %d retries: %w", maxRetries, registerErr)
-	}
-
-	// 启动服务发现监听（监听 GameServer 变化）
 	go bs.startServiceDiscoveryMonitor()
+	go bs.startHeartbeat()
 
-	// 启动心跳保持
-	go bs.startHeartbeat(serviceInfo, serverIDStr, groupID)
+	bs.healthChecker.LogStatus()
 
 	return nil
 }
@@ -194,6 +184,9 @@ func (bs *BaseServer) OnAfterStart() error {
 	bs.SetState(zServer.StateHealthy, "server healthy")
 	zLog.Info("Map server is healthy")
 
+	// 更新健康检查状态
+	bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusHealthy, "Server is healthy")
+
 	return nil
 }
 
@@ -202,24 +195,31 @@ func (bs *BaseServer) OnBeforeStop() {
 	bs.SetState(zServer.StateDraining, "server stopping")
 	zLog.Info("Map server entering draining state")
 
+	// 更新健康检查状态
+	bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusStopping, "Stopping TCP service")
+
 	// 停止TCP服务
 	if bs.tcpService != nil {
 		bs.tcpService.Stop(bs.GetContext())
 	}
 
+	// 停止监控指标服务
+	if bs.metricsManager != nil {
+		bs.metricsManager.ResetAll()
+	}
+
 	// 注销服务
-	if bs.serviceDiscovery != nil && bs.config != nil {
-		serverID, _ := id.ParseServerIDInt(int32(bs.config.Server.ServerID))
-		serverIDStr := id.ServerIDString(serverID)
-		groupID := id.GroupIDStringFromServerID(serverID)
-		if err := bs.serviceDiscovery.Unregister("map", groupID, serverIDStr); err != nil {
+	if bs.serviceDiscovery != nil {
+		bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusStopping, "Unregistering service")
+		if err := bs.serviceDiscovery.Unregister(); err != nil {
 			zLog.Warn("Failed to unregister service", zap.Error(err))
 		} else {
-			zLog.Info("Service unregistered successfully", zap.String("service_id", serverIDStr))
+			zLog.Info("Service unregistered successfully", zap.String("service_id", bs.serviceDiscovery.GetServerID()))
 		}
 		if err := bs.serviceDiscovery.Close(); err != nil {
 			zLog.Warn("Failed to close service discovery", zap.Error(err))
 		}
+		bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusUnhealthy, "Service unregistered")
 	}
 }
 
@@ -227,11 +227,16 @@ func (bs *BaseServer) OnAfterStop() {
 	// 设置状态为已停止
 	bs.SetState(zServer.StateStopped, "server stopped")
 	bs.isRunning = false
+
+	// 更新健康检查状态
+	bs.healthChecker.UpdateComponentStatus(health.ComponentTCP, health.StatusUnhealthy, "Server stopped")
+	bs.healthChecker.UpdateComponentStatus(health.ComponentContainer, health.StatusUnhealthy, "Container stopped")
+
 	zLog.Info("Map server stopped completely")
 }
 
 // startHeartbeat 启动心跳保持
-func (bs *BaseServer) startHeartbeat(serviceInfo *discovery.ServerInfo, serverIDStr, groupID string) {
+func (bs *BaseServer) startHeartbeat() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
@@ -240,28 +245,14 @@ func (bs *BaseServer) startHeartbeat(serviceInfo *discovery.ServerInfo, serverID
 		case <-bs.GetContext().Done():
 			return
 		case <-ticker.C:
-			// 更新地图ID列表（可能动态变化）
 			currentMapIDs := bs.mapManager.GetAllMapIDs()
-			if len(currentMapIDs) == 0 {
-				currentMapIDs = serviceInfo.MapIDs
-			}
+			bs.serviceDiscovery.UpdateMapIDs(currentMapIDs)
 
-			// 更新服务状态
-			updatedInfo := &discovery.ServerInfo{
-				ID:            serverIDStr,
-				ServiceType:   "map",
-				GroupID:       groupID,
-				Status:        bs.GetState(),
-				Address:       serviceInfo.Address,
-				Port:          serviceInfo.Port,
-				Load:          0,
-				Players:       0,
-				ReadyTime:     serviceInfo.ReadyTime,
-				LastHeartbeat: time.Now().Unix(),
-				MapIDs:        currentMapIDs,
-			}
-			if err := bs.serviceDiscovery.Register(updatedInfo); err != nil {
+			if err := bs.serviceDiscovery.UpdateHeartbeat(string(bs.GetState()), 0); err != nil {
 				zLog.Warn("Failed to send heartbeat", zap.Error(err))
+				bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusUnhealthy, "Failed to send heartbeat")
+			} else {
+				bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusHealthy, "Heartbeat sent successfully")
 			}
 		}
 	}
@@ -269,9 +260,6 @@ func (bs *BaseServer) startHeartbeat(serviceInfo *discovery.ServerInfo, serverID
 
 // startServiceDiscoveryMonitor 启动服务发现监听
 func (bs *BaseServer) startServiceDiscoveryMonitor() {
-	serverID := id.MustParseServerIDInt(int32(bs.config.Server.ServerID))
-	groupID := id.GroupIDStringFromServerID(serverID)
-
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -280,19 +268,18 @@ func (bs *BaseServer) startServiceDiscoveryMonitor() {
 		case <-bs.GetContext().Done():
 			return
 		case <-ticker.C:
-			// 发现 GameServer
-			gameServers, err := bs.serviceDiscovery.Discover("game", groupID)
+			gameServers, err := bs.serviceDiscovery.DiscoverInGroup("game", bs.serviceDiscovery.GetGroupID())
 			if err != nil {
 				zLog.Warn("Failed to discover game servers", zap.Error(err))
+				bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusUnhealthy, "Failed to discover game servers")
 				continue
 			}
 
 			zLog.Info("Discovered game servers", zap.Int("count", len(gameServers)))
+			bs.healthChecker.UpdateComponentStatus(health.ComponentDiscovery, health.StatusHealthy, "Game servers discovered successfully")
 
-			// 连接到 GameServer
 			for _, gameServer := range gameServers {
 				if gameServer.Status == "healthy" || gameServer.Status == "ready" {
-					// 实际应用中，这里应该建立与 GameServer 的连接
 					zLog.Info("Found healthy GameServer", zap.String("address", gameServer.Address))
 				}
 			}
@@ -322,5 +309,20 @@ func intSliceToCSV(slice []int) string {
 
 // registerMetrics 注册指标
 func (bs *BaseServer) registerMetrics() {
-	// 实现指标注册逻辑
+	// 注册服务器基本指标
+	bs.metricsManager.RegisterCounter("mapserver_requests_total", "Total number of requests", nil)
+	bs.metricsManager.RegisterGauge("mapserver_connections", "Current number of connections", nil)
+	bs.metricsManager.RegisterGauge("mapserver_players", "Current number of players", nil)
+	bs.metricsManager.RegisterGauge("mapserver_maps", "Current number of maps", nil)
+	bs.metricsManager.RegisterHistogram("mapserver_request_duration_seconds", "Request duration in seconds", []float64{0.001, 0.01, 0.1, 1, 5, 10}, nil)
+
+	// 注册服务发现指标
+	bs.metricsManager.RegisterCounter("mapserver_service_discovery_register_total", "Total number of service discovery register attempts", nil)
+	bs.metricsManager.RegisterCounter("mapserver_service_discovery_discover_total", "Total number of service discovery discover attempts", nil)
+
+	// 注册地图指标
+	bs.metricsManager.RegisterCounter("mapserver_map_enter_total", "Total number of map enter requests", nil)
+	bs.metricsManager.RegisterCounter("mapserver_map_leave_total", "Total number of map leave requests", nil)
+	bs.metricsManager.RegisterCounter("mapserver_map_move_total", "Total number of map move requests", nil)
+	bs.metricsManager.RegisterCounter("mapserver_map_attack_total", "Total number of map attack requests", nil)
 }

@@ -2,16 +2,14 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 
+	cfgutil "github.com/pzqf/zCommon/config"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
-	"github.com/pzqf/zCommon/discovery"
 )
 
-// Config 游戏服务器配置
 type Config struct {
 	Server       ServerConfig         `ini:"Server"`
 	Database     DatabaseConfig       `ini:"Database"`
@@ -23,22 +21,29 @@ type Config struct {
 	Metrics      MetricsConfig        `ini:"Metrics"`
 }
 
-// ServerConfig 服务器基本配置
 type ServerConfig struct {
-	ServerName        string `ini:"ServerName"`
-	ServerID          int    `ini:"ServerID"`
-	GroupID           int    `ini:"GroupID"`
-	ListenAddr        string `ini:"ListenAddr"`
-	ExternalAddr      string `ini:"ExternalAddr"`
-	MaxConnections    int    `ini:"MaxConnections"`
-	ConnectionTimeout int    `ini:"ConnectionTimeout"`
-	HeartbeatInterval int    `ini:"HeartbeatInterval"`
-	UseWorkerPool     bool   `ini:"UseWorkerPool"`
-	WorkerPoolSize    int    `ini:"WorkerPoolSize"`
-	WorkerQueueSize   int    `ini:"WorkerQueueSize"`
+	ServerName          string `ini:"ServerName"`
+	ServerID            int    `ini:"ServerID"`
+	GroupID             int    `ini:"GroupID"`
+	ListenAddr          string `ini:"ListenAddr"`
+	ExternalAddr        string `ini:"ExternalAddr"`
+	MaxConnections      int    `ini:"MaxConnections"`
+	ConnectionTimeout   int    `ini:"ConnectionTimeout"`
+	HeartbeatInterval   int    `ini:"HeartbeatInterval"`
+	UseWorkerPool       bool   `ini:"UseWorkerPool"`
+	WorkerPoolSize      int    `ini:"WorkerPoolSize"`
+	WorkerQueueSize     int    `ini:"WorkerQueueSize"`
+	ChanSize            int    `ini:"ChanSize"`
+	MaxPacketDataSize   int    `ini:"MaxPacketDataSize"`
+	DisableEncryption   bool   `ini:"DisableEncryption"`
+	EnableKeyRotation   bool   `ini:"EnableKeyRotation"`
+	KeyRotationInterval int    `ini:"KeyRotationInterval"`
+	MaxHistoryKeys      int    `ini:"MaxHistoryKeys"`
+	EnableSequenceCheck bool   `ini:"EnableSequenceCheck"`
+	SequenceWindowSize  uint64 `ini:"SequenceWindowSize"`
+	TimestampTolerance  int64  `ini:"TimestampTolerance"`
 }
 
-// DatabaseConfig 数据库配置
 type DatabaseConfig struct {
 	DBType          string `ini:"DBType"`
 	DBHost          string `ini:"DBHost"`
@@ -51,24 +56,20 @@ type DatabaseConfig struct {
 	ConnMaxLifetime int    `ini:"ConnMaxLifetime"`
 }
 
-// GatewayConfig Gateway配置
 type GatewayConfig struct {
 	GatewayAddr           string `ini:"GatewayAddr"`
 	GatewayConnectTimeout int    `ini:"GatewayConnectTimeout"`
 }
 
-// MapServerConfig MapServer配置
 type MapServerConfig struct {
 	MapServerAddr string `ini:"MapServerAddr"`
 }
 
-// GlobalServerConfig GlobalServer配置
 type GlobalServerConfig struct {
 	GlobalServerAddr string `ini:"GlobalServerAddr"`
 	RegisterInterval int    `ini:"RegisterInterval"`
 }
 
-// LoggingConfig 日志配置
 type LoggingConfig struct {
 	LogLevel           int    `ini:"LogLevel"`
 	Console            bool   `ini:"console"`
@@ -87,131 +88,111 @@ type LoggingConfig struct {
 	AsyncFlushInterval int    `ini:"async-flush-interval"`
 }
 
-// MetricsConfig 监控配置
 type MetricsConfig struct {
 	Enabled     bool   `ini:"Enabled"`
 	MetricsAddr string `ini:"MetricsAddr"`
 }
 
-
-
 var globalConfig *Config
 
-// LoadConfig 加载配置
 func LoadConfig(configPath string) (*Config, error) {
 	zcfg := zConfig.NewConfig()
 	if err := zcfg.LoadINI(configPath); err != nil {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	config := &Config{}
+	c := &Config{}
 
-	config.Server = ServerConfig{
-		ServerName:        getConfigString(zcfg, "Server.ServerName", getEnv("SERVER_NAME", "GameServer")),
-		ServerID:          getConfigInt(zcfg, "Server.ServerID", getEnvAsInt("SERVER_ID", 1)),
-		GroupID:           getConfigInt(zcfg, "Server.GroupID", 1),
-		ListenAddr:        getConfigString(zcfg, "Server.ListenAddr", getEnv("LISTEN_ADDR", "0.0.0.0:9001")),
-		ExternalAddr:      getConfigString(zcfg, "Server.ExternalAddr", getEnv("GAME_EXTERNAL_ADDR", "")),
-		MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
-		ConnectionTimeout: getConfigInt(zcfg, "Server.ConnectionTimeout", 300),
-		HeartbeatInterval: getConfigInt(zcfg, "Server.HeartbeatInterval", 30),
-		UseWorkerPool:     getConfigBool(zcfg, "Server.UseWorkerPool", true),
-		WorkerPoolSize:    getConfigInt(zcfg, "Server.WorkerPoolSize", 10),
-		WorkerQueueSize:   getConfigInt(zcfg, "Server.WorkerQueueSize", 1000),
+	c.Server = ServerConfig{
+		ServerName:          cfgutil.GetConfigString(zcfg, "Server.ServerName", cfgutil.GetEnv("SERVER_NAME", "GameServer")),
+		ServerID:            cfgutil.GetConfigInt(zcfg, "Server.ServerID", cfgutil.GetEnvAsInt("SERVER_ID", 1)),
+		GroupID:             cfgutil.GetConfigInt(zcfg, "Server.GroupID", 1),
+		ListenAddr:          cfgutil.GetConfigString(zcfg, "Server.ListenAddr", cfgutil.GetEnv("LISTEN_ADDR", "0.0.0.0:9001")),
+		ExternalAddr:        cfgutil.GetConfigString(zcfg, "Server.ExternalAddr", cfgutil.GetEnv("GAME_EXTERNAL_ADDR", "")),
+		MaxConnections:      cfgutil.GetConfigInt(zcfg, "Server.MaxConnections", 10000),
+		ConnectionTimeout:   cfgutil.GetConfigInt(zcfg, "Server.ConnectionTimeout", 300),
+		HeartbeatInterval:   cfgutil.GetConfigInt(zcfg, "Server.HeartbeatInterval", 30),
+		UseWorkerPool:       cfgutil.GetConfigBool(zcfg, "Server.UseWorkerPool", true),
+		WorkerPoolSize:      cfgutil.GetConfigInt(zcfg, "Server.WorkerPoolSize", 10),
+		WorkerQueueSize:     cfgutil.GetConfigInt(zcfg, "Server.WorkerQueueSize", 1000),
+		ChanSize:            cfgutil.GetConfigInt(zcfg, "Server.ChanSize", 1024),
+		MaxPacketDataSize:   cfgutil.GetConfigInt(zcfg, "Server.MaxPacketDataSize", 1024*1024),
+		DisableEncryption:   cfgutil.GetConfigBool(zcfg, "Server.DisableEncryption", cfgutil.GetEnvAsBool("DISABLE_ENCRYPTION", true)),
+		EnableKeyRotation:   cfgutil.GetConfigBool(zcfg, "Server.EnableKeyRotation", false),
+		KeyRotationInterval: cfgutil.GetConfigInt(zcfg, "Server.KeyRotationInterval", 1800),
+		MaxHistoryKeys:      cfgutil.GetConfigInt(zcfg, "Server.MaxHistoryKeys", 3),
+		EnableSequenceCheck: cfgutil.GetConfigBool(zcfg, "Server.EnableSequenceCheck", false),
+		SequenceWindowSize:  uint64(cfgutil.GetConfigInt(zcfg, "Server.SequenceWindowSize", 1000)),
+		TimestampTolerance:  int64(cfgutil.GetConfigInt(zcfg, "Server.TimestampTolerance", 30)),
 	}
 
-	config.Database = DatabaseConfig{
-		DBType:          getConfigString(zcfg, "Database.DBType", "mysql"),
-		DBHost:          getConfigString(zcfg, "Database.DBHost", getEnv("DB_HOST", "192.168.91.128")),
-		DBPort:          getConfigInt(zcfg, "Database.DBPort", 30306),
-		DBName:          getConfigString(zcfg, "Database.DBName", getEnv("DB_NAME", "GameDB_000101")),
-		DBUser:          getConfigString(zcfg, "Database.DBUser", getEnv("DB_USER", "root")),
-		DBPassword:      getConfigString(zcfg, "Database.DBPassword", getEnv("DB_PASSWORD", "123456")),
-		MaxOpenConns:    getConfigInt(zcfg, "Database.MaxOpenConns", 100),
-		MaxIdleConns:    getConfigInt(zcfg, "Database.MaxIdleConns", 10),
-		ConnMaxLifetime: getConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
+	c.Database = DatabaseConfig{
+		DBType:          cfgutil.GetConfigString(zcfg, "Database.DBType", "mysql"),
+		DBHost:          cfgutil.GetConfigString(zcfg, "Database.DBHost", cfgutil.GetEnv("DB_HOST", "192.168.91.128")),
+		DBPort:          cfgutil.GetConfigInt(zcfg, "Database.DBPort", 30306),
+		DBName:          cfgutil.GetConfigString(zcfg, "Database.DBName", cfgutil.GetEnv("DB_NAME", "GameDB_000101")),
+		DBUser:          cfgutil.GetConfigString(zcfg, "Database.DBUser", cfgutil.GetEnv("DB_USER", "root")),
+		DBPassword:      cfgutil.GetConfigString(zcfg, "Database.DBPassword", cfgutil.GetEnv("DB_PASSWORD", "123456")),
+		MaxOpenConns:    cfgutil.GetConfigInt(zcfg, "Database.MaxOpenConns", 100),
+		MaxIdleConns:    cfgutil.GetConfigInt(zcfg, "Database.MaxIdleConns", 10),
+		ConnMaxLifetime: cfgutil.GetConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
 	}
 
-	config.Gateway = GatewayConfig{
-		GatewayAddr:           getConfigString(zcfg, "Gateway.GatewayAddr", getEnv("GATEWAY_ADDR", "gateway-service.game:8081")),
-		GatewayConnectTimeout: getConfigInt(zcfg, "Gateway.GatewayConnectTimeout", 10),
+	c.Gateway = GatewayConfig{
+		GatewayAddr:           cfgutil.GetConfigString(zcfg, "Gateway.GatewayAddr", cfgutil.GetEnv("GATEWAY_ADDR", "gateway-service.game:8081")),
+		GatewayConnectTimeout: cfgutil.GetConfigInt(zcfg, "Gateway.GatewayConnectTimeout", 10),
 	}
 
-	config.GlobalServer = GlobalServerConfig{
-		GlobalServerAddr: getConfigString(zcfg, "GlobalServer.GlobalServerAddr", getEnv("GLOBAL_SERVER_ADDR", "global-service.game:8082")),
-		RegisterInterval: getConfigInt(zcfg, "GlobalServer.RegisterInterval", 30),
+	c.GlobalServer = GlobalServerConfig{
+		GlobalServerAddr: cfgutil.GetConfigString(zcfg, "GlobalServer.GlobalServerAddr", cfgutil.GetEnv("GLOBAL_SERVER_ADDR", "global-service.game:8082")),
+		RegisterInterval: cfgutil.GetConfigInt(zcfg, "GlobalServer.RegisterInterval", 30),
 	}
 
-	config.MapServer = MapServerConfig{
-		MapServerAddr: getConfigString(zcfg, "MapServer.MapServerAddr", getEnv("MAP_SERVER_ADDR", "127.0.0.1:9002")),
+	c.MapServer = MapServerConfig{
+		MapServerAddr: cfgutil.GetConfigString(zcfg, "MapServer.MapServerAddr", cfgutil.GetEnv("MAP_SERVER_ADDR", "127.0.0.1:9002")),
 	}
 
-	config.Logging = LoggingConfig{
-		LogLevel:           getConfigInt(zcfg, "Logging.LogLevel", getEnvAsInt("LOG_LEVEL", 0)),
-		Console:            getConfigBool(zcfg, "Logging.console", true),
-		LogFile:            getConfigString(zcfg, "Logging.LogFile", "logs/server.log"),
-		LogMaxSize:         getConfigInt(zcfg, "Logging.LogMaxSize", 100),
-		LogMaxBackups:      getConfigInt(zcfg, "Logging.LogMaxBackups", 10),
-		LogMaxAge:          getConfigInt(zcfg, "Logging.LogMaxAge", 15),
-		Compress:           getConfigBool(zcfg, "Logging.compress", true),
-		ShowCaller:         getConfigBool(zcfg, "Logging.show-caller", true),
-		Stacktrace:         getConfigInt(zcfg, "Logging.stacktrace", 3),
-		Sampling:           getConfigBool(zcfg, "Logging.sampling", true),
-		SamplingInitial:    getConfigInt(zcfg, "Logging.sampling-initial", 100),
-		SamplingThereafter: getConfigInt(zcfg, "Logging.sampling-thereafter", 10),
-		Async:              getConfigBool(zcfg, "Logging.async", true),
-		AsyncBufferSize:    getConfigInt(zcfg, "Logging.async-buffer-size", 2048),
-		AsyncFlushInterval: getConfigInt(zcfg, "Logging.async-flush-interval", 50),
+	c.Logging = LoggingConfig{
+		LogLevel:           cfgutil.GetConfigInt(zcfg, "Logging.LogLevel", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
+		Console:            cfgutil.GetConfigBool(zcfg, "Logging.console", true),
+		LogFile:            cfgutil.GetConfigString(zcfg, "Logging.LogFile", "logs/server.log"),
+		LogMaxSize:         cfgutil.GetConfigInt(zcfg, "Logging.LogMaxSize", 100),
+		LogMaxBackups:      cfgutil.GetConfigInt(zcfg, "Logging.LogMaxBackups", 10),
+		LogMaxAge:          cfgutil.GetConfigInt(zcfg, "Logging.LogMaxAge", 15),
+		Compress:           cfgutil.GetConfigBool(zcfg, "Logging.compress", true),
+		ShowCaller:         cfgutil.GetConfigBool(zcfg, "Logging.show-caller", true),
+		Stacktrace:         cfgutil.GetConfigInt(zcfg, "Logging.stacktrace", 3),
+		Sampling:           cfgutil.GetConfigBool(zcfg, "Logging.sampling", true),
+		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Logging.sampling-initial", 100),
+		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Logging.sampling-thereafter", 10),
+		Async:              cfgutil.GetConfigBool(zcfg, "Logging.async", true),
+		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Logging.async-buffer-size", 2048),
+		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Logging.async-flush-interval", 50),
 	}
 
-	config.Metrics = MetricsConfig{
-		Enabled:     getConfigBool(zcfg, "Metrics.Enabled", true),
-		MetricsAddr: getConfigString(zcfg, "Metrics.MetricsAddr", getEnv("METRICS_ADDR", "0.0.0.0:9092")),
+	c.Metrics = MetricsConfig{
+		Enabled:     cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
+		MetricsAddr: cfgutil.GetConfigString(zcfg, "Metrics.MetricsAddr", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9092")),
 	}
 
-	// 解析etcd配置
-	config.Etcd = discovery.EtcdConfig{
-		Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", getEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
-		Username:       getConfigString(zcfg, "Etcd.Username", ""),
-		Password:       getConfigString(zcfg, "Etcd.Password", ""),
-		CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
-		ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
-		ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
+	c.Etcd = discovery.EtcdConfig{
+		Endpoints:      cfgutil.GetConfigString(zcfg, "Etcd.Endpoints", cfgutil.GetEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
+		Username:       cfgutil.GetConfigString(zcfg, "Etcd.Username", ""),
+		Password:       cfgutil.GetConfigString(zcfg, "Etcd.Password", ""),
+		CACertPath:     cfgutil.GetConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+		ClientCertPath: cfgutil.GetConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+		ClientKeyPath:  cfgutil.GetConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 	}
 
-	globalConfig = config
-	return config, nil
+	globalConfig = c
+	return c, nil
 }
 
-// GetServerConfig 获取服务器配置
 func GetServerConfig() *Config {
 	return globalConfig
 }
 
-func getConfigString(cfg *zConfig.Config, key string, defaultValue string) string {
-	if value, err := cfg.GetString(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-func getConfigInt(cfg *zConfig.Config, key string, defaultValue int) int {
-	if value, err := cfg.GetInt(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
-	if value, err := cfg.GetBool(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-// GetLogConfig 获取日志配置（实现LogConfigurable接口）
 func (c *Config) GetLogConfig() *zLog.Config {
-	// 处理日志文件名中的{server_id}占位符
 	logFile := c.Logging.LogFile
 	if strings.Contains(logFile, "{server_id}") {
 		logFile = strings.ReplaceAll(logFile, "{server_id}", fmt.Sprintf("%06d", c.Server.ServerID))
@@ -234,32 +215,4 @@ func (c *Config) GetLogConfig() *zLog.Config {
 		AsyncBufferSize:    c.Logging.AsyncBufferSize,
 		AsyncFlushInterval: c.Logging.AsyncFlushInterval,
 	}
-}
-
-// 辅助函数：获取环境变量
-func getEnv(key, defaultValue string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return defaultValue
-}
-
-// 辅助函数：获取整数类型的环境变量
-func getEnvAsInt(key string, defaultValue int) int {
-	if value, exists := os.LookupEnv(key); exists {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
-// 辅助函数：获取布尔类型的环境变量
-func getEnvAsBool(key string, defaultValue bool) bool {
-	if value, exists := os.LookupEnv(key); exists {
-		if boolValue, err := strconv.ParseBool(value); err == nil {
-			return boolValue
-		}
-	}
-	return defaultValue
 }

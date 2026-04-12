@@ -17,6 +17,27 @@ const (
 	HealthStatusUnhealthy HealthStatus = "unhealthy"
 )
 
+const (
+	StatusHealthy   = string(HealthStatusHealthy)
+	StatusUnhealthy = string(HealthStatusUnhealthy)
+	StatusDegraded  = string(HealthStatusDegraded)
+	StatusStarting  = "starting"
+	StatusStopping  = "stopping"
+	StatusUnknown   = "unknown"
+)
+
+const (
+	ComponentTCP       = "tcp_service"
+	ComponentMap       = "map_service"
+	ComponentDiscovery = "service_discovery"
+	ComponentDatabase  = "database"
+	ComponentConfig    = "config"
+	ComponentContainer = "container"
+	ComponentGateway   = "gateway"
+	ComponentSession   = "session"
+	ComponentPlayer    = "player"
+)
+
 // String 返回健康状态的字符串表示
 func (h HealthStatus) String() string {
 	return string(h)

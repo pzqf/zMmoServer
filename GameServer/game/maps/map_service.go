@@ -147,23 +147,27 @@ func (ms *MapService) Stop(ctx context.Context) error {
 func (ms *MapService) loadMaps() error {
 	// 从Excel配置表加载地图数据
 	mapTableLoader := tables.NewMapTableLoader()
-	excelDir := "resources/excel_tables"
+	excelDir := "../resources/excel_tables"
 
 	err := mapTableLoader.Load(excelDir)
 	if err != nil {
-		return fmt.Errorf("failed to load map tables from %s: %w", excelDir, err)
+		zLog.Warn("Failed to load map tables, using default maps", zap.Error(err))
+		ms.loadDefaultMaps()
+		return nil
 	}
 
 	// 加载所有地图
 	maps := mapTableLoader.GetAllMaps()
+	if len(maps) == 0 {
+		zLog.Warn("No maps found in config, using default maps")
+		ms.loadDefaultMaps()
+		return nil
+	}
+
 	for mapID, mapConfig := range maps {
 		newMap := NewMap(id.MapIdType(mapID), mapID, mapConfig.Name, float32(mapConfig.Width), float32(mapConfig.Height))
 		ms.maps.Store(id.MapIdType(mapID), newMap)
 		zLog.Info("Map loaded from config", zap.Int32("map_id", mapID), zap.String("name", mapConfig.Name))
-	}
-
-	if len(maps) == 0 {
-		return fmt.Errorf("map table loaded but no maps found in %s/map.xlsx", excelDir)
 	}
 
 	return nil
@@ -409,24 +413,36 @@ func (ms *MapService) publishOutboxStats() {
 
 // sendMapEnterRequest 发送进入地图请求到MapServer
 func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	req := &protocol.MapEnterRequest{
-		PlayerId:     int64(playerID),
-		SessionId:    0,
-		MapId:        int64(mapID),
-		X:            pos.X,
-		Y:            pos.Y,
-		Z:            pos.Z,
-		GameServerId: int32(ms.config.Server.ServerID),
-		PlayerData:   []byte{},
+	// 创建地图进入请求
+	mapEnterReq := &protocol.ClientMapEnterRequest{
+		PlayerId: int64(playerID),
+		MapId:    int32(mapID),
 	}
 
-	data, err := proto.Marshal(req)
+	// 序列化具体消息
+	reqData, err := proto.Marshal(mapEnterReq)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map enter request: %w", err)
 	}
 
+	// 创建基础消息
+	baseMsg := &protocol.BaseMessage{
+		PlayerId:  uint64(playerID),
+		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_ENTER),
+		ServerId:  uint32(ms.config.Server.ServerID),
+		MapId:     uint32(mapID),
+		Data:      reqData,
+		Timestamp: uint64(time.Now().UnixNano()),
+	}
+
+	// 序列化基础消息
+	data, err := proto.Marshal(baseMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal base message: %w", err)
+	}
+
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 400, data, playerID, meta)
+	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
 	if err != nil {
 		return err
 	}
@@ -501,22 +517,41 @@ func (ms *MapService) HandlePlayerMove(playerID id.PlayerIdType, mapID id.MapIdT
 
 // sendMapMoveRequest 发送移动请求到MapServer
 func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, pos common.Vector3) error {
-	req := &protocol.MapMoveRequest{
+	// 创建地图移动请求
+	mapMoveReq := &protocol.ClientMapMoveRequest{
 		PlayerId: int64(playerID),
-		ObjectId: int64(objectID),
-		MapId:    int64(mapID),
-		X:        pos.X,
-		Y:        pos.Y,
-		Z:        pos.Z,
+		MapId:    int32(mapID),
+		Pos: &protocol.Position{
+			X: pos.X,
+			Y: pos.Y,
+			Z: pos.Z,
+		},
 	}
 
-	data, err := proto.Marshal(req)
+	// 序列化具体消息
+	reqData, err := proto.Marshal(mapMoveReq)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map move request: %w", err)
 	}
 
+	// 创建基础消息
+	baseMsg := &protocol.BaseMessage{
+		PlayerId:  uint64(playerID),
+		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_MOVE),
+		ServerId:  uint32(ms.config.Server.ServerID),
+		MapId:     uint32(mapID),
+		Data:      reqData,
+		Timestamp: uint64(time.Now().UnixNano()),
+	}
+
+	// 序列化基础消息
+	data, err := proto.Marshal(baseMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal base message: %w", err)
+	}
+
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 404, data, playerID, meta)
+	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
 	if err != nil {
 		return err
 	}
@@ -625,23 +660,40 @@ func (ms *MapService) HandleMapAttackResponse(requestID uint64, playerID id.Play
 
 // sendMapAttackRequest 发送攻击请求到MapServer
 func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
-	req := &protocol.MapAttackRequest{
+	// 创建地图攻击请求
+	mapAttackReq := &protocol.ClientMapAttackRequest{
 		PlayerId: int64(playerID),
-		ObjectId: int64(objectID),
-		MapId:    int64(mapID),
+		MapId:    int32(mapID),
 		TargetId: int64(targetID),
 	}
 
-	data, err := proto.Marshal(req)
+	// 序列化具体消息
+	reqData, err := proto.Marshal(mapAttackReq)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to marshal map attack request: %w", err)
+	}
+
+	// 创建基础消息
+	baseMsg := &protocol.BaseMessage{
+		PlayerId:  uint64(playerID),
+		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_ATTACK),
+		ServerId:  uint32(ms.config.Server.ServerID),
+		MapId:     uint32(mapID),
+		Data:      reqData,
+		Timestamp: uint64(time.Now().UnixNano()),
+	}
+
+	// 序列化基础消息
+	data, err := proto.Marshal(baseMsg)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to marshal base message: %w", err)
 	}
 
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
 	respCh := ms.registerPendingAttack(playerID, targetID, meta.RequestID)
 	defer ms.removePendingAttack(playerID, targetID, meta.RequestID)
 
-	err = ms.sendMapMessage(mapID, 406, data, playerID, meta)
+	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -664,16 +716,19 @@ func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id
 
 // SendMapEnterResponse 发送进入地图响应
 func (ms *MapService) SendMapEnterResponse(conn interface{}, playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	resp := &protocol.MapEnterResponse{
-		Success:  true,
-		ObjectId: int64(playerID),
-		MapId:    int64(mapID),
-		X:        pos.X,
-		Y:        pos.Y,
-		Z:        pos.Z,
+	// 创建地图进入响应
+	resp := &protocol.ClientMapEnterResponse{
+		Result: 0, // 成功
+		MapId:  int32(mapID),
+		Pos: &protocol.Position{
+			X: pos.X,
+			Y: pos.Y,
+			Z: pos.Z,
+		},
 	}
 
-	data, err := proto.Marshal(resp)
+	// 序列化响应
+	respData, err := proto.Marshal(resp)
 	if err != nil {
 		return err
 	}
@@ -681,7 +736,7 @@ func (ms *MapService) SendMapEnterResponse(conn interface{}, playerID id.PlayerI
 	// 发送响应到客户端
 	// 注意：这里需要根据实际的连接类型实现发送逻辑
 	// 目前留作接口，后续根据具体连接类型实现
-	_ = data
+	_ = respData
 	_ = conn
 	return nil
 }

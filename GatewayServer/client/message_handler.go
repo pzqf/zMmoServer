@@ -30,6 +30,7 @@ func NewMessageHandler(ipManager *security.IPManager, antiCheatManager *security
 func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPacket) error {
 	// 处理客户端消息
 	clientIP := session.GetClientIP()
+	sessionID := session.GetSid()
 
 	// 检查IP是否被封禁
 	if !mh.ipManager.CheckIPAllowed(clientIP) {
@@ -39,7 +40,7 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 	}
 
 	// 检查防作弊状态
-	clientID := fmt.Sprintf("client_%d", session.GetSid())
+	clientID := fmt.Sprintf("client_%d", sessionID)
 	allowed, reason := mh.antiCheatManager.CheckClientStatus(clientID)
 	if !allowed {
 		zLog.Warn("Client rejected due to cheat detection",
@@ -54,12 +55,12 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 
 	// 转发消息到GameServer
 	if mh.gameServerProxy != nil {
-		err := mh.gameServerProxy.SendToGameServer(session.GetSid(), packet.ProtoId, packet.Data)
+		err := mh.gameServerProxy.SendToGameServer(sessionID, int32(packet.ProtoId), packet.Data)
 		if err != nil {
 			zLog.Error("Failed to forward message to GameServer",
 				zap.Error(err),
-				zap.Uint64("session_id", uint64(session.GetSid())),
-				zap.Int32("proto_id", packet.ProtoId))
+				zap.Uint64("session_id", uint64(sessionID)),
+				zap.Int32("proto_id", int32(packet.ProtoId)))
 			return err
 		}
 	}

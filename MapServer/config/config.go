@@ -2,13 +2,13 @@ package config
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/pzqf/zCommon/common/id"
+	cfgutil "github.com/pzqf/zCommon/config"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
-	"github.com/pzqf/zCommon/discovery"
 )
 
 const (
@@ -17,7 +17,6 @@ const (
 	MapModeCrossGroup   = "cross_group"
 )
 
-// Config MapServer 配置
 type Config struct {
 	Server     ServerConfig         `ini:"Server"`
 	Database   DatabaseConfig       `ini:"Database"`
@@ -27,13 +26,11 @@ type Config struct {
 	Maps       MapsConfig           `ini:"Maps"`
 }
 
-// MapsConfig 地图配置
 type MapsConfig struct {
 	Mode   string `ini:"Mode"`
-	MapIDs []int `ini:"MapIDs"`
+	MapIDs []int  `ini:"MapIDs"`
 }
 
-// ServerConfig 服务器基本配置
 type ServerConfig struct {
 	ServerID          int    `ini:"ServerID"`
 	ServerName        string `ini:"ServerName"`
@@ -43,7 +40,6 @@ type ServerConfig struct {
 	HeartbeatInterval int    `ini:"HeartbeatInterval"`
 }
 
-// DatabaseConfig 数据库配置
 type DatabaseConfig struct {
 	DBType          string `ini:"DBType"`
 	DBHost          string `ini:"DBHost"`
@@ -56,13 +52,11 @@ type DatabaseConfig struct {
 	ConnMaxLifetime int    `ini:"ConnMaxLifetime"`
 }
 
-// GameServerConfig GameServer连接配置
 type GameServerConfig struct {
 	GameServerAddr           string `ini:"GameServerAddr"`
 	GameServerConnectTimeout int    `ini:"GameServerConnectTimeout"`
 }
 
-// LogConfig 日志配置
 type LogConfig struct {
 	Level              int    `ini:"Level"`
 	Console            bool   `ini:"Console"`
@@ -81,78 +75,74 @@ type LogConfig struct {
 	AsyncFlushInterval int    `ini:"async-flush-interval"`
 }
 
-
-
-// LoadConfig 加载配置文件
 func LoadConfig(configPath string) (*Config, error) {
 	zcfg := zConfig.NewConfig()
 	if err := zcfg.LoadINI(configPath); err != nil {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	cfg := &Config{
+	c := &Config{
 		Server: ServerConfig{
-			ServerID:          getConfigInt(zcfg, "Server.ServerID", 1),
-			ServerName:        getConfigString(zcfg, "Server.ServerName", "MapServer"),
-			GroupID:           getConfigInt(zcfg, "Server.GroupID", 1),
-			ListenAddr:        getConfigString(zcfg, "Server.ListenAddr", "0.0.0.0:9002"),
-			MaxConnections:    getConfigInt(zcfg, "Server.MaxConnections", 10000),
-			HeartbeatInterval: getConfigInt(zcfg, "Server.HeartbeatInterval", 30),
+			ServerID:          cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1),
+			ServerName:        cfgutil.GetConfigString(zcfg, "Server.ServerName", "MapServer"),
+			GroupID:           cfgutil.GetConfigInt(zcfg, "Server.GroupID", 1),
+			ListenAddr:        cfgutil.GetConfigString(zcfg, "Server.ListenAddr", "0.0.0.0:9002"),
+			MaxConnections:    cfgutil.GetConfigInt(zcfg, "Server.MaxConnections", 10000),
+			HeartbeatInterval: cfgutil.GetConfigInt(zcfg, "Server.HeartbeatInterval", 30),
 		},
 		Database: DatabaseConfig{
-			DBType:          getConfigString(zcfg, "Database.DBType", "mysql"),
-			DBHost:          getConfigString(zcfg, "Database.DBHost", "127.0.0.1"),
-			DBPort:          getConfigInt(zcfg, "Database.DBPort", 3306),
-			DBName:          getConfigString(zcfg, "Database.DBName", "MapDB"),
-			DBUser:          getConfigString(zcfg, "Database.DBUser", "root"),
-			DBPassword:      getConfigString(zcfg, "Database.DBPassword", ""),
-			MaxOpenConns:    getConfigInt(zcfg, "Database.MaxOpenConns", 100),
-			MaxIdleConns:    getConfigInt(zcfg, "Database.MaxIdleConns", 10),
-			ConnMaxLifetime: getConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
+			DBType:          cfgutil.GetConfigString(zcfg, "Database.DBType", "mysql"),
+			DBHost:          cfgutil.GetConfigString(zcfg, "Database.DBHost", "127.0.0.1"),
+			DBPort:          cfgutil.GetConfigInt(zcfg, "Database.DBPort", 3306),
+			DBName:          cfgutil.GetConfigString(zcfg, "Database.DBName", "MapDB"),
+			DBUser:          cfgutil.GetConfigString(zcfg, "Database.DBUser", "root"),
+			DBPassword:      cfgutil.GetConfigString(zcfg, "Database.DBPassword", ""),
+			MaxOpenConns:    cfgutil.GetConfigInt(zcfg, "Database.MaxOpenConns", 100),
+			MaxIdleConns:    cfgutil.GetConfigInt(zcfg, "Database.MaxIdleConns", 10),
+			ConnMaxLifetime: cfgutil.GetConfigInt(zcfg, "Database.ConnMaxLifetime", 3600),
 		},
 		GameServer: GameServerConfig{
-			GameServerAddr:           getConfigString(zcfg, "GameServer.GameServerAddr", "127.0.0.1:20002"),
-			GameServerConnectTimeout: getConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
+			GameServerAddr:           cfgutil.GetConfigString(zcfg, "GameServer.GameServerAddr", "127.0.0.1:20002"),
+			GameServerConnectTimeout: cfgutil.GetConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
 		},
 		Log: LogConfig{
-			Level:              getConfigInt(zcfg, "Log.Level", 0),
-			Console:            getConfigBool(zcfg, "Log.Console", true),
-			Filename:           getConfigString(zcfg, "Log.Filename", "./logs/server.log"),
-			MaxSize:            getConfigInt(zcfg, "Log.MaxSize", 100),
-			MaxDays:            getConfigInt(zcfg, "Log.MaxDays", 15),
-			MaxBackups:         getConfigInt(zcfg, "Log.MaxBackups", 10),
-			Compress:           getConfigBool(zcfg, "Log.Compress", true),
-			ShowCaller:         getConfigBool(zcfg, "Log.show-caller", true),
-			Stacktrace:         getConfigInt(zcfg, "Log.stacktrace", 3),
-			Sampling:           getConfigBool(zcfg, "Log.sampling", true),
-			SamplingInitial:    getConfigInt(zcfg, "Log.sampling-initial", 100),
-			SamplingThereafter: getConfigInt(zcfg, "Log.sampling-thereafter", 10),
-			Async:              getConfigBool(zcfg, "Log.async", true),
-			AsyncBufferSize:    getConfigInt(zcfg, "Log.async-buffer-size", 2048),
-			AsyncFlushInterval: getConfigInt(zcfg, "Log.async-flush-interval", 50),
+			Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", 0),
+			Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
+			Filename:           cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/server.log"),
+			MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
+			MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
+			MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
+			Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
+			ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.show-caller", true),
+			Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.stacktrace", 3),
+			Sampling:           cfgutil.GetConfigBool(zcfg, "Log.sampling", true),
+			SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.sampling-initial", 100),
+			SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.sampling-thereafter", 10),
+			Async:              cfgutil.GetConfigBool(zcfg, "Log.async", true),
+			AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.async-buffer-size", 2048),
+			AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.async-flush-interval", 50),
 		},
 		Etcd: discovery.EtcdConfig{
-			Endpoints:      getConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
-			Username:       getConfigString(zcfg, "Etcd.Username", ""),
-			Password:       getConfigString(zcfg, "Etcd.Password", ""),
-			CACertPath:     getConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
-			ClientCertPath: getConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
-			ClientKeyPath:  getConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
+			Endpoints:      cfgutil.GetConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
+			Username:       cfgutil.GetConfigString(zcfg, "Etcd.Username", ""),
+			Password:       cfgutil.GetConfigString(zcfg, "Etcd.Password", ""),
+			CACertPath:     cfgutil.GetConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+			ClientCertPath: cfgutil.GetConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+			ClientKeyPath:  cfgutil.GetConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 		},
 		Maps: MapsConfig{
-			Mode:   strings.ToLower(getConfigString(zcfg, "Maps.Mode", MapModeSingleServer)),
-			MapIDs: getConfigIntSlice(zcfg, "Maps.MapIDs", []int{1001}),
+			Mode:   strings.ToLower(cfgutil.GetConfigString(zcfg, "Maps.Mode", MapModeSingleServer)),
+			MapIDs: cfgutil.GetConfigIntSlice(zcfg, "Maps.MapIDs", []int{1001}),
 		},
 	}
 
-	if err := cfg.Validate(); err != nil {
+	if err := c.Validate(); err != nil {
 		return nil, err
 	}
 
-	return cfg, nil
+	return c, nil
 }
 
-// Validate 验证配置
 func (c *Config) Validate() error {
 	if _, err := id.ParseServerIDInt(int32(c.Server.ServerID)); err != nil {
 		return fmt.Errorf("invalid ServerID %d: %w", c.Server.ServerID, err)
@@ -179,7 +169,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// ToZLogConfig 转换为zLog配置
 func (c *LogConfig) ToZLogConfig() *zLog.Config {
 	return &zLog.Config{
 		Level:              c.Level,
@@ -200,49 +189,6 @@ func (c *LogConfig) ToZLogConfig() *zLog.Config {
 	}
 }
 
-// GetLogConfig 获取日志配置（实现LogConfigurable接口）
 func (c *Config) GetLogConfig() *zLog.Config {
 	return c.Log.ToZLogConfig()
-}
-
-// 辅助函数
-func getConfigString(cfg *zConfig.Config, key string, defaultValue string) string {
-	if value, err := cfg.GetString(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-func getConfigInt(cfg *zConfig.Config, key string, defaultValue int) int {
-	if value, err := cfg.GetInt(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-func getConfigBool(cfg *zConfig.Config, key string, defaultValue bool) bool {
-	if value, err := cfg.GetBool(key); err == nil {
-		return value
-	}
-	return defaultValue
-}
-
-func getConfigIntSlice(cfg *zConfig.Config, key string, defaultValue []int) []int {
-	if value, err := cfg.GetString(key); err == nil {
-		// 解析逗号分隔的字符串
-		strs := strings.Split(value, ",")
-		ints := make([]int, 0, len(strs))
-		for _, str := range strs {
-			str = strings.TrimSpace(str)
-			if str != "" {
-				if i, err := strconv.Atoi(str); err == nil {
-					ints = append(ints, i)
-				}
-			}
-		}
-		if len(ints) > 0 {
-			return ints
-		}
-	}
-	return defaultValue
 }

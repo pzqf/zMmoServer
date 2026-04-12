@@ -4,6 +4,10 @@ package protocol;
 
 option go_package = "./;protocol";
 
+// ============================================
+// 服务间通信协议
+// ============================================
+
 // 服务间消息ID
 enum InternalMsgId {
   MSG_INTERNAL_INVALID = 0;
@@ -25,20 +29,15 @@ enum InternalMsgId {
   MSG_INTERNAL_PLAYER_UNBIND_SERVER = 302;
   MSG_INTERNAL_PLAYER_TRANSFER = 303;
 
-  // 地图服务器相关 400-499
+  // 地图服务间通信 400-499
   MSG_INTERNAL_MAP_ENTER_REQUEST = 400;
   MSG_INTERNAL_MAP_ENTER_RESPONSE = 401;
   MSG_INTERNAL_MAP_LEAVE_REQUEST = 402;
   MSG_INTERNAL_MAP_LEAVE_RESPONSE = 403;
-  MSG_INTERNAL_MAP_MOVE_SYNC = 404;
-  MSG_INTERNAL_MAP_AOI_ENTER = 405;
-  MSG_INTERNAL_MAP_AOI_LEAVE = 406;
-  MSG_INTERNAL_MAP_AOI_UPDATE = 407;
-
-  // 战斗相关 500-599
-  MSG_INTERNAL_COMBAT_START = 500;
-  MSG_INTERNAL_COMBAT_ACTION = 501;
-  MSG_INTERNAL_COMBAT_END = 502;
+  MSG_INTERNAL_MAP_MOVE_REQUEST = 404;
+  MSG_INTERNAL_MAP_MOVE_SYNC = 405;
+  MSG_INTERNAL_MAP_ATTACK_REQUEST = 406;
+  MSG_INTERNAL_COMBAT_ACTION = 407;
 
   // 跨服相关 600-699
   MSG_INTERNAL_CROSS_SERVER_REQUEST = 600;
@@ -95,9 +94,9 @@ message ServiceHeartbeatRequest {
   int32 online_count = 3;
   int32 status = 4;
   float load = 5;
-  string external_ip = 6; // 对外服务IP
-  int32 external_port = 7; // 对外服务端口
-  string version = 8; // 服务版本
+  string external_ip = 6;
+  int32 external_port = 7;
+  string version = 8;
 }
 
 // 服务发现请求
@@ -184,209 +183,6 @@ message PlayerTransferResponse {
   string error_msg = 2;
 }
 
-// 地图进入请求（GameServer -> MapServer）
-message MapEnterRequest {
-  int64 player_id = 1;
-  int64 session_id = 2;
-  int64 map_id = 3;
-  float x = 4;
-  float y = 5;
-  float z = 6;
-  int32 game_server_id = 7;
-  bytes player_data = 8;
-}
-
-// 地图进入响应（MapServer -> GameServer）
-message MapEnterResponse {
-  bool success = 1;
-  string error_msg = 2;
-  int64 object_id = 3;
-  int64 map_id = 4;
-  float x = 5;
-  float y = 6;
-  float z = 7;
-}
-
-// 地图离开请求（GameServer -> MapServer）
-message MapLeaveRequest {
-  int64 player_id = 1;
-  int64 object_id = 2;
-  int64 map_id = 3;
-  int32 reason = 4;
-}
-
-// 地图离开响应（MapServer -> GameServer）
-message MapLeaveResponse {
-  bool success = 1;
-  string error_msg = 2;
-  int64 player_id = 3;
-}
-
-// 地图移动同步（MapServer -> Gateway -> Client）
-message MapMoveSync {
-  int64 object_id = 1;
-  int64 map_id = 2;
-  float x = 3;
-  float y = 4;
-  float z = 5;
-  float orientation = 6;
-  float speed = 7;
-  int32 move_type = 8;
-  int64 timestamp = 9;
-}
-
-// 地图移动请求（GameServer -> MapServer）
-message MapMoveRequest {
-  int64 player_id = 1;
-  int64 object_id = 2;
-  int64 map_id = 3;
-  float x = 4;
-  float y = 5;
-  float z = 6;
-  float orientation = 7;
-  int32 move_type = 8;
-}
-
-// 地图移动响应（MapServer -> GameServer）
-message MapMoveResponse {
-  bool success = 1;
-  string error_msg = 2;
-  int64 player_id = 3;
-  float x = 4;
-  float y = 5;
-  float z = 6;
-}
-
-// 地图攻击请求（GameServer -> MapServer）
-message MapAttackRequest {
-  int64 player_id = 1;
-  int64 object_id = 2;
-  int64 map_id = 3;
-  int64 target_id = 4;
-  int32 attack_type = 5;
-  int32 skill_id = 6;
-}
-
-// MapServer认证请求（MapServer -> GameServer）
-message MapServerAuthRequest {
-  string map_server_id = 1;
-  string version = 2;
-}
-
-// MapServer认证响应（GameServer -> MapServer）
-message MapServerAuthResponse {
-  bool success = 1;
-  string error_msg = 2;
-  string game_server_id = 3;
-}
-
-// 地图攻击响应（MapServer -> GameServer）
-message MapAttackResponse {
-  bool success = 1;
-  string error_msg = 2;
-  int64 player_id = 3;
-  int64 target_id = 4;
-  int64 damage = 5;
-  int64 target_hp = 6;
-  int64 target_max_hp = 7;
-  int32 exp = 8;
-  repeated InternalItemInfo items = 9;
-}
-
-// AOI进入通知（MapServer -> GameServer）
-message AoiEnterNotify {
-  int64 player_id = 1;
-  int64 map_id = 2;
-  repeated AoiObjectInfo objects = 3;
-}
-
-// AOI离开通知（MapServer -> GameServer）
-message AoiLeaveNotify {
-  int64 player_id = 1;
-  int64 map_id = 2;
-  repeated int64 object_ids = 3;
-}
-
-// AOI更新通知（MapServer -> GameServer）
-message AoiUpdateNotify {
-  int64 player_id = 1;
-  int64 map_id = 2;
-  repeated AoiObjectInfo objects = 3;
-}
-
-// AOI对象信息
-message AoiObjectInfo {
-  int64 object_id = 1;
-  int32 object_type = 2;
-  int64 entity_id = 3;
-  string name = 4;
-  float x = 5;
-  float y = 6;
-  float z = 7;
-  float orientation = 8;
-  int32 status = 9;
-  map<int32, int64> attributes = 10;
-}
-
-// 战斗开始通知
-message CombatStartNotify {
-  int64 combat_id = 1;
-  int64 map_id = 2;
-  repeated CombatUnitInfo attackers = 3;
-  repeated CombatUnitInfo defenders = 4;
-}
-
-// 战斗单位信息
-message CombatUnitInfo {
-  int64 unit_id = 1;
-  int32 unit_type = 2;
-  int64 entity_id = 3;
-  int32 hp = 4;
-  int32 max_hp = 5;
-  int32 mp = 6;
-  int32 max_mp = 7;
-}
-
-// 战斗行动通知
-message CombatActionNotify {
-  int64 combat_id = 1;
-  int64 actor_id = 2;
-  int32 action_type = 3;
-  int32 skill_id = 4;
-  repeated CombatEffect effects = 5;
-}
-
-// 战斗效果
-message CombatEffect {
-  int64 target_id = 1;
-  int32 effect_type = 2;
-  int32 value = 3;
-  int32 current_hp = 4;
-  int32 current_mp = 5;
-}
-
-// 战斗结束通知
-message CombatEndNotify {
-  int64 combat_id = 1;
-  int32 result = 2;
-  repeated CombatReward rewards = 3;
-}
-
-// 战斗奖励
-message CombatReward {
-  int64 unit_id = 1;
-  int64 exp = 2;
-  int64 gold = 3;
-  repeated InternalItemInfo items = 4;
-}
-
-// 内部物品信息（服务间通信使用）
-message InternalItemInfo {
-  int64 item_id = 1;
-  int32 config_id = 2;
-  int32 count = 3;
-}
-
 // 跨服请求
 message CrossServerRequest {
   int64 request_id = 1;
@@ -407,6 +203,28 @@ message CrossServerResponse {
   bytes data = 6;
 }
 
+// 跨服消息包装
+message CrossServerMessage {
+  uint64 trace_id = 1;
+  uint32 from_server_id = 2;
+  uint32 to_server_id = 3;
+  uint32 from_service = 4;
+  uint32 to_service = 5;
+  BaseMessage message = 6;
+}
+
+// 基础消息结构
+message BaseMessage {
+  uint64 session_id = 1;
+  uint64 player_id = 2;
+  uint64 timestamp = 3;
+  uint32 msg_id = 4;
+  uint32 server_id = 5;
+  uint32 map_id = 6;
+  uint32 map_server_id = 7;
+  bytes data = 8;
+}
+
 // 内部消息包装
 message InternalMessage {
   int32 msg_id = 1;
@@ -414,4 +232,80 @@ message InternalMessage {
   int64 timestamp = 3;
   int32 source_server_id = 4;
   int32 target_server_id = 5;
+}
+
+// ============================================
+// 地图服务间通信协议 (GameServer <-> MapServer)
+// ============================================
+
+// 地图进入请求
+message MapEnterRequest {
+  int64 player_id = 1;
+  int64 map_id = 2;
+  float x = 3;
+  float y = 4;
+  float z = 5;
+}
+
+// 地图进入响应
+message MapEnterResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 object_id = 3;
+  int64 map_id = 4;
+  float x = 5;
+  float y = 6;
+  float z = 7;
+}
+
+// 地图离开请求
+message MapLeaveRequest {
+  int64 player_id = 1;
+  int64 map_id = 2;
+  int32 reason = 3;
+}
+
+// 地图离开响应
+message MapLeaveResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+}
+
+// 地图移动请求
+message MapMoveRequest {
+  int64 player_id = 1;
+  int64 object_id = 2;
+  int64 map_id = 3;
+  float x = 4;
+  float y = 5;
+  float z = 6;
+}
+
+// 地图移动响应
+message MapMoveResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+  float x = 4;
+  float y = 5;
+  float z = 6;
+}
+
+// 地图攻击请求
+message MapAttackRequest {
+  int64 player_id = 1;
+  int64 object_id = 2;
+  int64 map_id = 3;
+  int64 target_id = 4;
+}
+
+// 地图攻击响应
+message MapAttackResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 player_id = 3;
+  int64 target_id = 4;
+  int64 damage = 5;
+  int64 target_hp = 6;
 }
