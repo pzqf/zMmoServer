@@ -20,37 +20,37 @@ type Metrics struct {
 	sessionManager *session.SessionManager
 	mapService     *maps.MapService
 
-	connectionsTotal    prometheus.Counter
-	connectionsCurrent  prometheus.Gauge
-	sessionsCurrent     prometheus.Gauge
-	messagesReceived    prometheus.Counter
-	messagesSent        prometheus.Counter
-	messagesFailed      prometheus.Counter
-	messageDuration     prometheus.Histogram
-	playersOnline       prometheus.Gauge
-	playersLoginTotal   prometheus.Counter
-	playersLogoutTotal  prometheus.Counter
-	playersCreateTotal  prometheus.Counter
-	mapsLoaded          prometheus.Gauge
-	mapEnterTotal       prometheus.Counter
-	mapLeaveTotal       prometheus.Counter
-	mapLoadDuration     prometheus.Histogram
-	serviceRegister     prometheus.Counter
-	serviceUnregister   prometheus.Counter
-	serviceDiscoveryOK  prometheus.Counter
+	connectionsTotal     prometheus.Counter
+	connectionsCurrent   prometheus.Gauge
+	sessionsCurrent      prometheus.Gauge
+	messagesReceived     prometheus.Counter
+	messagesSent         prometheus.Counter
+	messagesFailed       prometheus.Counter
+	messageDuration      prometheus.Histogram
+	playersOnline        prometheus.Gauge
+	playersLoginTotal    prometheus.Counter
+	playersLogoutTotal   prometheus.Counter
+	playersCreateTotal   prometheus.Counter
+	mapsLoaded           prometheus.Gauge
+	mapEnterTotal        prometheus.Counter
+	mapLeaveTotal        prometheus.Counter
+	mapLoadDuration      prometheus.Histogram
+	serviceRegister      prometheus.Counter
+	serviceUnregister    prometheus.Counter
+	serviceDiscoveryOK   prometheus.Counter
 	serviceDiscoveryFail prometheus.Counter
-	serviceHeartbeat    prometheus.Counter
-	healthCheckOK       prometheus.Counter
-	healthCheckFail     prometheus.Counter
-	outboxPending       prometheus.Gauge
-	outboxDead          prometheus.Gauge
-	gatewayDedupeHits   prometheus.Gauge
+	serviceHeartbeat     prometheus.Counter
+	healthCheckOK        prometheus.Counter
+	healthCheckFail      prometheus.Counter
+	outboxPending        prometheus.Gauge
+	outboxDead           prometheus.Gauge
+	gatewayDedupeHits    prometheus.Gauge
 }
 
 func NewMetrics(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, mapService *maps.MapService) *Metrics {
 	commonCfg := &sharedMetrics.MetricsConfig{
 		Enabled:       cfg.Metrics.Enabled,
-		ListenAddress: cfg.Metrics.MetricsAddr,
+		ListenAddress: cfg.Metrics.ListenAddress,
 	}
 
 	m := &Metrics{

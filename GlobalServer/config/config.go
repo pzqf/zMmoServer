@@ -14,34 +14,35 @@ import (
 )
 
 type Config struct {
-	Server   ServerConfig         `ini:"server"`
-	HTTP     HTTPConfig           `ini:"http"`
-	Etcd     discovery.EtcdConfig `ini:"etcd"`
-	Log      zLog.Config          `ini:"log"`
-	Database db.DBConfig          `ini:"database.global"`
-	Redis    RedisConfig          `ini:"redis"`
-	Pprof    PprofConfig          `ini:"pprof"`
-	Metrics  MetricsConfig        `ini:"metrics"`
+	Server   ServerConfig         `ini:"Server"`
+	HTTP     HTTPConfig           `ini:"HTTP"`
+	Etcd     discovery.EtcdConfig `ini:"Etcd"`
+	Log      zLog.Config          `ini:"Log"`
+	Database db.DBConfig          `ini:"Database"`
+	Redis    RedisConfig          `ini:"Redis"`
+	Pprof    PprofConfig          `ini:"Pprof"`
+	Metrics  MetricsConfig        `ini:"Metrics"`
 }
 
 type ServerConfig struct {
-	ServerID     int32  `ini:"server_id"`
-	ServerName   string `ini:"server_name"`
-	WorkerID     int64  `ini:"worker_id"`
-	DatacenterID int64  `ini:"datacenter_id"`
-	JWTSecret    string `ini:"jwt_secret"`
+	ServerID     int32  `ini:"ServerID"`
+	ServerName   string `ini:"ServerName"`
+	GroupID      string `ini:"GroupID"`
+	WorkerID     int64  `ini:"WorkerID"`
+	DatacenterID int64  `ini:"DatacenterID"`
+	JWTSecret    string `ini:"JWTSecret"`
 }
 
 type HTTPConfig struct {
-	ListenAddress     string `ini:"listen_address"`
-	MaxClientCount    int    `ini:"max_client_count"`
-	MaxPacketDataSize int32  `ini:"max_packet_data_size"`
-	Enabled           bool   `ini:"enabled"`
+	ListenAddress     string `ini:"ListenAddress"`
+	MaxClientCount    int    `ini:"MaxClientCount"`
+	MaxPacketDataSize int32  `ini:"MaxPacketDataSize"`
+	Enabled           bool   `ini:"Enabled"`
 }
 
 type PprofConfig struct {
-	Enabled       bool   `ini:"enabled"`
-	ListenAddress string `ini:"listen_address"`
+	Enabled       bool   `ini:"Enabled"`
+	ListenAddress string `ini:"ListenAddress"`
 }
 
 type MetricsConfig metrics.MetricsConfig
@@ -54,68 +55,69 @@ func LoadConfig(filePath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	serverID := cfgutil.GetConfigInt(zcfg, "server.server_id", 1)
+	serverID := cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1)
 
 	cfg := &Config{
 		Server: ServerConfig{
 			ServerID:     int32(serverID),
-			ServerName:   cfgutil.GetConfigString(zcfg, "server.server_name", "GlobalServer"),
-			WorkerID:     int64(cfgutil.GetConfigInt(zcfg, "server.worker_id", 1)),
-			DatacenterID: int64(cfgutil.GetConfigInt(zcfg, "server.datacenter_id", 1)),
-			JWTSecret:    cfgutil.GetConfigString(zcfg, "server.jwt_secret", "zMmoServerSecretKey"),
+			ServerName:   cfgutil.GetConfigString(zcfg, "Server.ServerName", "GlobalServer"),
+			GroupID:      cfgutil.GetConfigString(zcfg, "Server.GroupID", "default"),
+			WorkerID:     int64(cfgutil.GetConfigInt(zcfg, "Server.WorkerID", 1)),
+			DatacenterID: int64(cfgutil.GetConfigInt(zcfg, "Server.DatacenterID", 1)),
+			JWTSecret:    cfgutil.GetConfigString(zcfg, "Server.JWTSecret", "zMmoServerSecretKey"),
 		},
 		HTTP: HTTPConfig{
-			ListenAddress:     cfgutil.GetConfigString(zcfg, "http.listen_address", "0.0.0.0:8888"),
-			MaxClientCount:    cfgutil.GetConfigInt(zcfg, "http.max_client_count", 10000),
-			MaxPacketDataSize: int32(cfgutil.GetConfigInt(zcfg, "http.max_packet_data_size", 1048576)),
-			Enabled:           cfgutil.GetConfigBool(zcfg, "http.enabled", true),
+			ListenAddress:     cfgutil.GetConfigString(zcfg, "HTTP.ListenAddress", "0.0.0.0:8888"),
+			MaxClientCount:    cfgutil.GetConfigInt(zcfg, "HTTP.MaxClientCount", 10000),
+			MaxPacketDataSize: int32(cfgutil.GetConfigInt(zcfg, "HTTP.MaxPacketDataSize", 1048576)),
+			Enabled:           cfgutil.GetConfigBool(zcfg, "HTTP.Enabled", true),
 		},
 		Log: zLog.Config{
-			Level:              cfgutil.GetConfigInt(zcfg, "log.level", 0),
-			Console:            cfgutil.GetConfigBool(zcfg, "log.console", true),
-			ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "log.console_level", 0),
-			Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "log.filename", "./logs/global_server_{server_id}.log"), "{server_id}", serverID),
-			MaxSize:            cfgutil.GetConfigInt(zcfg, "log.max_size", 100),
-			MaxDays:            cfgutil.GetConfigInt(zcfg, "log.max_days", 15),
-			MaxBackups:         cfgutil.GetConfigInt(zcfg, "log.max_backups", 10),
-			Compress:           cfgutil.GetConfigBool(zcfg, "log.compress", true),
-			ShowCaller:         cfgutil.GetConfigBool(zcfg, "log.show_caller", true),
-			Stacktrace:         cfgutil.GetConfigInt(zcfg, "log.stacktrace", 3),
-			Sampling:           cfgutil.GetConfigBool(zcfg, "log.sampling", true),
-			SamplingInitial:    cfgutil.GetConfigInt(zcfg, "log.sampling_initial", 100),
-			SamplingThereafter: cfgutil.GetConfigInt(zcfg, "log.sampling_thereafter", 10),
-			Async:              cfgutil.GetConfigBool(zcfg, "log.async", true),
-			AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "log.async_buffer_size", 2048),
-			AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "log.async_flush_interval", 50),
+			Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", 0),
+			Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
+			ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "Log.ConsoleLevel", 0),
+			Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/global_server_{ServerID}.log"), "{ServerID}", serverID),
+			MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
+			MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
+			MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
+			Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
+			ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.ShowCaller", true),
+			Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.Stacktrace", 3),
+			Sampling:           cfgutil.GetConfigBool(zcfg, "Log.Sampling", true),
+			SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.SamplingInitial", 100),
+			SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.SamplingThereafter", 10),
+			Async:              cfgutil.GetConfigBool(zcfg, "Log.Async", true),
+			AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.AsyncBufferSize", 2048),
+			AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.AsyncFlushInterval", 50),
 		},
 		Database: db.DBConfig{
-			Host:           cfgutil.GetConfigString(zcfg, "database.global.host", "localhost"),
-			Port:           cfgutil.GetConfigInt(zcfg, "database.global.port", 3306),
-			User:           cfgutil.GetConfigString(zcfg, "database.global.user", "root"),
-			Password:       cfgutil.GetConfigString(zcfg, "database.global.password", "123456"),
-			DBName:         cfgutil.GetConfigString(zcfg, "database.global.dbname", "global"),
-			Charset:        cfgutil.GetConfigString(zcfg, "database.global.charset", "utf8mb4"),
-			MaxIdle:        cfgutil.GetConfigInt(zcfg, "database.global.max_idle", 10),
-			MaxOpen:        cfgutil.GetConfigInt(zcfg, "database.global.max_open", 100),
-			Driver:         cfgutil.GetConfigString(zcfg, "database.global.driver", "mysql"),
-			MaxPoolSize:    cfgutil.GetConfigInt(zcfg, "database.global.max_pool_size", 100),
-			MinPoolSize:    cfgutil.GetConfigInt(zcfg, "database.global.min_pool_size", 10),
-			ConnectTimeout: cfgutil.GetConfigInt(zcfg, "database.global.connect_timeout", 30),
+			Host:           cfgutil.GetConfigString(zcfg, "Database.Host", "localhost"),
+			Port:           cfgutil.GetConfigInt(zcfg, "Database.Port", 3306),
+			User:           cfgutil.GetConfigString(zcfg, "Database.User", "root"),
+			Password:       cfgutil.GetConfigString(zcfg, "Database.Password", "123456"),
+			DBName:         cfgutil.GetConfigString(zcfg, "Database.DBName", "global"),
+			Charset:        cfgutil.GetConfigString(zcfg, "Database.Charset", "utf8mb4"),
+			MaxIdle:        cfgutil.GetConfigInt(zcfg, "Database.MaxIdle", 10),
+			MaxOpen:        cfgutil.GetConfigInt(zcfg, "Database.MaxOpen", 100),
+			Driver:         cfgutil.GetConfigString(zcfg, "Database.Driver", "mysql"),
+			MaxPoolSize:    cfgutil.GetConfigInt(zcfg, "Database.MaxPoolSize", 100),
+			MinPoolSize:    cfgutil.GetConfigInt(zcfg, "Database.MinPoolSize", 10),
+			ConnectTimeout: cfgutil.GetConfigInt(zcfg, "Database.ConnectTimeout", 30),
 		},
 		Redis: RedisConfig{
-			Host:     cfgutil.GetConfigString(zcfg, "redis.host", "192.168.91.128"),
-			Port:     cfgutil.GetConfigInt(zcfg, "redis.port", 6379),
-			Password: cfgutil.GetConfigString(zcfg, "redis.password", ""),
-			DB:       cfgutil.GetConfigInt(zcfg, "redis.db", 0),
-			PoolSize: cfgutil.GetConfigInt(zcfg, "redis.pool_size", 10),
+			Host:     cfgutil.GetConfigString(zcfg, "Redis.Host", "192.168.91.128"),
+			Port:     cfgutil.GetConfigInt(zcfg, "Redis.Port", 6379),
+			Password: cfgutil.GetConfigString(zcfg, "Redis.Password", ""),
+			DB:       cfgutil.GetConfigInt(zcfg, "Redis.DB", 0),
+			PoolSize: cfgutil.GetConfigInt(zcfg, "Redis.PoolSize", 10),
 		},
 		Pprof: PprofConfig{
-			Enabled:       cfgutil.GetConfigBool(zcfg, "pprof.enabled", false),
-			ListenAddress: cfgutil.GetConfigString(zcfg, "pprof.listen_address", "localhost:6060"),
+			Enabled:       cfgutil.GetConfigBool(zcfg, "Pprof.Enabled", false),
+			ListenAddress: cfgutil.GetConfigString(zcfg, "Pprof.ListenAddress", "localhost:6060"),
 		},
 		Metrics: MetricsConfig{
-			Enabled:       cfgutil.GetConfigBool(zcfg, "metrics.enabled", true),
-			ListenAddress: cfgutil.GetConfigString(zcfg, "metrics.listen_address", "0.0.0.0:8889"),
+			Enabled:       cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
+			ListenAddress: cfgutil.GetConfigString(zcfg, "Metrics.ListenAddress", "0.0.0.0:8889"),
 		},
 		Etcd: discovery.EtcdConfig{
 			Endpoints:      cfgutil.GetConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
@@ -136,16 +138,16 @@ func LoadConfig(filePath string) (*Config, error) {
 
 func (c *Config) Validate() error {
 	if c.Server.ServerID <= 0 {
-		return fmt.Errorf("server_id must be greater than 0")
+		return fmt.Errorf("ServerID must be greater than 0")
 	}
 	if c.HTTP.ListenAddress == "" {
-		return fmt.Errorf("http.listen_address is required")
+		return fmt.Errorf("HTTP.ListenAddress is required")
 	}
 	if c.Database.Host == "" {
-		return fmt.Errorf("database.global.host is required")
+		return fmt.Errorf("Database.Host is required")
 	}
 	if c.Redis.Host == "" {
-		return fmt.Errorf("redis.host is required")
+		return fmt.Errorf("Redis.Host is required")
 	}
 	return nil
 }

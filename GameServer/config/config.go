@@ -2,10 +2,10 @@ package config
 
 import (
 	"fmt"
-	"strings"
 
 	cfgutil "github.com/pzqf/zCommon/config"
 	"github.com/pzqf/zCommon/discovery"
+	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
 )
@@ -17,8 +17,9 @@ type Config struct {
 	MapServer    MapServerConfig      `ini:"MapServer"`
 	GlobalServer GlobalServerConfig   `ini:"GlobalServer"`
 	Etcd         discovery.EtcdConfig `ini:"Etcd"`
-	Logging      LoggingConfig        `ini:"Logging"`
+	Log          zLog.Config          `ini:"Log"`
 	Metrics      MetricsConfig        `ini:"Metrics"`
+	Pprof        PprofConfig          `ini:"Pprof"`
 }
 
 type ServerConfig struct {
@@ -70,27 +71,11 @@ type GlobalServerConfig struct {
 	RegisterInterval int    `ini:"RegisterInterval"`
 }
 
-type LoggingConfig struct {
-	LogLevel           int    `ini:"LogLevel"`
-	Console            bool   `ini:"console"`
-	LogFile            string `ini:"LogFile"`
-	LogMaxSize         int    `ini:"LogMaxSize"`
-	LogMaxBackups      int    `ini:"LogMaxBackups"`
-	LogMaxAge          int    `ini:"LogMaxAge"`
-	Compress           bool   `ini:"compress"`
-	ShowCaller         bool   `ini:"show-caller"`
-	Stacktrace         int    `ini:"stacktrace"`
-	Sampling           bool   `ini:"sampling"`
-	SamplingInitial    int    `ini:"sampling-initial"`
-	SamplingThereafter int    `ini:"sampling-thereafter"`
-	Async              bool   `ini:"async"`
-	AsyncBufferSize    int    `ini:"async-buffer-size"`
-	AsyncFlushInterval int    `ini:"async-flush-interval"`
-}
+type MetricsConfig metrics.MetricsConfig
 
-type MetricsConfig struct {
-	Enabled     bool   `ini:"Enabled"`
-	MetricsAddr string `ini:"MetricsAddr"`
+type PprofConfig struct {
+	Enabled       bool   `ini:"Enabled"`
+	ListenAddress string `ini:"ListenAddress"`
 }
 
 var globalConfig *Config
@@ -101,11 +86,13 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
+	serverID := cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1)
+
 	c := &Config{}
 
 	c.Server = ServerConfig{
 		ServerName:          cfgutil.GetConfigString(zcfg, "Server.ServerName", cfgutil.GetEnv("SERVER_NAME", "GameServer")),
-		ServerID:            cfgutil.GetConfigInt(zcfg, "Server.ServerID", cfgutil.GetEnvAsInt("SERVER_ID", 1)),
+		ServerID:            serverID,
 		GroupID:             cfgutil.GetConfigInt(zcfg, "Server.GroupID", 1),
 		ListenAddr:          cfgutil.GetConfigString(zcfg, "Server.ListenAddr", cfgutil.GetEnv("LISTEN_ADDR", "0.0.0.0:9001")),
 		ExternalAddr:        cfgutil.GetConfigString(zcfg, "Server.ExternalAddr", cfgutil.GetEnv("GAME_EXTERNAL_ADDR", "")),
@@ -152,27 +139,33 @@ func LoadConfig(configPath string) (*Config, error) {
 		MapServerAddr: cfgutil.GetConfigString(zcfg, "MapServer.MapServerAddr", cfgutil.GetEnv("MAP_SERVER_ADDR", "127.0.0.1:9002")),
 	}
 
-	c.Logging = LoggingConfig{
-		LogLevel:           cfgutil.GetConfigInt(zcfg, "Logging.LogLevel", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
-		Console:            cfgutil.GetConfigBool(zcfg, "Logging.console", true),
-		LogFile:            cfgutil.GetConfigString(zcfg, "Logging.LogFile", "logs/server.log"),
-		LogMaxSize:         cfgutil.GetConfigInt(zcfg, "Logging.LogMaxSize", 100),
-		LogMaxBackups:      cfgutil.GetConfigInt(zcfg, "Logging.LogMaxBackups", 10),
-		LogMaxAge:          cfgutil.GetConfigInt(zcfg, "Logging.LogMaxAge", 15),
-		Compress:           cfgutil.GetConfigBool(zcfg, "Logging.compress", true),
-		ShowCaller:         cfgutil.GetConfigBool(zcfg, "Logging.show-caller", true),
-		Stacktrace:         cfgutil.GetConfigInt(zcfg, "Logging.stacktrace", 3),
-		Sampling:           cfgutil.GetConfigBool(zcfg, "Logging.sampling", true),
-		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Logging.sampling-initial", 100),
-		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Logging.sampling-thereafter", 10),
-		Async:              cfgutil.GetConfigBool(zcfg, "Logging.async", true),
-		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Logging.async-buffer-size", 2048),
-		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Logging.async-flush-interval", 50),
+	c.Log = zLog.Config{
+		Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
+		Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
+		ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "Log.ConsoleLevel", 0),
+		Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/game_server_{ServerID}.log"), "{ServerID}", serverID),
+		MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
+		MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
+		MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
+		Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
+		ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.ShowCaller", true),
+		Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.Stacktrace", 3),
+		Sampling:           cfgutil.GetConfigBool(zcfg, "Log.Sampling", true),
+		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.SamplingInitial", 100),
+		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.SamplingThereafter", 10),
+		Async:              cfgutil.GetConfigBool(zcfg, "Log.Async", true),
+		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.AsyncBufferSize", 2048),
+		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.AsyncFlushInterval", 50),
 	}
 
 	c.Metrics = MetricsConfig{
-		Enabled:     cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
-		MetricsAddr: cfgutil.GetConfigString(zcfg, "Metrics.MetricsAddr", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9092")),
+		Enabled:       cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
+		ListenAddress: cfgutil.GetConfigString(zcfg, "Metrics.ListenAddress", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9092")),
+	}
+
+	c.Pprof = PprofConfig{
+		Enabled:       cfgutil.GetConfigBool(zcfg, "Pprof.Enabled", false),
+		ListenAddress: cfgutil.GetConfigString(zcfg, "Pprof.ListenAddress", "localhost:6061"),
 	}
 
 	c.Etcd = discovery.EtcdConfig{
@@ -193,26 +186,5 @@ func GetServerConfig() *Config {
 }
 
 func (c *Config) GetLogConfig() *zLog.Config {
-	logFile := c.Logging.LogFile
-	if strings.Contains(logFile, "{server_id}") {
-		logFile = strings.ReplaceAll(logFile, "{server_id}", fmt.Sprintf("%06d", c.Server.ServerID))
-	}
-
-	return &zLog.Config{
-		Level:              c.Logging.LogLevel,
-		Console:            c.Logging.Console,
-		Filename:           logFile,
-		MaxSize:            c.Logging.LogMaxSize,
-		MaxDays:            c.Logging.LogMaxAge,
-		MaxBackups:         c.Logging.LogMaxBackups,
-		Compress:           c.Logging.Compress,
-		ShowCaller:         c.Logging.ShowCaller,
-		Stacktrace:         c.Logging.Stacktrace,
-		Sampling:           c.Logging.Sampling,
-		SamplingInitial:    c.Logging.SamplingInitial,
-		SamplingThereafter: c.Logging.SamplingThereafter,
-		Async:              c.Logging.Async,
-		AsyncBufferSize:    c.Logging.AsyncBufferSize,
-		AsyncFlushInterval: c.Logging.AsyncFlushInterval,
-	}
+	return &c.Log
 }

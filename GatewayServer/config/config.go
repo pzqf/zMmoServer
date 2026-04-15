@@ -5,6 +5,7 @@ import (
 
 	cfgutil "github.com/pzqf/zCommon/config"
 	"github.com/pzqf/zCommon/discovery"
+	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zUtil/zConfig"
@@ -13,12 +14,13 @@ import (
 type Config struct {
 	Server      ServerConfig           `ini:"Server"`
 	Security    SecurityConfig         `ini:"Security"`
-	DDoS        zNet.DDoSConfig        `ini:"ddos"`
-	Compression zNet.CompressionConfig `ini:"compression"`
+	DDoS        zNet.DDoSConfig        `ini:"DDoS"`
+	Compression zNet.CompressionConfig `ini:"Compression"`
 	GameServer  GameServerConfig       `ini:"GameServer"`
 	Etcd        discovery.EtcdConfig   `ini:"Etcd"`
-	Log         zLog.Config            `ini:"log"`
+	Log         zLog.Config            `ini:"Log"`
 	Metrics     MetricsConfig          `ini:"Metrics"`
+	Pprof       PprofConfig            `ini:"Pprof"`
 }
 
 type ServerConfig struct {
@@ -30,7 +32,7 @@ type ServerConfig struct {
 	MaxConnections      int    `ini:"MaxConnections"`
 	ConnectionTimeout   int    `ini:"ConnectionTimeout"`
 	HeartbeatInterval   int    `ini:"HeartbeatInterval"`
-	JWTSecret           string `ini:"jwt_secret"`
+	JWTSecret           string `ini:"JWTSecret"`
 	UseWorkerPool       bool   `ini:"UseWorkerPool"`
 	WorkerPoolSize      int    `ini:"WorkerPoolSize"`
 	WorkerQueueSize     int    `ini:"WorkerQueueSize"`
@@ -57,9 +59,11 @@ type GameServerConfig struct {
 	GameServerConnectTimeout int    `ini:"GameServerConnectTimeout"`
 }
 
-type MetricsConfig struct {
-	Enabled     bool   `ini:"Enabled"`
-	MetricsAddr string `ini:"MetricsAddr"`
+type MetricsConfig metrics.MetricsConfig
+
+type PprofConfig struct {
+	Enabled       bool   `ini:"Enabled"`
+	ListenAddress string `ini:"ListenAddress"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -87,7 +91,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		MaxConnections:      cfgutil.GetConfigInt(zcfg, "Server.MaxConnections", 10000),
 		ConnectionTimeout:   cfgutil.GetConfigInt(zcfg, "Server.ConnectionTimeout", 300),
 		HeartbeatInterval:   cfgutil.GetConfigInt(zcfg, "Server.HeartbeatInterval", 30),
-		JWTSecret:           cfgutil.GetConfigString(zcfg, "Server.jwt_secret", cfgutil.GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
+		JWTSecret:           cfgutil.GetConfigString(zcfg, "Server.JWTSecret", cfgutil.GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
 		UseWorkerPool:       cfgutil.GetConfigBool(zcfg, "Server.UseWorkerPool", true),
 		WorkerPoolSize:      cfgutil.GetConfigInt(zcfg, "Server.WorkerPoolSize", 100),
 		WorkerQueueSize:     cfgutil.GetConfigInt(zcfg, "Server.WorkerQueueSize", 10000),
@@ -109,19 +113,19 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	c.DDoS = zNet.DDoSConfig{
-		MaxConnPerIP:      cfgutil.GetConfigInt(zcfg, "ddos.max_conn_per_ip", 10),
-		ConnTimeWindow:    cfgutil.GetConfigInt(zcfg, "ddos.conn_time_window", 60),
-		MaxPacketsPerIP:   cfgutil.GetConfigInt(zcfg, "ddos.max_packets_per_ip", 100),
-		PacketTimeWindow:  cfgutil.GetConfigInt(zcfg, "ddos.packet_time_window", 1),
-		MaxBytesPerIP:     int64(cfgutil.GetConfigInt(zcfg, "ddos.max_bytes_per_ip", 10*1024*1024)),
-		TrafficTimeWindow: cfgutil.GetConfigInt(zcfg, "ddos.traffic_time_window", 3600),
-		BanDuration:       cfgutil.GetConfigInt(zcfg, "ddos.ban_duration", 24*3600),
+		MaxConnPerIP:      cfgutil.GetConfigInt(zcfg, "DDoS.MaxConnPerIP", 10),
+		ConnTimeWindow:    cfgutil.GetConfigInt(zcfg, "DDoS.ConnTimeWindow", 60),
+		MaxPacketsPerIP:   cfgutil.GetConfigInt(zcfg, "DDoS.MaxPacketsPerIP", 100),
+		PacketTimeWindow:  cfgutil.GetConfigInt(zcfg, "DDoS.PacketTimeWindow", 1),
+		MaxBytesPerIP:     int64(cfgutil.GetConfigInt(zcfg, "DDoS.MaxBytesPerIP", 10*1024*1024)),
+		TrafficTimeWindow: cfgutil.GetConfigInt(zcfg, "DDoS.TrafficTimeWindow", 3600),
+		BanDuration:       cfgutil.GetConfigInt(zcfg, "DDoS.BanDuration", 24*3600),
 	}
 
 	c.Compression = zNet.CompressionConfig{
-		Enabled:              cfgutil.GetConfigBool(zcfg, "compression.enabled", false),
-		CompressionThreshold: cfgutil.GetConfigInt(zcfg, "compression.threshold", 1024),
-		MaxCompressSize:      cfgutil.GetConfigInt(zcfg, "compression.max_compress_size", 1024*1024),
+		Enabled:              cfgutil.GetConfigBool(zcfg, "Compression.Enabled", false),
+		CompressionThreshold: cfgutil.GetConfigInt(zcfg, "Compression.CompressionThreshold", 1024),
+		MaxCompressSize:      cfgutil.GetConfigInt(zcfg, "Compression.MaxCompressSize", 1024*1024),
 	}
 
 	c.GameServer = GameServerConfig{
@@ -131,27 +135,32 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	c.Log = zLog.Config{
-		Level:              cfgutil.GetConfigInt(zcfg, "log.level", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
-		Console:            cfgutil.GetConfigBool(zcfg, "log.console", true),
-		ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "log.console_level", 0),
-		Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "log.filename", "./logs/gateway_server_{server_id}.log"), "{server_id}", serverID),
-		MaxSize:            cfgutil.GetConfigInt(zcfg, "log.max_size", 100),
-		MaxDays:            cfgutil.GetConfigInt(zcfg, "log.max_days", 15),
-		MaxBackups:         cfgutil.GetConfigInt(zcfg, "log.max_backups", 10),
-		Compress:           cfgutil.GetConfigBool(zcfg, "log.compress", true),
-		ShowCaller:         cfgutil.GetConfigBool(zcfg, "log.show_caller", true),
-		Stacktrace:         cfgutil.GetConfigInt(zcfg, "log.stacktrace", 3),
-		Sampling:           cfgutil.GetConfigBool(zcfg, "log.sampling", true),
-		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "log.sampling_initial", 100),
-		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "log.sampling_thereafter", 10),
-		Async:              cfgutil.GetConfigBool(zcfg, "log.async", true),
-		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "log.async_buffer_size", 2048),
-		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "log.async_flush_interval", 50),
+		Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
+		Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
+		ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "Log.ConsoleLevel", 0),
+		Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/gateway_server_{ServerID}.log"), "{ServerID}", serverID),
+		MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
+		MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
+		MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
+		Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
+		ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.ShowCaller", true),
+		Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.Stacktrace", 3),
+		Sampling:           cfgutil.GetConfigBool(zcfg, "Log.Sampling", true),
+		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.SamplingInitial", 100),
+		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.SamplingThereafter", 10),
+		Async:              cfgutil.GetConfigBool(zcfg, "Log.Async", true),
+		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.AsyncBufferSize", 2048),
+		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.AsyncFlushInterval", 50),
 	}
 
 	c.Metrics = MetricsConfig{
-		Enabled:     cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
-		MetricsAddr: cfgutil.GetConfigString(zcfg, "Metrics.MetricsAddr", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
+		Enabled:       cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
+		ListenAddress: cfgutil.GetConfigString(zcfg, "Metrics.ListenAddress", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
+	}
+
+	c.Pprof = PprofConfig{
+		Enabled:       cfgutil.GetConfigBool(zcfg, "Pprof.Enabled", false),
+		ListenAddress: cfgutil.GetConfigString(zcfg, "Pprof.ListenAddress", "localhost:6062"),
 	}
 
 	c.Etcd = discovery.EtcdConfig{

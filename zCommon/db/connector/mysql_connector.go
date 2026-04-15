@@ -374,3 +374,31 @@ func (c *MySQLConnector) GetMongoDB() *mongo.Database {
 	return nil
 }
 
+func (c *MySQLConnector) QuerySync(query string, args ...interface{}) (*sql.Rows, error) {
+	if !c.isRunning {
+		return nil, fmt.Errorf("mysql connector is not running")
+	}
+	startTime := time.Now()
+	c.metrics.IncCounter("total_queries")
+	rows, err := c.db.Query(query, args...)
+	c.metrics.RecordTimer("query_latency", time.Since(startTime))
+	if err != nil {
+		c.metrics.IncCounter("total_errors")
+	}
+	return rows, err
+}
+
+func (c *MySQLConnector) ExecSync(query string, args ...interface{}) (sql.Result, error) {
+	if !c.isRunning {
+		return nil, fmt.Errorf("mysql connector is not running")
+	}
+	startTime := time.Now()
+	c.metrics.IncCounter("total_executes")
+	result, err := c.db.Exec(query, args...)
+	c.metrics.RecordTimer("execute_latency", time.Since(startTime))
+	if err != nil {
+		c.metrics.IncCounter("total_errors")
+	}
+	return result, err
+}
+

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"go.etcd.io/etcd/client/v3"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
@@ -19,10 +19,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// ServerType 网关服类型
 const ServerTypeGateway zServer.ServerType = "gateway"
 
-// BaseServer 网关服基础服务
 type BaseServer struct {
 	*zServer.BaseServer
 	Config                *config.Config
@@ -34,39 +32,44 @@ type BaseServer struct {
 	MetricsService        *metrics.Metrics
 }
 
-// NewBaseServer 创建网关服基础服务
-func NewBaseServer() *BaseServer {
-	gs := &BaseServer{}
-
-	baseServer := zServer.NewBaseServer(
-		ServerTypeGateway,
-		"gateway",
-		"Gateway Server",
-		version.Version,
-		gs,
-	)
-
-	gs.BaseServer = baseServer
+func NewBaseServer(cfg *config.Config) *BaseServer {
+	gs := &BaseServer{Config: cfg}
+	gs.BaseServer = zServer.NewBaseServer(ServerTypeGateway, "gateway", "Gateway Server", version.Version, gs)
 	return gs
 }
 
-// OnBeforeStart 启动前的准备工作 - 实现 LifecycleHooks 接口
 func (s *BaseServer) OnBeforeStart() error {
-	cfg := s.Config
-	if cfg == nil {
+	if s.Config == nil {
 		return nil
 	}
 
-	// 解析ServerID
-	serverID, err := id.ParseServerIDInt(int32(cfg.Server.ServerID))
-	if err != nil {
-		return fmt.Errorf("invalid gateway ServerID %d: %w", cfg.Server.ServerID, err)
-	}
-	serverIDStr := id.ServerIDString(serverID)
-	s.SetId(fmt.Sprintf("gateway-%s", serverIDStr))
+	s.initServerID()
+	s.SetState(zServer.StateInitializing, "server initializing")
 
-	// 初始化网络服务器
-	tcpConfig := &zNet.TcpConfig{
+	s.initNetServer()
+
+	if err := s.initEtcdClient(); err != nil {
+		return err
+	}
+
+	s.initServices()
+	s.registerComponents()
+
+	zLog.Info("Gateway server initialized successfully")
+	return nil
+}
+
+func (s *BaseServer) initServerID() {
+	serverID, err := id.ParseServerIDInt(int32(s.Config.Server.ServerID))
+	if err != nil {
+		zLog.Fatal("Invalid gateway ServerID", zap.Error(err))
+	}
+	s.SetId(fmt.Sprintf("gateway-%s", id.ServerIDString(serverID)))
+}
+
+func (s *BaseServer) initNetServer() {
+	cfg := s.Config
+	s.NetServer = zNet.NewTcpServer(&zNet.TcpConfig{
 		ListenAddress:       cfg.Server.ListenAddr,
 		MaxClientCount:      cfg.Server.MaxConnections,
 		HeartbeatDuration:   cfg.Server.HeartbeatInterval,
@@ -82,14 +85,15 @@ func (s *BaseServer) OnBeforeStart() error {
 		EnableSequenceCheck: cfg.Server.EnableSequenceCheck,
 		SequenceWindowSize:  cfg.Server.SequenceWindowSize,
 		TimestampTolerance:  cfg.Server.TimestampTolerance,
-	}
-
-	s.NetServer = zNet.NewTcpServer(tcpConfig,
+	},
 		zNet.WithDDoSConfig(&cfg.DDoS),
 		zNet.WithCompressionConfig(&cfg.Compression),
-		zNet.WithLogger(s.GetLogger()))
+		zNet.WithLogger(s.GetLogger()),
+	)
+}
 
-	// 初始化etcd客户端
+func (s *BaseServer) initEtcdClient() error {
+	cfg := s.Config
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{cfg.Etcd.Endpoints},
 		Username:    cfg.Etcd.Username,
@@ -97,108 +101,79 @@ func (s *BaseServer) OnBeforeStart() error {
 		DialTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		zLog.Error("Failed to create etcd client", zap.Error(err))
-		return fmt.Errorf("failed to create etcd client: %w", err)
+		return fmt.Errorf("create etcd client: %w", err)
 	}
 	s.EtcdClient = etcdClient
+	return nil
+}
 
-	// 初始化客户端服务
-	s.ClientService = client.NewService(cfg, s.NetServer, etcdClient)
+func (s *BaseServer) initServices() {
+	s.ClientService = client.NewService(s.Config, s.NetServer, s.EtcdClient)
 	s.ClientService.Init()
 
-	// 初始化GameServer连接服务
-	s.GameServerConnService = gameserver.NewConnectionService(cfg, s.ClientService)
+	s.GameServerConnService = gameserver.NewConnectionService(s.Config, s.ClientService)
 	if err := s.GameServerConnService.Init(); err != nil {
-		return fmt.Errorf("failed to initialize GameServer connection service: %w", err)
+		zLog.Fatal("Failed to initialize GameServer connection service", zap.Error(err))
 	}
 
-	// 设置GameServer代理到客户端服务
 	s.ClientService.SetGameServerProxy(s.GameServerConnService.GetGameServerProxy())
-
-	// 初始化监控服务
-	s.MetricsService = metrics.NewMetrics(cfg, s.ClientService.GetConnMgr())
-
-	// 初始化服务上报服务
+	s.MetricsService = metrics.NewMetrics(s.Config, s.ClientService.GetConnMgr())
 	s.ReportService = report.NewService(s.ClientService.GetConnMgr(), s.GameServerConnService)
+}
 
-	// 设置状态为初始化中
-	s.SetState(zServer.StateInitializing, "server initializing")
-
-	// 注册组件
+func (s *BaseServer) registerComponents() {
 	s.RegisterComponent("Config", s.Config)
 	s.RegisterComponent("NetServer", s.NetServer)
 	s.RegisterComponent("ClientService", s.ClientService)
 	s.RegisterComponent("GameServerConnService", s.GameServerConnService)
 	s.RegisterComponent("ReportService", s.ReportService)
 	s.RegisterComponent("MetricsService", s.MetricsService)
-
-	zLog.Info("Gateway server initialized successfully")
-	return nil
 }
 
-// OnAfterStart 启动后的工作 - 实现 LifecycleHooks 接口
 func (s *BaseServer) OnAfterStart() error {
-	// 启动监控服务
 	if s.MetricsService != nil {
 		if err := s.MetricsService.Start(); err != nil {
 			return err
 		}
 	}
-
-	// 启动GameServer连接服务
 	if s.GameServerConnService != nil {
 		if err := s.GameServerConnService.Start(s.GetContext()); err != nil {
 			return err
 		}
 	}
-
-	// 启动客户端服务
 	if s.ClientService != nil {
 		if err := s.ClientService.Start(); err != nil {
 			return err
 		}
 	}
-
-	// 启动服务上报服务
 	if s.ReportService != nil {
 		s.ReportService.Start(s.GetContext())
 	}
 
-	// 更新服务状态为就绪
 	s.SetState(zServer.StateReady, "server ready")
-
-	// 更新服务状态为健康
 	s.SetState(zServer.StateHealthy, "server healthy")
 	zLog.Info("Gateway server is healthy")
-
 	return nil
 }
 
-// OnBeforeStop 停止前的工作 - 实现 LifecycleHooks 接口
 func (s *BaseServer) OnBeforeStop() {
-	// 设置状态为流量排空
 	s.SetState(zServer.StateDraining, "server stopping")
 	zLog.Info("Gateway server entering draining state")
 
-	// 停止客户端服务
 	if s.ClientService != nil {
 		s.ClientService.Stop()
 	}
-
-	// 注销服务
 	if s.GameServerConnService != nil {
-		serviceDiscovery := s.GameServerConnService.GetServiceDiscovery()
-		if serviceDiscovery != nil {
-			if err := serviceDiscovery.Unregister(); err != nil {
+		sd := s.GameServerConnService.GetServiceDiscovery()
+		if sd != nil {
+			if err := sd.Unregister(); err != nil {
 				zLog.Warn("Failed to unregister service", zap.Error(err))
 			}
-			if err := serviceDiscovery.Close(); err != nil {
+			if err := sd.Close(); err != nil {
 				zLog.Warn("Failed to close service discovery", zap.Error(err))
 			}
 		}
 	}
-
-	// 关闭etcd客户端
 	if s.EtcdClient != nil {
 		if err := s.EtcdClient.Close(); err != nil {
 			zLog.Warn("Failed to close etcd client", zap.Error(err))
@@ -206,9 +181,7 @@ func (s *BaseServer) OnBeforeStop() {
 	}
 }
 
-// OnAfterStop 停止后的工作 - 实现 LifecycleHooks 接口
 func (s *BaseServer) OnAfterStop() {
-	// 设置状态为已停止
 	s.SetState(zServer.StateStopped, "server stopped")
 	zLog.Info("Gateway server stopped completely")
 }

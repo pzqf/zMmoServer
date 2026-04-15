@@ -3,48 +3,80 @@ package router
 import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
-// 定义处理器函数类型
 type HandlerFunc func(session zNet.Session, packet *zNet.NetPacket) error
 
-// 定义路由处理器映射表
-type HandlerTable map[int32]HandlerFunc
+type DataHandlerFunc func(session zNet.Session, protoId int32, data []byte) error
 
-// PacketRouter 数据包路由器
 type PacketRouter struct {
-	handlers HandlerTable
+	handlers     *zMap.TypedMap[int32, HandlerFunc]
+	dataHandlers *zMap.TypedMap[int32, DataHandlerFunc]
 }
 
-// NewPacketRouter 创建一个新的数据包路由器
 func NewPacketRouter() *PacketRouter {
 	return &PacketRouter{
-		handlers: make(HandlerTable),
+		handlers:     zMap.NewTypedMap[int32, HandlerFunc](),
+		dataHandlers: zMap.NewTypedMap[int32, DataHandlerFunc](),
 	}
 }
 
-// RegisterHandler 注册一个消息处理器
 func (pr *PacketRouter) RegisterHandler(cmd int32, handler HandlerFunc) {
-	pr.handlers[cmd] = handler
-	zLog.Debug("Registered handler", zap.Int32("cmd", cmd))
+	pr.handlers.Store(cmd, handler)
+	zLog.Debug("Registered packet handler", zap.Int32("cmd", cmd))
 }
 
-// UnregisterHandler 注销一个消息处理器
+func (pr *PacketRouter) RegisterDataHandler(cmd int32, handler DataHandlerFunc) {
+	pr.dataHandlers.Store(cmd, handler)
+	zLog.Debug("Registered data handler", zap.Int32("cmd", cmd))
+}
+
 func (pr *PacketRouter) UnregisterHandler(cmd int32) {
-	delete(pr.handlers, cmd)
+	pr.handlers.Delete(cmd)
+	pr.dataHandlers.Delete(cmd)
 	zLog.Debug("Unregistered handler", zap.Int32("cmd", cmd))
 }
 
-// Route 路由数据包到相应的处理程序
 func (pr *PacketRouter) Route(session zNet.Session, packet *zNet.NetPacket) error {
-	// 查找对应的处理函数
-	handler, exists := pr.handlers[int32(packet.ProtoId)]
-	if !exists {
-		zLog.Warn("No handler found for command", zap.Int32("cmd", int32(packet.ProtoId)))
-		return nil
+	if handler, exists := pr.handlers.Load(int32(packet.ProtoId)); exists {
+		return handler(session, packet)
 	}
 
-	// 执行处理函数
-	return handler(session, packet)
+	if dataHandler, exists := pr.dataHandlers.Load(int32(packet.ProtoId)); exists {
+		return dataHandler(session, int32(packet.ProtoId), packet.Data)
+	}
+
+	zLog.Warn("No handler found for command", zap.Int32("cmd", int32(packet.ProtoId)))
+	return nil
+}
+
+func (pr *PacketRouter) HandleData(session zNet.Session, protoId int32, data []byte) error {
+	if dataHandler, exists := pr.dataHandlers.Load(protoId); exists {
+		return dataHandler(session, protoId, data)
+	}
+
+	if handler, exists := pr.handlers.Load(protoId); exists {
+		packet := &zNet.NetPacket{
+			ProtoId: zNet.ProtoIdType(protoId),
+			Data:    data,
+		}
+		return handler(session, packet)
+	}
+
+	zLog.Warn("No handler found for command", zap.Int32("cmd", protoId))
+	return nil
+}
+
+func (pr *PacketRouter) HasHandler(cmd int32) bool {
+	if _, exists := pr.handlers.Load(cmd); exists {
+		return true
+	}
+	_, exists := pr.dataHandlers.Load(cmd)
+	return exists
+}
+
+func (pr *PacketRouter) HandlerCount() int {
+	return int(pr.handlers.Len() + pr.dataHandlers.Len())
 }

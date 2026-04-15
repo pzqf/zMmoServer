@@ -35,21 +35,15 @@ type DBQuery struct {
 
 // DBConnector 数据库连接器接口
 type DBConnector interface {
-	// Init 初始化数据库连接
 	Init(dbConfig DBConfig) error
-	// Start 启动数据库连接
 	Start() error
-	// Query 执行查询操作
 	Query(sql string, args []interface{}, callback func(*sql.Rows, error))
-	// Execute 执行执行操作（插入、更新、删除等）
+	QuerySync(sql string, args ...interface{}) (*sql.Rows, error)
 	Execute(sql string, args []interface{}, callback func(sql.Result, error))
-	// Close 关闭数据库连接
+	ExecSync(sql string, args ...interface{}) (sql.Result, error)
 	Close() error
-	// GetDriver 获取当前数据库驱动类型
 	GetDriver() string
-	// GetMongoClient 获取MongoDB客户端
 	GetMongoClient() *mongo.Client
-	// GetMongoDB 获取MongoDB数据库
 	GetMongoDB() *mongo.Database
 }
 

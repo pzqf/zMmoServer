@@ -302,8 +302,8 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byt
 	msg := consistency.OutboxMessage{
 		RequestID:   meta.RequestID,
 		Topic:       fmt.Sprintf("map:%d:proto:%d", mapID, protoId),
-		TargetMapID: int(mapID),
-		ProtoID:     protoId,
+		TargetMapID: int32(mapID),
+		ProtoID:     int32(protoId),
 		Payload:     enveloped,
 	}
 	ms.outbox.Add(msg)
@@ -380,10 +380,10 @@ func (ms *MapService) outboxRetryLoop() {
 					parts := strings.Split(msg.Topic, ":")
 					if len(parts) >= 4 {
 						if mapID, err := strconv.Atoi(parts[1]); err == nil {
-							targetMapID = mapID
+							targetMapID = int32(mapID)
 						}
 						if pid, err := strconv.Atoi(parts[3]); err == nil {
-							protoID = pid
+							protoID = int32(pid)
 						}
 					}
 				}
@@ -393,7 +393,7 @@ func (ms *MapService) outboxRetryLoop() {
 					continue
 				}
 				ms.outbox.MarkAttempt(msg.RequestID, nil)
-				if err := ms.sendFramedToMap(targetMapID, protoID, msg.Payload); err != nil {
+				if err := ms.sendFramedToMap(int(targetMapID), int(protoID), msg.Payload); err != nil {
 					ms.outbox.MarkAttempt(msg.RequestID, err)
 					continue
 				}

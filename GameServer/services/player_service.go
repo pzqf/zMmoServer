@@ -126,67 +126,27 @@ func (ps *PlayerService) savePlayer(p *OnlinePlayer) {
 	}
 	p.mu.RUnlock()
 
-	ps.playerDAO.UpdatePlayer(player, func(updated bool, err error) {
-		if err != nil {
-			zLog.Error("Failed to save player", zap.Int64("player_id", int64(p.PlayerID)), zap.Error(err))
-			return
-		}
-		if updated {
-			p.LastSaveTime = time.Now()
-			zLog.Debug("Player saved", zap.Int64("player_id", int64(p.PlayerID)))
-		}
-	})
+	updated, err := ps.playerDAO.UpdatePlayer(player)
+	if err != nil {
+		zLog.Error("Failed to save player", zap.Int64("player_id", int64(p.PlayerID)), zap.Error(err))
+		return
+	}
+	if updated {
+		p.LastSaveTime = time.Now()
+		zLog.Debug("Player saved", zap.Int64("player_id", int64(p.PlayerID)))
+	}
 }
 
 func (ps *PlayerService) GetPlayerList(accountID id.AccountIdType) ([]PlayerInfo, error) {
-	var result []PlayerInfo
-	var err error
-
-	ps.playerDAO.GetPlayersByAccountID(int64(accountID), func(players []*models.Player, e error) {
-		if e != nil {
-			err = e
-			return
-		}
-
-		for _, player := range players {
-			result = append(result, PlayerInfo{
-				PlayerID:   id.PlayerIdType(player.PlayerID),
-				Name:       player.PlayerName,
-				PlayerName: player.PlayerName,
-				Level:      player.Level,
-				Exp:        player.Experience,
-				Gold:       player.Gold,
-				Diamond:    player.Diamond,
-				Sex:        player.Sex,
-				Age:        player.Age,
-				VipLevel:   player.VipLevel,
-				CreateTime: player.CreatedAt.Unix(),
-			})
-		}
-	})
-
+	players, err := ps.playerDAO.GetPlayersByAccountID(int64(accountID))
 	if err != nil {
 		zLog.Error("Failed to get player list", zap.Error(err))
 		return nil, err
 	}
 
-	return result, nil
-}
-
-func (ps *PlayerService) GetPlayerByID(playerID id.PlayerIdType) (*PlayerInfo, error) {
-	var result *PlayerInfo
-	var err error
-
-	ps.playerDAO.GetPlayerByID(int64(playerID), func(player *models.Player, e error) {
-		if e != nil {
-			err = e
-			return
-		}
-		if player == nil {
-			return
-		}
-
-		result = &PlayerInfo{
+	result := make([]PlayerInfo, 0, len(players))
+	for _, player := range players {
+		result = append(result, PlayerInfo{
 			PlayerID:   id.PlayerIdType(player.PlayerID),
 			Name:       player.PlayerName,
 			PlayerName: player.PlayerName,
@@ -198,35 +158,43 @@ func (ps *PlayerService) GetPlayerByID(playerID id.PlayerIdType) (*PlayerInfo, e
 			Age:        player.Age,
 			VipLevel:   player.VipLevel,
 			CreateTime: player.CreatedAt.Unix(),
-		}
-	})
+		})
+	}
+	return result, nil
+}
 
+func (ps *PlayerService) GetPlayerByID(playerID id.PlayerIdType) (*PlayerInfo, error) {
+	player, err := ps.playerDAO.GetPlayerByID(int64(playerID))
 	if err != nil {
 		zLog.Error("Failed to get player", zap.Error(err))
 		return nil, err
 	}
+	if player == nil {
+		return nil, nil
+	}
 
-	return result, nil
+	return &PlayerInfo{
+		PlayerID:   id.PlayerIdType(player.PlayerID),
+		Name:       player.PlayerName,
+		PlayerName: player.PlayerName,
+		Level:      player.Level,
+		Exp:        player.Experience,
+		Gold:       player.Gold,
+		Diamond:    player.Diamond,
+		Sex:        player.Sex,
+		Age:        player.Age,
+		VipLevel:   player.VipLevel,
+		CreateTime: player.CreatedAt.Unix(),
+	}, nil
 }
 
 func (ps *PlayerService) CreatePlayer(accountID id.AccountIdType, playerName string, sex int32, age int32) (id.PlayerIdType, error) {
-	var nameExists bool
-	var nameErr error
-	ps.playerDAO.GetPlayerByName(playerName, func(player *models.Player, e error) {
-		if e != nil {
-			nameErr = e
-			return
-		}
-		nameExists = player != nil
-	})
-
-	if nameErr != nil {
-		zLog.Error("Failed to check player name", zap.Error(nameErr))
-		return 0, nameErr
+	existing, err := ps.playerDAO.GetPlayerByName(playerName)
+	if err != nil {
+		zLog.Error("Failed to check player name", zap.Error(err))
+		return 0, err
 	}
-
-	if nameExists {
-		zLog.Error("Player name already exists", zap.String("player_name", playerName))
+	if existing != nil {
 		return 0, fmt.Errorf("player name already exists")
 	}
 
@@ -251,21 +219,14 @@ func (ps *PlayerService) CreatePlayer(accountID id.AccountIdType, playerName str
 		Age:        int(age),
 		Level:      1,
 		Experience: 0,
-		Gold:       1000, // 初始金币
-		Diamond:    100,  // 初始钻石
+		Gold:       1000,
+		Diamond:    100,
 		VipLevel:   0,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
 
-	var err error
-	ps.playerDAO.CreatePlayer(player, func(id int64, e error) {
-		if e != nil {
-			err = e
-		}
-	})
-
-	if err != nil {
+	if _, err := ps.playerDAO.CreatePlayer(player); err != nil {
 		zLog.Error("Failed to create player", zap.Error(err))
 		return 0, err
 	}
@@ -275,9 +236,7 @@ func (ps *PlayerService) CreatePlayer(accountID id.AccountIdType, playerName str
 }
 
 func (ps *PlayerService) PlayerLogin(playerID id.PlayerIdType) error {
-	// 更新玩家登录状态
-	now := time.Now()
-	ps.playerDAO.UpdatePlayerLastLogin(int64(playerID), now)
+	ps.playerDAO.UpdatePlayerLastLogin(int64(playerID), time.Now())
 	zLog.Info("Player logged in", zap.Int64("player_id", int64(playerID)))
 	return nil
 }
@@ -290,8 +249,7 @@ func (ps *PlayerService) PlayerLogout(playerID id.PlayerIdType) error {
 	}
 	ps.onlineMu.Unlock()
 
-	now := time.Now()
-	ps.playerDAO.UpdatePlayerLastLogout(int64(playerID), now)
+	ps.playerDAO.UpdatePlayerLastLogout(int64(playerID), time.Now())
 	zLog.Info("Player logged out", zap.Int64("player_id", int64(playerID)))
 	return nil
 }
@@ -300,13 +258,12 @@ func (ps *PlayerService) AddToOnline(playerID id.PlayerIdType, sessionID string,
 	ps.onlineMu.Lock()
 	defer ps.onlineMu.Unlock()
 
-	onlinePlayer := &OnlinePlayer{
+	ps.onlinePlayers[playerID] = &OnlinePlayer{
 		PlayerInfo:   *info,
 		SessionID:    sessionID,
 		Status:       1,
 		LastSaveTime: time.Now(),
 	}
-	ps.onlinePlayers[playerID] = onlinePlayer
 	zLog.Info("Player added to online", zap.Int64("player_id", int64(playerID)), zap.String("session_id", sessionID))
 }
 
@@ -324,7 +281,6 @@ func (ps *PlayerService) RemoveFromOnline(playerID id.PlayerIdType) {
 func (ps *PlayerService) GetOnlinePlayer(playerID id.PlayerIdType) (*OnlinePlayer, bool) {
 	ps.onlineMu.RLock()
 	defer ps.onlineMu.RUnlock()
-
 	p, ok := ps.onlinePlayers[playerID]
 	return p, ok
 }
@@ -332,7 +288,6 @@ func (ps *PlayerService) GetOnlinePlayer(playerID id.PlayerIdType) (*OnlinePlaye
 func (ps *PlayerService) IsOnline(playerID id.PlayerIdType) bool {
 	ps.onlineMu.RLock()
 	defer ps.onlineMu.RUnlock()
-
 	_, ok := ps.onlinePlayers[playerID]
 	return ok
 }
@@ -433,4 +388,3 @@ func (ps *PlayerService) UpdatePlayerExp(playerID id.PlayerIdType, expDelta int6
 
 	return newLevel, levelUp
 }
-

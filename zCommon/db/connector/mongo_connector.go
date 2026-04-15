@@ -201,3 +201,11 @@ func (c *MongoConnector) GetMongoClient() *mongo.Client {
 func (c *MongoConnector) GetMongoDB() *mongo.Database {
 	return c.mongoDB
 }
+
+func (c *MongoConnector) QuerySync(query string, args ...interface{}) (*sql.Rows, error) {
+	return nil, fmt.Errorf("SQL query not supported in MongoDB, use GetMongoDB() directly")
+}
+
+func (c *MongoConnector) ExecSync(query string, args ...interface{}) (sql.Result, error) {
+	return nil, fmt.Errorf("SQL execute not supported in MongoDB, use GetMongoDB() directly")
+}

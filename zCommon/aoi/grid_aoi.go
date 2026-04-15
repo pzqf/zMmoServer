@@ -1,9 +1,8 @@
 package aoi
 
 import (
-	"sync"
-
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
@@ -31,59 +30,48 @@ type AOIEvent struct {
 type AOIListener func(event AOIEvent)
 
 type Grid struct {
-	mu       sync.RWMutex
 	entityID int64
-	entities map[int64]Coord
+	entities *zMap.TypedMap[int64, Coord]
 }
 
 func NewGrid(entityID int64) *Grid {
 	return &Grid{
 		entityID: entityID,
-		entities: make(map[int64]Coord),
+		entities: zMap.NewTypedMap[int64, Coord](),
 	}
 }
 
 func (g *Grid) Add(entityID int64, coord Coord) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.entities[entityID] = coord
+	g.entities.Store(entityID, coord)
 }
 
 func (g *Grid) Remove(entityID int64) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	delete(g.entities, entityID)
+	g.entities.Delete(entityID)
 }
 
 func (g *Grid) Update(entityID int64, coord Coord) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.entities[entityID] = coord
+	g.entities.Store(entityID, coord)
 }
 
 func (g *Grid) GetAll() map[int64]Coord {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	result := make(map[int64]Coord, len(g.entities))
-	for k, v := range g.entities {
-		result[k] = v
-	}
+	result := make(map[int64]Coord)
+	g.entities.Range(func(id int64, coord Coord) bool {
+		result[id] = coord
+		return true
+	})
 	return result
 }
 
 func (g *Grid) Count() int {
-	g.mu.RLock()
-	defer g.mu.RUnlock()
-	return len(g.entities)
+	return int(g.entities.Len())
 }
 
 type GridManager struct {
-	mu         sync.RWMutex
 	gridWidth  float64
 	gridHeight float64
 	mapWidth   float64
 	mapHeight  float64
-	grids      map[int64]*Grid
+	grids      *zMap.TypedMap[int64, *Grid]
 	listener   AOIListener
 }
 
@@ -93,7 +81,7 @@ func NewGridManager(mapWidth, mapHeight, gridWidth, gridHeight float64) *GridMan
 		gridHeight: gridHeight,
 		mapWidth:   mapWidth,
 		mapHeight:  mapHeight,
-		grids:      make(map[int64]*Grid),
+		grids:      zMap.NewTypedMap[int64, *Grid](),
 	}
 }
 
@@ -141,13 +129,11 @@ func (gm *GridManager) getSurroundingGridIDs(gridID int64) []int64 {
 }
 
 func (gm *GridManager) getOrCreateGrid(gridID int64) *Grid {
-	gm.mu.Lock()
-	defer gm.mu.Unlock()
-	if grid, ok := gm.grids[gridID]; ok {
+	if grid, ok := gm.grids.Load(gridID); ok {
 		return grid
 	}
 	grid := NewGrid(gridID)
-	gm.grids[gridID] = grid
+	gm.grids.Store(gridID, grid)
 	return grid
 }
 
@@ -162,9 +148,9 @@ func (gm *GridManager) AddEntity(entityID int64, coord Coord) {
 		for watcherID := range sgrid.GetAll() {
 			if watcherID != entityID && gm.listener != nil {
 				gm.listener(AOIEvent{
-					Type:    AOIEventEnter,
-					Watcher: watcherID,
-					Target:  entityID,
+					Type:     AOIEventEnter,
+					Watcher:  watcherID,
+					Target:   entityID,
 					NewCoord: coord,
 				})
 			}
@@ -194,11 +180,9 @@ func (gm *GridManager) RemoveEntity(entityID int64, coord Coord) {
 		}
 	}
 
-	gm.mu.RLock()
-	if grid, ok := gm.grids[oldGridID]; ok {
+	if grid, ok := gm.grids.Load(oldGridID); ok {
 		grid.Remove(entityID)
 	}
-	gm.mu.RUnlock()
 
 	zLog.Debug("Entity removed from AOI",
 		zap.Int64("entity_id", entityID),
@@ -210,11 +194,9 @@ func (gm *GridManager) MoveEntity(entityID int64, oldCoord, newCoord Coord) {
 	newGridID := gm.getGridID(newCoord)
 
 	if oldGridID == newGridID {
-		gm.mu.RLock()
-		if grid, ok := gm.grids[oldGridID]; ok {
+		if grid, ok := gm.grids.Load(oldGridID); ok {
 			grid.Update(entityID, newCoord)
 		}
-		gm.mu.RUnlock()
 
 		if gm.listener != nil {
 			gm.listener(AOIEvent{
@@ -237,22 +219,18 @@ func (gm *GridManager) GetSurroundingEntities(coord Coord) map[int64]Coord {
 
 	result := make(map[int64]Coord)
 	for _, sid := range surroundingGrids {
-		gm.mu.RLock()
-		if grid, ok := gm.grids[sid]; ok {
+		if grid, ok := gm.grids.Load(sid); ok {
 			for id, c := range grid.GetAll() {
 				result[id] = c
 			}
 		}
-		gm.mu.RUnlock()
 	}
 	return result
 }
 
 func (gm *GridManager) GetEntitiesInGrid(coord Coord) map[int64]Coord {
 	gridID := gm.getGridID(coord)
-	gm.mu.RLock()
-	defer gm.mu.RUnlock()
-	if grid, ok := gm.grids[gridID]; ok {
+	if grid, ok := gm.grids.Load(gridID); ok {
 		return grid.GetAll()
 	}
 	return make(map[int64]Coord)

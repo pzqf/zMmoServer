@@ -11,8 +11,8 @@ import (
 type Metrics struct {
 	*sharedMetrics.ServerMetrics
 
-	config     *config.Config
-	connMgr    *connection.ClientConnMgr
+	config  *config.Config
+	connMgr *connection.ClientConnMgr
 
 	connectionsTotal   prometheus.Counter
 	connectionsCurrent prometheus.Gauge
@@ -25,7 +25,7 @@ type Metrics struct {
 func NewMetrics(cfg *config.Config, connMgr *connection.ClientConnMgr) *Metrics {
 	commonCfg := &sharedMetrics.MetricsConfig{
 		Enabled:       cfg.Metrics.Enabled,
-		ListenAddress: cfg.Metrics.MetricsAddr,
+		ListenAddress: cfg.Metrics.ListenAddress,
 	}
 
 	m := &Metrics{

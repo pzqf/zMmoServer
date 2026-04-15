@@ -12,8 +12,8 @@ import (
 	"github.com/pzqf/zCommon/db/models"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zMmoServer/GlobalServer/gameserverlist"
 	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
-	"github.com/pzqf/zMmoServer/GlobalServer/serverregistry"
 	"github.com/pzqf/zUtil/zCrypto"
 	"go.uber.org/zap"
 )
@@ -259,7 +259,7 @@ func HandleAccountLogin(c echo.Context) error {
 	}
 
 	// Get server list from cache (合并MySQL静态数据+Redis动态数据)
-	manager := serverregistry.GetServerListManager()
+	manager := gameserverlist.GetServerListManager()
 	var serverInfos []*protocol.ServerInfo
 	if manager != nil {
 		servers := manager.GetOnlineServers()
@@ -311,7 +311,7 @@ func HandleAccountLogin(c echo.Context) error {
 func HandleGetServerList(c echo.Context) error {
 	start := time.Now()
 	// Get server list from cache
-	manager := serverregistry.GetServerListManager()
+	manager := gameserverlist.GetServerListManager()
 	if manager == nil {
 		zLog.Error("Failed to get server list manager")
 		if m := getMetricsFromContext(c); m != nil {
@@ -373,7 +373,7 @@ func HandleGetServerListByGroup(c echo.Context) error {
 	}
 
 	// Get server list from cache by group
-	manager := serverregistry.GetServerListManager()
+	manager := gameserverlist.GetServerListManager()
 	if manager == nil {
 		zLog.Error("Failed to get server list manager")
 		if m := getMetricsFromContext(c); m != nil {

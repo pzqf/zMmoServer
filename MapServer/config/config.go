@@ -7,6 +7,7 @@ import (
 	"github.com/pzqf/zCommon/common/id"
 	cfgutil "github.com/pzqf/zCommon/config"
 	"github.com/pzqf/zCommon/discovery"
+	"github.com/pzqf/zCommon/metrics"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zConfig"
 )
@@ -22,7 +23,9 @@ type Config struct {
 	Database   DatabaseConfig       `ini:"Database"`
 	GameServer GameServerConfig     `ini:"GameServer"`
 	Etcd       discovery.EtcdConfig `ini:"Etcd"`
-	Log        LogConfig            `ini:"Log"`
+	Log        zLog.Config          `ini:"Log"`
+	Metrics    MetricsConfig        `ini:"Metrics"`
+	Pprof      PprofConfig          `ini:"Pprof"`
 	Maps       MapsConfig           `ini:"Maps"`
 }
 
@@ -57,22 +60,11 @@ type GameServerConfig struct {
 	GameServerConnectTimeout int    `ini:"GameServerConnectTimeout"`
 }
 
-type LogConfig struct {
-	Level              int    `ini:"Level"`
-	Console            bool   `ini:"Console"`
-	Filename           string `ini:"Filename"`
-	MaxSize            int    `ini:"MaxSize"`
-	MaxDays            int    `ini:"MaxDays"`
-	MaxBackups         int    `ini:"MaxBackups"`
-	Compress           bool   `ini:"Compress"`
-	ShowCaller         bool   `ini:"show-caller"`
-	Stacktrace         int    `ini:"stacktrace"`
-	Sampling           bool   `ini:"sampling"`
-	SamplingInitial    int    `ini:"sampling-initial"`
-	SamplingThereafter int    `ini:"sampling-thereafter"`
-	Async              bool   `ini:"async"`
-	AsyncBufferSize    int    `ini:"async-buffer-size"`
-	AsyncFlushInterval int    `ini:"async-flush-interval"`
+type MetricsConfig metrics.MetricsConfig
+
+type PprofConfig struct {
+	Enabled       bool   `ini:"Enabled"`
+	ListenAddress string `ini:"ListenAddress"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -81,9 +73,11 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
+	serverID := cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1)
+
 	c := &Config{
 		Server: ServerConfig{
-			ServerID:          cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1),
+			ServerID:          serverID,
 			ServerName:        cfgutil.GetConfigString(zcfg, "Server.ServerName", "MapServer"),
 			GroupID:           cfgutil.GetConfigInt(zcfg, "Server.GroupID", 1),
 			ListenAddr:        cfgutil.GetConfigString(zcfg, "Server.ListenAddr", "0.0.0.0:9002"),
@@ -105,22 +99,31 @@ func LoadConfig(configPath string) (*Config, error) {
 			GameServerAddr:           cfgutil.GetConfigString(zcfg, "GameServer.GameServerAddr", "127.0.0.1:20002"),
 			GameServerConnectTimeout: cfgutil.GetConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
 		},
-		Log: LogConfig{
+		Log: zLog.Config{
 			Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", 0),
 			Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
-			Filename:           cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/server.log"),
+			ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "Log.ConsoleLevel", 0),
+			Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/map_server_{ServerID}.log"), "{ServerID}", serverID),
 			MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
 			MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
 			MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
 			Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
-			ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.show-caller", true),
-			Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.stacktrace", 3),
-			Sampling:           cfgutil.GetConfigBool(zcfg, "Log.sampling", true),
-			SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.sampling-initial", 100),
-			SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.sampling-thereafter", 10),
-			Async:              cfgutil.GetConfigBool(zcfg, "Log.async", true),
-			AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.async-buffer-size", 2048),
-			AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.async-flush-interval", 50),
+			ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.ShowCaller", true),
+			Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.Stacktrace", 3),
+			Sampling:           cfgutil.GetConfigBool(zcfg, "Log.Sampling", true),
+			SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.SamplingInitial", 100),
+			SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.SamplingThereafter", 10),
+			Async:              cfgutil.GetConfigBool(zcfg, "Log.Async", true),
+			AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.AsyncBufferSize", 2048),
+			AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.AsyncFlushInterval", 50),
+		},
+		Metrics: MetricsConfig{
+			Enabled:       cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
+			ListenAddress: cfgutil.GetConfigString(zcfg, "Metrics.ListenAddress", "0.0.0.0:9093"),
+		},
+		Pprof: PprofConfig{
+			Enabled:       cfgutil.GetConfigBool(zcfg, "Pprof.Enabled", false),
+			ListenAddress: cfgutil.GetConfigString(zcfg, "Pprof.ListenAddress", "localhost:6063"),
 		},
 		Etcd: discovery.EtcdConfig{
 			Endpoints:      cfgutil.GetConfigString(zcfg, "Etcd.Endpoints", "etcd-cluster.kube-system.svc.cluster.local:2379"),
@@ -169,26 +172,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *LogConfig) ToZLogConfig() *zLog.Config {
-	return &zLog.Config{
-		Level:              c.Level,
-		Console:            c.Console,
-		Filename:           c.Filename,
-		MaxSize:            c.MaxSize,
-		MaxDays:            c.MaxDays,
-		MaxBackups:         c.MaxBackups,
-		Compress:           c.Compress,
-		ShowCaller:         c.ShowCaller,
-		Stacktrace:         c.Stacktrace,
-		Sampling:           c.Sampling,
-		SamplingInitial:    c.SamplingInitial,
-		SamplingThereafter: c.SamplingThereafter,
-		Async:              c.Async,
-		AsyncBufferSize:    c.AsyncBufferSize,
-		AsyncFlushInterval: c.AsyncFlushInterval,
-	}
-}
-
 func (c *Config) GetLogConfig() *zLog.Config {
-	return c.Log.ToZLogConfig()
+	return &c.Log
 }
