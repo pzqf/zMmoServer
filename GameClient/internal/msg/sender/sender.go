@@ -12,6 +12,7 @@ import (
 type MessageSender struct {
 	tcpClient *zNet.TcpClient
 	token     string
+	playerID  int64
 }
 
 // NewMessageSender 创建新的消息发送器
@@ -48,9 +49,8 @@ func (s *MessageSender) SendHeartbeat() error {
 
 // SendTokenVerify 发送令牌验证消息
 func (s *MessageSender) SendTokenVerify(token string) error {
-	// 令牌验证消息
 	data := []byte(token)
-	return s.Send(2, data)
+	return s.Send(uint32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY), data)
 }
 
 // SendPlayerLogin 发送玩家登录请求
@@ -83,11 +83,14 @@ func (s *MessageSender) SendPlayerCreate(name string, sex, age int32) error {
 	return s.Send(uint32(protocol.PlayerMsgId_MSG_PLAYER_CREATE), data)
 }
 
+func (s *MessageSender) SetPlayerID(playerID int64) {
+	s.playerID = playerID
+}
+
 // SendPlayerLogout 发送玩家登出请求
 func (s *MessageSender) SendPlayerLogout() error {
-	// 玩家登出请求
 	req := &protocol.PlayerLogoutRequest{
-		PlayerId: 0, // 暂时设为0
+		PlayerId: s.playerID,
 	}
 	data, err := proto.Marshal(req)
 	if err != nil {

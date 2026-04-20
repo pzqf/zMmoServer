@@ -95,10 +95,16 @@ func (c *Client) Login(account, password string) (*http.AuthResponse, error) {
 
 	if authResp.Result == 0 {
 		c.token = authResp.Token
-		// 从服务器列表中获取第一个服务器的地址作为默认网关地址
 		if len(authResp.Servers) > 0 {
 			c.selectedServer = authResp.Servers[0]
-			c.gatewayAddr = fmt.Sprintf("%s:%d", c.selectedServer.Address, c.selectedServer.Port)
+			addr := c.selectedServer.Address
+			if addr == "0.0.0.0" || addr == "" {
+				if c.gatewayAddr != "" {
+					// 保留命令行传入的gateway地址
+				}
+			} else {
+				c.gatewayAddr = fmt.Sprintf("%s:%d", addr, c.selectedServer.Port)
+			}
 		}
 	}
 
@@ -177,4 +183,15 @@ func (c *Client) SetToken(token string) {
 // SelectedServer 获取选中的服务器
 func (c *Client) SelectedServer() *protocol.ServerInfo {
 	return c.selectedServer
+}
+
+func (c *Client) GetCreatedPlayerID() int64 {
+	if c.messageHandler != nil {
+		pid := c.messageHandler.WaitForPlayerID()
+		if pid != 0 && c.messageSender != nil {
+			c.messageSender.SetPlayerID(pid)
+		}
+		return pid
+	}
+	return 0
 }

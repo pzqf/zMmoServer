@@ -212,18 +212,20 @@ func (ps *PlayerService) CreatePlayer(accountID id.AccountIdType, playerName str
 
 	now := time.Now()
 	player := &models.Player{
-		PlayerID:   int64(playerID),
-		AccountID:  int64(accountID),
-		PlayerName: playerName,
-		Sex:        int(sex),
-		Age:        int(age),
-		Level:      1,
-		Experience: 0,
-		Gold:       1000,
-		Diamond:    100,
-		VipLevel:   0,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		PlayerID:     int64(playerID),
+		AccountID:    int64(accountID),
+		PlayerName:   playerName,
+		Sex:          int(sex),
+		Age:          int(age),
+		Level:        1,
+		Experience:   0,
+		Gold:         1000,
+		Diamond:      100,
+		VipLevel:     0,
+		LastLoginAt:  now,
+		LastLogoutAt: now,
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 
 	if _, err := ps.playerDAO.CreatePlayer(player); err != nil {
@@ -387,4 +389,22 @@ func (ps *PlayerService) UpdatePlayerExp(playerID id.PlayerIdType, expDelta int6
 	}
 
 	return newLevel, levelUp
+}
+
+// SyncOnlinePlayerData 同步在线玩家数据（从 Actor 层同步到 Service 层）
+func (ps *PlayerService) SyncOnlinePlayerData(playerID id.PlayerIdType, level int, exp, gold, diamond int64) {
+	ps.onlineMu.RLock()
+	p, ok := ps.onlinePlayers[playerID]
+	ps.onlineMu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	p.mu.Lock()
+	p.Level = level
+	p.Exp = exp
+	p.Gold = gold
+	p.Diamond = diamond
+	p.mu.Unlock()
 }

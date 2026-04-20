@@ -3,6 +3,7 @@ package ai
 import (
 	"math"
 	"math/rand"
+	"strconv"
 	"sync"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/pzqf/zCommon/config/tables"
 	"go.uber.org/zap"
 )
+
+type PlayerQuerier interface {
+	GetPlayersInRange(position common.Vector3, radius float32) []common.IGameObject
+}
 
 type AIManager struct {
 	mu                    sync.RWMutex
@@ -51,6 +56,7 @@ func (am *AIManager) SetTableManager(tm *tables.TableManager) {
 
 type MonsterAI struct {
 	monster         *object.Monster
+	mapRef          PlayerQuerier
 	aiConfig        *models.AI
 	state           AIState
 	lastStateChange time.Time
@@ -71,29 +77,32 @@ const (
 	AIStateDead
 )
 
-func (am *AIManager) CreateMonsterAI(monster *object.Monster, aiID int32) *MonsterAI {
+func (am *AIManager) CreateMonsterAI(monster *object.Monster, aiType string, mapRef PlayerQuerier) *MonsterAI {
 	am.mu.Lock()
 	defer am.mu.Unlock()
 
 	ai := &MonsterAI{
 		monster:        monster,
+		mapRef:         mapRef,
 		state:          AIStateIdle,
 		skillCooldowns: make(map[int32]time.Time),
 	}
 
 	if am.tableManager != nil {
-		if aiConfig, ok := am.tableManager.GetAILoader().GetAI(aiID); ok {
-			ai.aiConfig = aiConfig
-			monster.SetAIType(aiConfig.Type)
-			monster.SetBehaviorPattern(aiConfig.Behavior)
-			if aiConfig.DetectionRange > 0 {
-				monster.SetVisionRange(aiConfig.DetectionRange)
-			}
-			if aiConfig.AttackRange > 0 {
-				monster.SetAttackRange(aiConfig.AttackRange)
-			}
-			if aiConfig.ChaseRange > 0 {
-				monster.SetAggroRange(aiConfig.ChaseRange)
+		if aiID, err := strconv.Atoi(aiType); err == nil {
+			if aiConfig, ok := am.tableManager.GetAILoader().GetAI(int32(aiID)); ok {
+				ai.aiConfig = aiConfig
+				monster.SetAIType(aiConfig.Type)
+				monster.SetBehaviorPattern(aiConfig.Behavior)
+				if aiConfig.DetectionRange > 0 {
+					monster.SetVisionRange(aiConfig.DetectionRange)
+				}
+				if aiConfig.AttackRange > 0 {
+					monster.SetAttackRange(aiConfig.AttackRange)
+				}
+				if aiConfig.ChaseRange > 0 {
+					monster.SetAggroRange(aiConfig.ChaseRange)
+				}
 			}
 		}
 	}
@@ -363,7 +372,31 @@ func (ai *MonsterAI) findTarget() common.IGameObject {
 }
 
 func (ai *MonsterAI) findNearestPlayer(range_ float32) common.IGameObject {
-	return nil
+	if ai.mapRef == nil {
+		return nil
+	}
+
+	monster := ai.monster
+	pos := monster.GetPosition()
+	players := ai.mapRef.GetPlayersInRange(pos, range_)
+	if len(players) == 0 {
+		return nil
+	}
+
+	var nearest common.IGameObject
+	minDist := float32(math.MaxFloat32)
+	for _, p := range players {
+		pPos := p.GetPosition()
+		dx := pPos.X - pos.X
+		dz := pPos.Z - pos.Z
+		dist := float32(math.Sqrt(float64(dx*dx + dz*dz)))
+		if dist < minDist {
+			minDist = dist
+			nearest = p
+		}
+	}
+
+	return nearest
 }
 
 func (ai *MonsterAI) tryAttack() {

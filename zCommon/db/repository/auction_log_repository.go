@@ -14,40 +14,13 @@ func NewAuctionLogRepository(logDAO *dao.AuctionLogDAO) *AuctionLogRepositoryImp
 }
 
 func (r *AuctionLogRepositoryImpl) Create(auctionLog *models.AuctionLog) (int64, error) {
-	var result int64
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.CreateAuctionLog(auctionLog, func(id int64, err error) {
-		result = id
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.CreateAuctionLog(auctionLog)
 }
 
 func (r *AuctionLogRepositoryImpl) GetByAuctionID(auctionID int64, limit int) ([]*models.AuctionLog, error) {
-	var result []*models.AuctionLog
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.GetAuctionLogsByAuctionID(auctionID, limit, func(logs []*models.AuctionLog, err error) {
-		result = logs
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.GetAuctionLogsByAuctionID(auctionID, limit)
 }
 
 func (r *AuctionLogRepositoryImpl) GetByPlayerID(playerID int64, limit int) ([]*models.AuctionLog, error) {
-	var result []*models.AuctionLog
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.GetAuctionLogsByPlayerID(playerID, limit, func(logs []*models.AuctionLog, err error) {
-		result = logs
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.GetAuctionLogsByPlayerID(playerID, limit)
 }

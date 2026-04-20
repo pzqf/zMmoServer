@@ -10,7 +10,7 @@ import (
 type ClientServiceInterface interface {
 	Start() error
 	Stop() error
-	SendToClient(sessionID zNet.SessionIdType, data []byte) error
+	SendToClient(sessionID zNet.SessionIdType, msgID uint32, data []byte) error
 	GetSessionCount() int
 }
 
@@ -36,5 +36,6 @@ type AntiCheatManagerInterface interface {
 	RecordClientAction(ip string, packetSize int)
 	RecordError(ip string, errorType string)
 	CheckClientStatus(ip string) (bool, string)
-	StartCleanupTask()
+	StartCleanupTask(ctx context.Context)
+	Stop()
 }

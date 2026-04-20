@@ -1,7 +1,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"strings"
 
@@ -29,32 +28,32 @@ func InitTables(conn connector.DBConnector, repoType RepoType) error {
 		createTablesSQL = []string{
 			// 账号表
 			`CREATE TABLE IF NOT EXISTS accounts (
-				id BIGINT PRIMARY KEY,
-				username VARCHAR(64) NOT NULL,
+				account_id BIGINT PRIMARY KEY,
+				account_name VARCHAR(64) NOT NULL,
 				password VARCHAR(128) NOT NULL,
-				email VARCHAR(128),
-				phone VARCHAR(20),
-				last_login_at DATETIME,
-				last_login_ip VARCHAR(32),
+				status INT NOT NULL DEFAULT 0,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_username (username),
-				UNIQUE KEY idx_email (email),
-				UNIQUE KEY idx_phone (phone)
+				last_login_at DATETIME,
+				UNIQUE KEY idx_account_name (account_name)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 			// 游戏服务器表
 			`CREATE TABLE IF NOT EXISTS game_servers (
-				id INT PRIMARY KEY,
-				name VARCHAR(64) NOT NULL,
-				type VARCHAR(32) NOT NULL,
-				group_id INT NOT NULL,
-				status VARCHAR(32) NOT NULL DEFAULT 'normal',
+				server_id INT PRIMARY KEY,
+				server_name VARCHAR(255) NOT NULL,
+				server_type VARCHAR(50) NOT NULL,
+				group_id INT NOT NULL DEFAULT 0,
+				address VARCHAR(255) NOT NULL DEFAULT '',
+				port INT NOT NULL DEFAULT 0,
+				status INT NOT NULL DEFAULT 0,
+				online_count INT NOT NULL DEFAULT 0,
 				max_online_count INT NOT NULL DEFAULT 5000,
-				region VARCHAR(64) NOT NULL DEFAULT 'default',
+				region VARCHAR(100) NOT NULL DEFAULT '',
+				version VARCHAR(50) NOT NULL DEFAULT '',
+				last_heartbeat DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_name (name),
+				UNIQUE KEY idx_server_name (server_name),
 				INDEX idx_group_id (group_id),
 				INDEX idx_status (status),
 				INDEX idx_region (region)
@@ -87,18 +86,13 @@ func InitTables(conn connector.DBConnector, repoType RepoType) error {
 
 			// 账号表
 			`CREATE TABLE IF NOT EXISTS accounts (
-				id BIGINT PRIMARY KEY,
-				username VARCHAR(64) NOT NULL,
+				account_id BIGINT PRIMARY KEY,
+				account_name VARCHAR(64) NOT NULL,
 				password VARCHAR(128) NOT NULL,
-				email VARCHAR(128),
-				phone VARCHAR(20),
-				last_login_at DATETIME,
-				last_login_ip VARCHAR(32),
+				status INT NOT NULL DEFAULT 0,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_username (username),
-				UNIQUE KEY idx_email (email),
-				UNIQUE KEY idx_phone (phone)
+				last_login_at DATETIME,
+				UNIQUE KEY idx_account_name (account_name)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 			// 玩家物品表
@@ -226,16 +220,21 @@ func InitTables(conn connector.DBConnector, repoType RepoType) error {
 
 			// 游戏服务器表
 			`CREATE TABLE IF NOT EXISTS game_servers (
-				id INT PRIMARY KEY,
-				name VARCHAR(64) NOT NULL,
-				type VARCHAR(32) NOT NULL,
-				group_id INT NOT NULL,
-				status VARCHAR(32) NOT NULL DEFAULT 'normal',
+				server_id INT PRIMARY KEY,
+				server_name VARCHAR(255) NOT NULL,
+				server_type VARCHAR(50) NOT NULL,
+				group_id INT NOT NULL DEFAULT 0,
+				address VARCHAR(255) NOT NULL DEFAULT '',
+				port INT NOT NULL DEFAULT 0,
+				status INT NOT NULL DEFAULT 0,
+				online_count INT NOT NULL DEFAULT 0,
 				max_online_count INT NOT NULL DEFAULT 5000,
-				region VARCHAR(64) NOT NULL DEFAULT 'default',
+				region VARCHAR(100) NOT NULL DEFAULT '',
+				version VARCHAR(50) NOT NULL DEFAULT '',
+				last_heartbeat DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_name (name),
+				UNIQUE KEY idx_server_name (server_name),
 				INDEX idx_group_id (group_id),
 				INDEX idx_status (status),
 				INDEX idx_region (region)
@@ -319,32 +318,32 @@ func InitTables(conn connector.DBConnector, repoType RepoType) error {
 		createTablesSQL = []string{
 			// 账号表
 			`CREATE TABLE IF NOT EXISTS accounts (
-				id BIGINT PRIMARY KEY,
-				username VARCHAR(64) NOT NULL,
+				account_id BIGINT PRIMARY KEY,
+				account_name VARCHAR(64) NOT NULL,
 				password VARCHAR(128) NOT NULL,
-				email VARCHAR(128),
-				phone VARCHAR(20),
-				last_login_at DATETIME,
-				last_login_ip VARCHAR(32),
+				status INT NOT NULL DEFAULT 0,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_username (username),
-				UNIQUE KEY idx_email (email),
-				UNIQUE KEY idx_phone (phone)
+				last_login_at DATETIME,
+				UNIQUE KEY idx_account_name (account_name)
 			) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 
 			// 游戏服务器表
 			`CREATE TABLE IF NOT EXISTS game_servers (
-				id INT PRIMARY KEY,
-				name VARCHAR(64) NOT NULL,
-				type VARCHAR(32) NOT NULL,
-				group_id INT NOT NULL,
-				status VARCHAR(32) NOT NULL DEFAULT 'normal',
+				server_id INT PRIMARY KEY,
+				server_name VARCHAR(255) NOT NULL,
+				server_type VARCHAR(50) NOT NULL,
+				group_id INT NOT NULL DEFAULT 0,
+				address VARCHAR(255) NOT NULL DEFAULT '',
+				port INT NOT NULL DEFAULT 0,
+				status INT NOT NULL DEFAULT 0,
+				online_count INT NOT NULL DEFAULT 0,
 				max_online_count INT NOT NULL DEFAULT 5000,
-				region VARCHAR(64) NOT NULL DEFAULT 'default',
+				region VARCHAR(100) NOT NULL DEFAULT '',
+				version VARCHAR(50) NOT NULL DEFAULT '',
+				last_heartbeat DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 				updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				UNIQUE KEY idx_name (name),
+				UNIQUE KEY idx_server_name (server_name),
 				INDEX idx_group_id (group_id),
 				INDEX idx_status (status),
 				INDEX idx_region (region)
@@ -361,14 +360,12 @@ func InitTables(conn connector.DBConnector, repoType RepoType) error {
 
 		zLog.Info("Creating table...", zap.Int("index", i), zap.String("sql", sqlStmt[:50]+"..."))
 
-		// 执行SQL语句
-		conn.Execute(sqlStmt, nil, func(result sql.Result, err error) {
-			if err != nil {
-				zLog.Error("Failed to create table", zap.Error(err), zap.String("sql", sqlStmt))
-			} else {
-				zLog.Info("Table created successfully")
-			}
-		})
+		_, err := conn.ExecSync(sqlStmt)
+		if err != nil {
+			zLog.Error("Failed to create table", zap.Error(err), zap.String("sql", sqlStmt))
+		} else {
+			zLog.Info("Table created successfully")
+		}
 	}
 
 	zLog.Info("Database tables initialized successfully", zap.String("repoType", string(repoType)))
@@ -384,53 +381,51 @@ func InitDefaultData(conn connector.DBConnector) error {
 
 	zLog.Info("Initializing default data...")
 
-	// 检查是否已有游戏服务器数据
-	checkServerSQL := "SELECT COUNT(*) FROM game_servers"
-	conn.Query(checkServerSQL, nil, func(rows *sql.Rows, err error) {
-		if err != nil {
-			zLog.Error("Failed to check game servers", zap.Error(err))
-			return
+	rows, err := conn.QuerySync("SELECT COUNT(*) FROM game_servers")
+	if err != nil {
+		zLog.Error("Failed to check game servers", zap.Error(err))
+		return nil
+	}
+
+	var count int
+	if rows.Next() {
+		if err := rows.Scan(&count); err != nil {
+			zLog.Error("Failed to scan count", zap.Error(err))
+			rows.Close()
+			return nil
+		}
+	}
+	rows.Close()
+
+	if count == 0 {
+		defaultServers := []struct {
+			ID      int
+			Name    string
+			Type    string
+			GroupID int
+			Address string
+			Port    int
+		}{
+			{1, "GameServer-000101", "game", 1, "127.0.0.1", 20001},
+			{2, "GameServer-000102", "game", 1, "127.0.0.1", 20003},
+			{101, "Gateway-000101", "gateway", 1, "127.0.0.1", 10001},
+			{102, "Gateway-000102", "gateway", 1, "127.0.0.1", 10002},
+			{201, "MapServer-1", "map", 1, "127.0.0.1", 30001},
 		}
 
-		var count int
-		if rows.Next() {
-			if err := rows.Scan(&count); err != nil {
-				zLog.Error("Failed to scan count", zap.Error(err))
-				return
+		for _, server := range defaultServers {
+			insertSQL := fmt.Sprintf(
+				"INSERT INTO game_servers (server_id, server_name, server_type, group_id, address, port) VALUES (%d, '%s', '%s', %d, '%s', %d)",
+				server.ID, server.Name, server.Type, server.GroupID, server.Address, server.Port,
+			)
+			_, err := conn.ExecSync(insertSQL)
+			if err != nil {
+				zLog.Error("Failed to insert default server", zap.Error(err), zap.String("name", server.Name))
+			} else {
+				zLog.Info("Default server inserted", zap.String("name", server.Name))
 			}
 		}
-		rows.Close()
-
-		// 如果没有游戏服务器数据，初始化默认服务器
-		if count == 0 {
-			defaultServers := []struct {
-				ID   int
-				Name string
-				Type string
-				GroupID int
-			}{
-				{1, "GameServer-000101", "game", 1},
-				{2, "GameServer-000102", "game", 1},
-				{101, "Gateway-000101", "gateway", 1},
-				{102, "Gateway-000102", "gateway", 1},
-				{201, "MapServer-1", "map", 1},
-			}
-
-			for _, server := range defaultServers {
-				insertSQL := fmt.Sprintf(
-					"INSERT INTO game_servers (id, name, type, group_id) VALUES (%d, '%s', '%s', %d)",
-					server.ID, server.Name, server.Type, server.GroupID,
-				)
-				conn.Execute(insertSQL, nil, func(result sql.Result, err error) {
-					if err != nil {
-						zLog.Error("Failed to insert default server", zap.Error(err), zap.String("name", server.Name))
-					} else {
-						zLog.Info("Default server inserted", zap.String("name", server.Name))
-					}
-				})
-			}
-		}
-	})
+	}
 
 	zLog.Info("Default data initialized successfully")
 	return nil

@@ -7,18 +7,9 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/config/tables"
 	"go.uber.org/zap"
-)
-
-type DungeonType int
-
-const (
-	DungeonTypeNone DungeonType = iota
-	DungeonTypeNormal
-	DungeonTypeElite
-	DungeonTypeBoss
-	DungeonTypeChallenge
-	DungeonTypeTimeAttack
 )
 
 type DungeonStatus int
@@ -32,61 +23,41 @@ const (
 	DungeonStatusClosed
 )
 
-type DungeonConfig struct {
-	DungeonID       int32
-	Name            string
-	Description     string
-	Type            DungeonType
-	MinLevel        int32
-	MaxLevel        int32
-	MinPlayers      int32
-	MaxPlayers      int32
-	TimeLimit       int32
-	DailyLimit      int32
-	Rewards         []DungeonReward
-	Waves           []DungeonWave
-	RequiredItems   []int32
-	EntryCost       *DungeonCost
-}
-
-type DungeonReward struct {
-	RewardID   int32
-	Type       string
-	ItemID     int32
-	Count      int32
-	Probability float32
-}
-
-type DungeonWave struct {
-	WaveID      int32
-	Monsters    []DungeonMonster
-	SpawnDelay  int32
-	CompleteCondition string
-}
-
-type DungeonMonster struct {
-	MonsterID int32
-	Count     int32
-	Position  string
-}
-
-type DungeonCost struct {
-	CurrencyType string
-	Amount       int32
+func (s DungeonStatus) String() string {
+	switch s {
+	case DungeonStatusNone:
+		return "none"
+	case DungeonStatusWaiting:
+		return "waiting"
+	case DungeonStatusInProgress:
+		return "in_progress"
+	case DungeonStatusCompleted:
+		return "completed"
+	case DungeonStatusFailed:
+		return "failed"
+	case DungeonStatusClosed:
+		return "closed"
+	default:
+		return "unknown"
+	}
 }
 
 type DungeonInstance struct {
-	InstanceID    int32
-	DungeonID     int32
-	Config        *DungeonConfig
-	Status        DungeonStatus
-	Players       map[id.PlayerIdType]*DungeonPlayer
-	CurrentWave   int32
-	StartTime     time.Time
-	EndTime       time.Time
-	KillCount     int32
-	TotalKills    int32
-	IsSuccess     bool
+	mu             sync.RWMutex
+	InstanceID     id.InstanceIdType
+	DungeonID      id.DungeonIdType
+	DungeonConfig  *models.Dungeon
+	Waves          []*models.DungeonWave
+	Status         DungeonStatus
+	Players        map[id.PlayerIdType]*DungeonPlayer
+	CurrentWave    int32
+	StartTime      time.Time
+	EndTime        time.Time
+	KillCount      int32
+	TotalKills     int32
+	MapInstanceID  id.MapIdType
+	IsSuccess      bool
+	createTime     time.Time
 }
 
 type DungeonPlayer struct {
@@ -101,7 +72,7 @@ type DungeonPlayer struct {
 
 type PlayerDungeonRecord struct {
 	PlayerID       id.PlayerIdType
-	DungeonID      int32
+	DungeonID      id.DungeonIdType
 	CompletedCount int32
 	BestTime       int32
 	LastEnterTime  time.Time
@@ -110,59 +81,68 @@ type PlayerDungeonRecord struct {
 }
 
 type DungeonManager struct {
-	mu              sync.RWMutex
-	instances       map[int32]*DungeonInstance
-	playerRecords   map[id.PlayerIdType]map[int32]*PlayerDungeonRecord
-	nextInstanceID  int32
+	mu             sync.RWMutex
+	instances      map[id.InstanceIdType]*DungeonInstance
+	playerRecords  map[id.PlayerIdType]map[id.DungeonIdType]*PlayerDungeonRecord
+	nextInstanceID int64
+	tableManager   *tables.TableManager
 }
-
-var globalDungeonManager *DungeonManager
-var dungeonOnce sync.Once
 
 func NewDungeonManager() *DungeonManager {
 	return &DungeonManager{
-		instances:      make(map[int32]*DungeonInstance),
-		playerRecords:  make(map[id.PlayerIdType]map[int32]*PlayerDungeonRecord),
-		nextInstanceID: 1,
+		instances:     make(map[id.InstanceIdType]*DungeonInstance),
+		playerRecords: make(map[id.PlayerIdType]map[id.DungeonIdType]*PlayerDungeonRecord),
 	}
 }
 
-func GetDungeonManager() *DungeonManager {
-	if globalDungeonManager == nil {
-		dungeonOnce.Do(func() {
-			globalDungeonManager = NewDungeonManager()
-		})
-	}
-	return globalDungeonManager
+func (dm *DungeonManager) SetTableManager(tm *tables.TableManager) {
+	dm.tableManager = tm
 }
 
-func (dm *DungeonManager) CreateInstance(config *DungeonConfig) (*DungeonInstance, error) {
+func (dm *DungeonManager) CreateInstance(dungeonID id.DungeonIdType) (*DungeonInstance, error) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	instanceID := dm.nextInstanceID
+	if dm.tableManager == nil {
+		return nil, fmt.Errorf("table manager not set")
+	}
+
+	dungeonConfig, ok := dm.tableManager.GetDungeonLoader().GetDungeon(int32(dungeonID))
+	if !ok {
+		return nil, fmt.Errorf("dungeon config not found: %d", dungeonID)
+	}
+
+	if !dungeonConfig.IsOpen {
+		return nil, fmt.Errorf("dungeon is not open: %d", dungeonID)
+	}
+
 	dm.nextInstanceID++
+	instanceID := id.InstanceIdType(dm.nextInstanceID)
+
+	waves := dm.tableManager.GetDungeonLoader().GetWavesByDungeonID(int32(dungeonID))
 
 	instance := &DungeonInstance{
-		InstanceID:  instanceID,
-		DungeonID:   config.DungeonID,
-		Config:      config,
-		Status:      DungeonStatusWaiting,
-		Players:     make(map[id.PlayerIdType]*DungeonPlayer),
-		CurrentWave: 0,
+		InstanceID:    instanceID,
+		DungeonID:     dungeonID,
+		DungeonConfig: dungeonConfig,
+		Waves:         waves,
+		Status:        DungeonStatusWaiting,
+		Players:       make(map[id.PlayerIdType]*DungeonPlayer),
+		CurrentWave:   0,
+		createTime:    time.Now(),
 	}
 
 	dm.instances[instanceID] = instance
 
 	zLog.Info("Dungeon instance created",
-		zap.Int32("instance_id", instanceID),
-		zap.Int32("dungeon_id", config.DungeonID),
-		zap.String("name", config.Name))
+		zap.Int64("instance_id", int64(instanceID)),
+		zap.Int32("dungeon_id", int32(dungeonID)),
+		zap.String("name", dungeonConfig.Name))
 
 	return instance, nil
 }
 
-func (dm *DungeonManager) RemoveInstance(instanceID int32) error {
+func (dm *DungeonManager) RemoveInstance(instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -172,11 +152,11 @@ func (dm *DungeonManager) RemoveInstance(instanceID int32) error {
 
 	delete(dm.instances, instanceID)
 
-	zLog.Info("Dungeon instance removed", zap.Int32("instance_id", instanceID))
+	zLog.Info("Dungeon instance removed", zap.Int64("instance_id", int64(instanceID)))
 	return nil
 }
 
-func (dm *DungeonManager) GetInstance(instanceID int32) (*DungeonInstance, bool) {
+func (dm *DungeonManager) GetInstance(instanceID id.InstanceIdType) (*DungeonInstance, bool) {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 
@@ -184,7 +164,19 @@ func (dm *DungeonManager) GetInstance(instanceID int32) (*DungeonInstance, bool)
 	return instance, ok
 }
 
-func (dm *DungeonManager) EnterDungeon(playerID id.PlayerIdType, instanceID int32) error {
+func (dm *DungeonManager) GetInstanceByMapID(mapID id.MapIdType) *DungeonInstance {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+
+	for _, instance := range dm.instances {
+		if instance.MapInstanceID == mapID {
+			return instance
+		}
+	}
+	return nil
+}
+
+func (dm *DungeonManager) EnterDungeon(playerID id.PlayerIdType, instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -197,7 +189,7 @@ func (dm *DungeonManager) EnterDungeon(playerID id.PlayerIdType, instanceID int3
 		return fmt.Errorf("instance is not waiting for players")
 	}
 
-	if int32(len(instance.Players)) >= instance.Config.MaxPlayers {
+	if int32(len(instance.Players)) >= instance.DungeonConfig.MaxPlayers {
 		return fmt.Errorf("instance is full")
 	}
 
@@ -219,12 +211,12 @@ func (dm *DungeonManager) EnterDungeon(playerID id.PlayerIdType, instanceID int3
 
 	zLog.Debug("Player entered dungeon",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int32("instance_id", instanceID))
+		zap.Int64("instance_id", int64(instanceID)))
 
 	return nil
 }
 
-func (dm *DungeonManager) LeaveDungeon(playerID id.PlayerIdType, instanceID int32) error {
+func (dm *DungeonManager) LeaveDungeon(playerID id.PlayerIdType, instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -241,17 +233,17 @@ func (dm *DungeonManager) LeaveDungeon(playerID id.PlayerIdType, instanceID int3
 
 	zLog.Debug("Player left dungeon",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int32("instance_id", instanceID))
+		zap.Int64("instance_id", int64(instanceID)))
 
 	if len(instance.Players) == 0 && instance.Status == DungeonStatusWaiting {
 		delete(dm.instances, instanceID)
-		zLog.Info("Empty instance removed", zap.Int32("instance_id", instanceID))
+		zLog.Info("Empty instance removed", zap.Int64("instance_id", int64(instanceID)))
 	}
 
 	return nil
 }
 
-func (dm *DungeonManager) StartDungeon(instanceID int32) error {
+func (dm *DungeonManager) StartDungeon(instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -264,8 +256,9 @@ func (dm *DungeonManager) StartDungeon(instanceID int32) error {
 		return fmt.Errorf("instance is not in waiting status")
 	}
 
-	if int32(len(instance.Players)) < instance.Config.MinPlayers {
-		return fmt.Errorf("not enough players")
+	if int32(len(instance.Players)) < instance.DungeonConfig.MinPlayers {
+		return fmt.Errorf("not enough players: need %d, have %d",
+			instance.DungeonConfig.MinPlayers, len(instance.Players))
 	}
 
 	instance.Status = DungeonStatusInProgress
@@ -273,14 +266,14 @@ func (dm *DungeonManager) StartDungeon(instanceID int32) error {
 	instance.CurrentWave = 1
 
 	zLog.Info("Dungeon started",
-		zap.Int32("instance_id", instanceID),
-		zap.Int32("dungeon_id", instance.DungeonID),
+		zap.Int64("instance_id", int64(instanceID)),
+		zap.Int32("dungeon_id", int32(instance.DungeonID)),
 		zap.Int("player_count", len(instance.Players)))
 
 	return nil
 }
 
-func (dm *DungeonManager) CompleteDungeon(instanceID int32, isSuccess bool) error {
+func (dm *DungeonManager) CompleteDungeon(instanceID id.InstanceIdType, isSuccess bool) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -299,54 +292,24 @@ func (dm *DungeonManager) CompleteDungeon(instanceID int32, isSuccess bool) erro
 	if isSuccess {
 		instance.Status = DungeonStatusCompleted
 		for playerID := range instance.Players {
-			dm.updatePlayerRecord(playerID, instance.DungeonID, true, int32(time.Since(instance.StartTime).Seconds()))
+			dm.updatePlayerRecordLocked(playerID, instance.DungeonID, true,
+				int32(time.Since(instance.StartTime).Seconds()))
 		}
 	} else {
 		instance.Status = DungeonStatusFailed
 		for playerID := range instance.Players {
-			dm.updatePlayerRecord(playerID, instance.DungeonID, false, 0)
+			dm.updatePlayerRecordLocked(playerID, instance.DungeonID, false, 0)
 		}
 	}
 
 	zLog.Info("Dungeon completed",
-		zap.Int32("instance_id", instanceID),
+		zap.Int64("instance_id", int64(instanceID)),
 		zap.Bool("success", isSuccess))
 
 	return nil
 }
 
-func (dm *DungeonManager) updatePlayerRecord(playerID id.PlayerIdType, dungeonID int32, success bool, clearTime int32) {
-	if _, exists := dm.playerRecords[playerID]; !exists {
-		dm.playerRecords[playerID] = make(map[int32]*PlayerDungeonRecord)
-	}
-
-	record, exists := dm.playerRecords[playerID][dungeonID]
-	if !exists {
-		record = &PlayerDungeonRecord{
-			PlayerID:  playerID,
-			DungeonID: dungeonID,
-		}
-		dm.playerRecords[playerID][dungeonID] = record
-	}
-
-	if success {
-		record.CompletedCount++
-		if record.BestTime == 0 || clearTime < record.BestTime {
-			record.BestTime = clearTime
-		}
-	}
-
-	record.LastEnterTime = time.Now()
-
-	now := time.Now()
-	if record.LastResetTime.IsZero() || now.Sub(record.LastResetTime) >= 24*time.Hour {
-		record.DailyCount = 0
-		record.LastResetTime = now
-	}
-	record.DailyCount++
-}
-
-func (dm *DungeonManager) PlayerDeath(playerID id.PlayerIdType, instanceID int32) error {
+func (dm *DungeonManager) PlayerDeath(playerID id.PlayerIdType, instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -376,13 +339,13 @@ func (dm *DungeonManager) PlayerDeath(playerID id.PlayerIdType, instanceID int32
 		instance.IsSuccess = false
 
 		zLog.Info("Dungeon failed - all players dead",
-			zap.Int32("instance_id", instanceID))
+			zap.Int64("instance_id", int64(instanceID)))
 	}
 
 	return nil
 }
 
-func (dm *DungeonManager) MonsterKilled(instanceID int32, killerID id.PlayerIdType, count int32) {
+func (dm *DungeonManager) MonsterKilled(instanceID id.InstanceIdType, killerID id.PlayerIdType, count int32) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -399,7 +362,7 @@ func (dm *DungeonManager) MonsterKilled(instanceID int32, killerID id.PlayerIdTy
 	}
 }
 
-func (dm *DungeonManager) AdvanceWave(instanceID int32) error {
+func (dm *DungeonManager) AdvanceWave(instanceID id.InstanceIdType) error {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
@@ -413,51 +376,76 @@ func (dm *DungeonManager) AdvanceWave(instanceID int32) error {
 	}
 
 	instance.CurrentWave++
+	instance.KillCount = 0
 
-	if instance.CurrentWave > int32(len(instance.Config.Waves)) {
+	totalWaves := int32(len(instance.Waves))
+	if totalWaves == 0 {
+		totalWaves = instance.DungeonConfig.WaveCount
+	}
+
+	if totalWaves > 0 && instance.CurrentWave > totalWaves {
 		instance.Status = DungeonStatusCompleted
 		instance.EndTime = time.Now()
 		instance.IsSuccess = true
 
 		for playerID := range instance.Players {
-			dm.updatePlayerRecord(playerID, instance.DungeonID, true, int32(time.Since(instance.StartTime).Seconds()))
+			dm.updatePlayerRecordLocked(playerID, instance.DungeonID, true,
+				int32(time.Since(instance.StartTime).Seconds()))
 		}
 
 		zLog.Info("Dungeon completed - all waves cleared",
-			zap.Int32("instance_id", instanceID))
+			zap.Int64("instance_id", int64(instanceID)))
 	} else {
 		zLog.Debug("Wave advanced",
-			zap.Int32("instance_id", instanceID),
+			zap.Int64("instance_id", int64(instanceID)),
 			zap.Int32("wave", instance.CurrentWave))
 	}
 
 	return nil
 }
 
-func (dm *DungeonManager) GetPlayerRecords(playerID id.PlayerIdType) map[int32]*PlayerDungeonRecord {
+func (dm *DungeonManager) GetCurrentWaveMonsters(instanceID id.InstanceIdType) ([]int32, error) {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 
-	if records, exists := dm.playerRecords[playerID]; exists {
-		result := make(map[int32]*PlayerDungeonRecord)
-		for k, v := range records {
-			result[k] = v
-		}
-		return result
+	instance, exists := dm.instances[instanceID]
+	if !exists {
+		return nil, fmt.Errorf("instance not found: %d", instanceID)
 	}
 
-	return make(map[int32]*PlayerDungeonRecord)
+	if instance.CurrentWave < 1 || int(instance.CurrentWave) > len(instance.Waves) {
+		return nil, nil
+	}
+
+	wave := instance.Waves[instance.CurrentWave-1]
+	if dm.tableManager != nil {
+		return dm.tableManager.GetDungeonLoader().ParseMonsterIDs(wave.MonsterIDs), nil
+	}
+	return nil, nil
 }
 
-func (dm *DungeonManager) CanEnterDungeon(playerID id.PlayerIdType, config *DungeonConfig) (bool, string) {
+func (dm *DungeonManager) CanEnterDungeon(playerID id.PlayerIdType, dungeonID id.DungeonIdType) (bool, string) {
 	dm.mu.RLock()
 	defer dm.mu.RUnlock()
 
+	if dm.tableManager == nil {
+		return false, "table manager not set"
+	}
+
+	dungeonConfig, ok := dm.tableManager.GetDungeonLoader().GetDungeon(int32(dungeonID))
+	if !ok {
+		return false, "dungeon not found"
+	}
+
+	if !dungeonConfig.IsOpen {
+		return false, "dungeon is not open"
+	}
+
 	if records, exists := dm.playerRecords[playerID]; exists {
-		if record, exists := records[config.DungeonID]; exists {
+		if record, exists := records[dungeonID]; exists {
 			now := time.Now()
 			if now.Sub(record.LastResetTime) < 24*time.Hour {
-				if record.DailyCount >= config.DailyLimit {
+				if dungeonConfig.DailyLimit > 0 && record.DailyCount >= dungeonConfig.DailyLimit {
 					return false, "daily limit reached"
 				}
 			}
@@ -465,6 +453,21 @@ func (dm *DungeonManager) CanEnterDungeon(playerID id.PlayerIdType, config *Dung
 	}
 
 	return true, ""
+}
+
+func (dm *DungeonManager) GetPlayerRecords(playerID id.PlayerIdType) map[id.DungeonIdType]*PlayerDungeonRecord {
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+
+	if records, exists := dm.playerRecords[playerID]; exists {
+		result := make(map[id.DungeonIdType]*PlayerDungeonRecord)
+		for k, v := range records {
+			result[k] = v
+		}
+		return result
+	}
+
+	return make(map[id.DungeonIdType]*PlayerDungeonRecord)
 }
 
 func (dm *DungeonManager) GetActiveInstances() []*DungeonInstance {
@@ -489,25 +492,68 @@ func (dm *DungeonManager) Update(deltaTime time.Duration) {
 	for _, instance := range dm.instances {
 		if instance.Status == DungeonStatusInProgress {
 			elapsed := now.Sub(instance.StartTime)
-			if elapsed.Seconds() >= float64(instance.Config.TimeLimit) {
+			if instance.DungeonConfig.TimeLimit > 0 &&
+				elapsed.Seconds() >= float64(instance.DungeonConfig.TimeLimit) {
 				instance.Status = DungeonStatusFailed
 				instance.EndTime = now
 				instance.IsSuccess = false
 
 				zLog.Info("Dungeon failed - time limit exceeded",
-					zap.Int32("instance_id", instance.InstanceID))
+					zap.Int64("instance_id", int64(instance.InstanceID)))
+			}
+		}
+
+		if instance.Status == DungeonStatusWaiting {
+			if now.Sub(instance.createTime) >= 10*time.Minute {
+				instance.Status = DungeonStatusClosed
+				zLog.Info("Dungeon instance closed - wait timeout",
+					zap.Int64("instance_id", int64(instance.InstanceID)))
 			}
 		}
 	}
 }
 
+func (dm *DungeonManager) updatePlayerRecordLocked(playerID id.PlayerIdType, dungeonID id.DungeonIdType, success bool, clearTime int32) {
+	if _, exists := dm.playerRecords[playerID]; !exists {
+		dm.playerRecords[playerID] = make(map[id.DungeonIdType]*PlayerDungeonRecord)
+	}
+
+	record, exists := dm.playerRecords[playerID][dungeonID]
+	if !exists {
+		record = &PlayerDungeonRecord{
+			PlayerID:  playerID,
+			DungeonID: dungeonID,
+		}
+		dm.playerRecords[playerID][dungeonID] = record
+	}
+
+	if success {
+		record.CompletedCount++
+		if record.BestTime == 0 || clearTime < record.BestTime {
+			record.BestTime = clearTime
+		}
+	}
+
+	record.LastEnterTime = time.Now()
+
+	now := time.Now()
+	if record.LastResetTime.IsZero() || now.Sub(record.LastResetTime) >= 24*time.Hour {
+		record.DailyCount = 0
+		record.LastResetTime = now
+	}
+	record.DailyCount++
+}
+
 func (di *DungeonInstance) GetRemainingTime() int32 {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
+
 	if di.Status != DungeonStatusInProgress {
 		return 0
 	}
 
 	elapsed := time.Since(di.StartTime).Seconds()
-	remaining := di.Config.TimeLimit - int32(elapsed)
+	remaining := di.DungeonConfig.TimeLimit - int32(elapsed)
 	if remaining < 0 {
 		return 0
 	}
@@ -515,10 +561,15 @@ func (di *DungeonInstance) GetRemainingTime() int32 {
 }
 
 func (di *DungeonInstance) GetPlayerCount() int {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
 	return len(di.Players)
 }
 
 func (di *DungeonInstance) GetAlivePlayerCount() int {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
+
 	count := 0
 	for _, player := range di.Players {
 		if player.IsAlive {
@@ -529,14 +580,34 @@ func (di *DungeonInstance) GetAlivePlayerCount() int {
 }
 
 func (di *DungeonInstance) IsPlayerInInstance(playerID id.PlayerIdType) bool {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
 	_, exists := di.Players[playerID]
 	return exists
 }
 
 func (di *DungeonInstance) GetProgress() float32 {
-	if len(di.Config.Waves) == 0 {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
+
+	totalWaves := int32(len(di.Waves))
+	if totalWaves == 0 {
+		totalWaves = di.DungeonConfig.WaveCount
+	}
+	if totalWaves == 0 {
 		return 100.0
 	}
-	return float32(di.CurrentWave-1) / float32(len(di.Config.Waves)) * 100.0
+	return float32(di.CurrentWave-1) / float32(totalWaves) * 100.0
 }
 
+func (di *DungeonInstance) SetMapInstanceID(mapID id.MapIdType) {
+	di.mu.Lock()
+	defer di.mu.Unlock()
+	di.MapInstanceID = mapID
+}
+
+func (di *DungeonInstance) GetMapInstanceID() id.MapIdType {
+	di.mu.RLock()
+	defer di.mu.RUnlock()
+	return di.MapInstanceID
+}

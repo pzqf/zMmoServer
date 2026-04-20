@@ -1,34 +1,29 @@
 package crossserver
 
 import (
-	"encoding/json"
+	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/proto"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/crossserver"
-	"github.com/pzqf/zCommon/message"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
-// MessageProcessor 跨服务器消息处理器
 type MessageProcessor struct {
 	serverID int32
 }
 
-// NewMessageProcessor 创建跨服务器消息处理器
 func NewMessageProcessor(serverID int32) *MessageProcessor {
 	return &MessageProcessor{
 		serverID: serverID,
 	}
 }
 
-// WrapMessage 封装跨服务器消息
 func (mp *MessageProcessor) WrapMessage(sessionID zNet.SessionIdType, protoId int32, playerID id.PlayerIdType, data []byte) ([]byte, error) {
-	// 创建基础消息
 	baseMsg := &protocol.BaseMessage{
 		MsgId:     uint32(protoId),
 		SessionId: uint64(sessionID),
@@ -38,7 +33,6 @@ func (mp *MessageProcessor) WrapMessage(sessionID zNet.SessionIdType, protoId in
 		Data:      data,
 	}
 
-	// 创建跨服务器消息
 	crossMsg := &protocol.CrossServerMessage{
 		TraceId:      uint64(time.Now().UnixNano()),
 		FromServerId: uint32(mp.serverID),
@@ -47,23 +41,14 @@ func (mp *MessageProcessor) WrapMessage(sessionID zNet.SessionIdType, protoId in
 		Message:      baseMsg,
 	}
 
-	// 使用Protocol Buffers序列化消息
 	crossMsgData, err := proto.Marshal(crossMsg)
 	if err != nil {
 		zLog.Error("Failed to marshal cross server message", zap.Error(err))
 		return nil, err
 	}
 
-	// 编码消息
-	encodedMsg, err := message.Encode(uint32(protoId), crossMsgData)
-	if err != nil {
-		zLog.Error("Failed to encode message", zap.Error(err))
-		return nil, err
-	}
-
-	// 包装消息
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, mp.serverID)
-	encodedMsg = crossserver.Wrap(meta, encodedMsg)
+	wrappedData := crossserver.Wrap(meta, crossMsgData)
 
 	zLog.Debug("Wrapped cross-server message",
 		zap.Uint64("trace_id", meta.TraceID),
@@ -71,12 +56,10 @@ func (mp *MessageProcessor) WrapMessage(sessionID zNet.SessionIdType, protoId in
 		zap.Int32("proto_id", protoId),
 		zap.Int32("server_id", mp.serverID))
 
-	return encodedMsg, nil
+	return wrappedData, nil
 }
 
-// UnwrapMessage 解析跨服务器消息
 func (mp *MessageProcessor) UnwrapMessage(data []byte) (int32, uint64, uint64, []byte, error) {
-	// 解包装
 	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(data)
 	if unwrapErr != nil {
 		zLog.Error("Invalid cross-server envelope", zap.Error(unwrapErr))
@@ -92,40 +75,32 @@ func (mp *MessageProcessor) UnwrapMessage(data []byte) (int32, uint64, uint64, [
 			zap.Int32("server_id", mp.serverID))
 	}
 
-	// 解码消息
-	msg, err := message.Decode(data)
-	if err != nil {
-		zLog.Error("Failed to decode message", zap.Error(err))
-		return 0, 0, 0, nil, err
-	}
-
-	// 解析跨服务器消息
-	var crossMsg crossserver.CrossServerMessage
-	if err := json.Unmarshal(msg.Data, &crossMsg); err != nil {
+	var crossMsg protocol.CrossServerMessage
+	if err := proto.Unmarshal(data, &crossMsg); err != nil {
 		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
 		return 0, 0, 0, nil, err
 	}
 
-	// 提取基础消息
 	baseMsg := crossMsg.Message
+	if baseMsg == nil {
+		zLog.Error("Cross server message has no base message")
+		return 0, 0, 0, nil, fmt.Errorf("no base message")
+	}
 
 	zLog.Debug("Unwrapped cross-server message",
-		zap.Uint32("msg_id", msg.Header.MsgID),
-		zap.Uint64("session_id", baseMsg.SessionID),
-		zap.Uint64("player_id", baseMsg.PlayerID))
+		zap.Uint32("msg_id", baseMsg.MsgId),
+		zap.Uint64("session_id", baseMsg.SessionId),
+		zap.Uint64("player_id", baseMsg.PlayerId))
 
-	return int32(msg.Header.MsgID), baseMsg.SessionID, baseMsg.PlayerID, baseMsg.Data, nil
+	return int32(baseMsg.MsgId), baseMsg.SessionId, baseMsg.PlayerId, baseMsg.Data, nil
 }
 
-// SendToGateway 发送消息到Gateway
 func (mp *MessageProcessor) SendToGateway(session zNet.Session, sessionID zNet.SessionIdType, protoId int32, playerID id.PlayerIdType, data []byte) error {
-	// 封装消息
 	encodedMsg, err := mp.WrapMessage(sessionID, protoId, playerID, data)
 	if err != nil {
 		return err
 	}
 
-	// 发送消息
 	err = session.Send(zNet.ProtoIdType(protoId), encodedMsg)
 	if err != nil {
 		zLog.Error("Failed to send message to Gateway", zap.Error(err))

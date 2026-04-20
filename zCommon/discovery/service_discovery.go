@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -62,34 +63,9 @@ func NewServiceDiscovery(endpoints []string) (*ServiceDiscovery, error) {
 func NewServiceDiscoveryWithConfig(endpoints []string, cfg *EtcdConfig) (*ServiceDiscovery, error) {
 	zLog.Info("Creating ServiceDiscovery", zap.Strings("endpoints", endpoints))
 
-	caCert, err := ioutil.ReadFile(cfg.CACertPath)
+	tlsConfig, err := CreateTLSConfig(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("read CA certificate failed: %w", err)
-	}
-
-	clientCert, err := ioutil.ReadFile(cfg.ClientCertPath)
-	if err != nil {
-		return nil, fmt.Errorf("read client certificate failed: %w", err)
-	}
-
-	clientKey, err := ioutil.ReadFile(cfg.ClientKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read client key failed: %w", err)
-	}
-
-	caCertPool := x509.NewCertPool()
-	if !caCertPool.AppendCertsFromPEM(caCert) {
-		return nil, fmt.Errorf("add CA certificate to pool failed")
-	}
-
-	cert, err := tls.X509KeyPair(clientCert, clientKey)
-	if err != nil {
-		return nil, fmt.Errorf("create client certificate failed: %w", err)
-	}
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{cert},
-		RootCAs:      caCertPool,
+		return nil, err
 	}
 
 	etcdClient, err := clientv3.New(clientv3.Config{
@@ -149,7 +125,7 @@ func (sd *ServiceDiscovery) Register(info *ServerInfo) error {
 		return err
 	}
 
-	zLog.Info("Service registered to etcd",
+	zLog.Debug("Service registered to etcd",
 		zap.String("key", serviceKey),
 		zap.String("id", info.ID),
 		zap.String("service_type", info.ServiceType),
@@ -159,6 +135,50 @@ func (sd *ServiceDiscovery) Register(info *ServerInfo) error {
 		zap.Int("players", info.Players))
 
 	return nil
+}
+
+func CreateTLSConfig(cfg *EtcdConfig) (*tls.Config, error) {
+	if cfg == nil {
+		return nil, nil
+	}
+
+	if strings.HasPrefix(cfg.Endpoints, "http://") {
+		return nil, nil
+	}
+
+	if cfg.CACertPath == "" && cfg.ClientCertPath == "" && cfg.ClientKeyPath == "" {
+		return nil, nil
+	}
+
+	caCert, err := ioutil.ReadFile(cfg.CACertPath)
+	if err != nil {
+		return nil, fmt.Errorf("read CA certificate failed: %w", err)
+	}
+
+	clientCert, err := ioutil.ReadFile(cfg.ClientCertPath)
+	if err != nil {
+		return nil, fmt.Errorf("read client certificate failed: %w", err)
+	}
+
+	clientKey, err := ioutil.ReadFile(cfg.ClientKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("read client key failed: %w", err)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("add CA certificate to pool failed")
+	}
+
+	cert, err := tls.X509KeyPair(clientCert, clientKey)
+	if err != nil {
+		return nil, fmt.Errorf("create client certificate failed: %w", err)
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs:      caCertPool,
+	}, nil
 }
 
 func (sd *ServiceDiscovery) Unregister(serviceType string, groupID string, serverID string) error {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zCommon/db"
+	sharedDB "github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/db/connector"
 	"github.com/pzqf/zCommon/db/dao"
 	"github.com/pzqf/zCommon/db/models"
@@ -15,17 +15,15 @@ import (
 	"go.uber.org/zap"
 )
 
-// DBService 数据库服务
 type DBService struct {
 	mu        sync.RWMutex
-	config    *db.DBConfig
+	config    *sharedDB.DBConfig
 	connector connector.DBConnector
 	isRunning bool
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
 
-// NewDBService 创建数据库服务
 func NewDBService(cfg *config.Config) *DBService {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &DBService{
@@ -35,7 +33,6 @@ func NewDBService(cfg *config.Config) *DBService {
 	}
 }
 
-// Start 启动数据库服务
 func (s *DBService) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -44,10 +41,23 @@ func (s *DBService) Start() error {
 		return fmt.Errorf("db service already running")
 	}
 
-	// 初始化数据库连接器
+	dbMgr := sharedDB.GetMgr()
+	if dbMgr != nil {
+		if conn := dbMgr.GetConnector("global"); conn != nil {
+			s.connector = conn
+			s.isRunning = true
+
+			zLog.Info("Database service started (reusing DBManager connector)",
+				zap.String("dbname", s.config.DBName))
+
+			go s.monitorLoop()
+			return nil
+		}
+	}
+
+	zLog.Warn("DBManager connector not available, creating standalone connection")
 	conn := connector.NewDBConnector("global", s.config.Driver, s.config.MaxPoolSize)
 
-	// 初始化配置
 	dbConfig := connector.DBConfig{
 		Host:           s.config.Host,
 		Port:           s.config.Port,
@@ -60,12 +70,10 @@ func (s *DBService) Start() error {
 		ConnectTimeout: s.config.ConnectTimeout,
 	}
 
-	// 初始化连接
 	if err := conn.Init(dbConfig); err != nil {
 		return fmt.Errorf("failed to init db connector: %v", err)
 	}
 
-	// 启动连接
 	if err := conn.Start(); err != nil {
 		return fmt.Errorf("failed to connect to database: %v", err)
 	}
@@ -79,9 +87,7 @@ func (s *DBService) Start() error {
 		zap.Int("port", s.config.Port),
 		zap.String("dbname", s.config.DBName))
 
-	// 启动连接池监控
 	go s.monitorLoop()
-
 	return nil
 }
 

@@ -50,6 +50,19 @@ func (mtl *MonsterTableLoader) Load(dir string) error {
 			DropItems:    row[10],
 		}
 
+		if len(row) > 11 {
+			monster.LootGroupID = StrToInt32(row[11])
+		}
+		if len(row) > 12 {
+			monster.RespawnTime = StrToInt32(row[12])
+		}
+		if len(row) > 13 {
+			monster.AIType = row[13]
+		}
+		if len(row) > 14 {
+			monster.Difficulty = row[14]
+		}
+
 		tempMonsters[monster.MonsterID] = monster
 		return nil
 	})

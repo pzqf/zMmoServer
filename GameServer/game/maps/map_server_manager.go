@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
+// MapServerInfo 地图服务器信息
 type MapServerInfo struct {
 	ServerID   uint32
 	Address    string
@@ -24,6 +25,9 @@ type MapServerInfo struct {
 	Status     string
 }
 
+// MapServerManager 地图服务器管理器
+// 职责：通过 etcd 服务发现管理 MapServer 实例信息，维护 mapID → serverID 的路由映射
+// 注意：本管理器仅负责服务发现和路由，不涉及地图游戏逻辑（由 MapService 负责）
 type MapServerManager struct {
 	config           *config.Config
 	serviceDiscovery *discovery.ServiceDiscovery

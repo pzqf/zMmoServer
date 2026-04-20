@@ -2,8 +2,6 @@ package maps
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,10 +12,12 @@ import (
 	"github.com/pzqf/zCommon/consistency"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/protocol"
+	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/config"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
+	"github.com/pzqf/zMmoServer/GameServer/game/event"
 	"github.com/pzqf/zMmoServer/GameServer/game/object"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
@@ -26,6 +26,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// MapService 地图服务
+// 职责：管理本地地图实例、处理玩家地图操作（进入/离开/移动/攻击）、与 MapServer 跨服通信
+// 路由依赖：通过 MapServerManager 获取 mapID → MapServer 的路由信息
 type MapService struct {
 	config            *config.Config
 	protocol          protolayer.Protocol
@@ -33,6 +36,7 @@ type MapService struct {
 	connectionManager *connection.ConnectionManager
 	mapServerManager  *MapServerManager
 	playerMapManager  *player.PlayerMapManager
+	playerManager     *player.PlayerManager
 	pendingAttacks    *zMap.TypedMap[string, chan mapAttackResult]
 	pendingByReq      *zMap.TypedMap[uint64, chan mapAttackResult]
 	outbox            consistency.OutboxStore
@@ -84,6 +88,11 @@ func (ms *MapService) SetPlayerMapManager(playerMapManager *player.PlayerMapMana
 	ms.playerMapManager = playerMapManager
 }
 
+// SetPlayerManager 设置玩家管理器（用于 AOI 视野消息投递）
+func (ms *MapService) SetPlayerManager(pm *player.PlayerManager) {
+	ms.playerManager = pm
+}
+
 // SetOnOutboxStatsChanged 设置Outbox状态变更回调（用于实时监控更新）
 func (ms *MapService) SetOnOutboxStatsChanged(cb func(OutboxStats)) {
 	ms.onOutboxChanged = cb
@@ -118,12 +127,13 @@ func (ms *MapService) PurgeOutboxDeadLetters(olderThan time.Duration) int {
 func (ms *MapService) Start(ctx context.Context) error {
 	zLog.Info("Starting MapService...")
 
-	// 严格加载地图配置，缺失配置直接启动失败
 	if err := ms.loadMaps(); err != nil {
 		return err
 	}
 	ms.retryCtx, ms.retryCancel = context.WithCancel(ctx)
 	go ms.outboxRetryLoop()
+
+	ms.subscribeAOIEvents()
 
 	zLog.Info("MapService started successfully")
 	return nil
@@ -265,35 +275,23 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byt
 		return fmt.Errorf("connection manager not set")
 	}
 
-	var mapServerID uint32
-	if ms.mapServerManager != nil {
-		var exists bool
-		mapServerID, exists = ms.mapServerManager.GetMapServerID(mapID)
-		if !exists {
-			zLog.Warn("Map server not found for map, using default routing", zap.Int32("map_id", int32(mapID)))
-		}
+	baseMsg := &protocol.BaseMessage{
+		MsgId:     uint32(protoId),
+		PlayerId:  uint64(playerID),
+		ServerId:  uint32(ms.config.Server.ServerID),
+		Timestamp: uint64(time.Now().Unix()),
+		Data:      data,
 	}
 
-	baseMsg := crossserver.BaseMessage{
-		MsgID:       uint32(protoId),
-		PlayerID:    uint64(playerID),
-		ServerID:    uint32(ms.config.Server.ServerID),
-		Timestamp:   uint64(time.Now().Unix()),
-		Data:        data,
-		MapID:       uint32(mapID),
-		MapServerID: mapServerID,
-	}
-
-	crossMsg := crossserver.CrossServerMessage{
-		TraceID:      meta.TraceID,
-		FromService:  crossserver.ServiceTypeGame,
-		ToService:    crossserver.ServiceTypeMap,
-		FromServerID: uint32(ms.config.Server.ServerID),
-		ToServerID:   mapServerID,
+	crossMsg := &protocol.CrossServerMessage{
+		TraceId:      meta.TraceID,
+		FromServerId: uint32(ms.config.Server.ServerID),
+		FromService:  uint32(crossserver.ServiceTypeGame),
+		ToService:    uint32(crossserver.ServiceTypeMap),
 		Message:      baseMsg,
 	}
 
-	crossMsgData, err := json.Marshal(crossMsg)
+	crossMsgData, err := proto.Marshal(crossMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal cross server message: %w", err)
 	}
@@ -332,20 +330,7 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byt
 }
 
 func (ms *MapService) sendFramedToMap(mapID int, protoId int, enveloped []byte) error {
-	header := make([]byte, 16)
-	version := 1
-	dataLen := len(enveloped)
-	isCompressed := 0
-
-	binary.BigEndian.PutUint32(header[:4], uint32(protoId))
-	binary.BigEndian.PutUint32(header[4:8], uint32(version))
-	binary.BigEndian.PutUint32(header[8:12], uint32(dataLen))
-	binary.BigEndian.PutUint32(header[12:16], uint32(isCompressed))
-
-	message := append(header, enveloped...)
-
-	// 使用ConnectionManager发送消息到MapServer
-	err := ms.connectionManager.SendToMap(int(mapID), message)
+	err := ms.connectionManager.SendToMap(int(mapID), protoId, enveloped)
 	if err != nil {
 		return fmt.Errorf("failed to send map message: %w", err)
 	}
@@ -470,7 +455,50 @@ func (ms *MapService) HandlePlayerLeaveMap(playerID id.PlayerIdType, mapID id.Ma
 		ms.playerMapManager.RemovePlayerMap(playerID)
 	}
 
+	if err := ms.sendMapLeaveRequest(playerID, mapID); err != nil {
+		zLog.Warn("Failed to send map leave request to MapServer", zap.Error(err))
+	}
+
 	zLog.Info("Player left map",
+		zap.Int64("player_id", int64(playerID)),
+		zap.Int32("map_id", int32(mapID)))
+
+	return nil
+}
+
+// sendMapLeaveRequest 发送离开地图请求到MapServer
+func (ms *MapService) sendMapLeaveRequest(playerID id.PlayerIdType, mapID id.MapIdType) error {
+	mapLeaveReq := &protocol.ClientMapLeaveRequest{
+		PlayerId: int64(playerID),
+		MapId:    int32(mapID),
+	}
+
+	reqData, err := proto.Marshal(mapLeaveReq)
+	if err != nil {
+		return fmt.Errorf("failed to marshal map leave request: %w", err)
+	}
+
+	baseMsg := &protocol.BaseMessage{
+		PlayerId:  uint64(playerID),
+		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_LEAVE),
+		ServerId:  uint32(ms.config.Server.ServerID),
+		MapId:     uint32(mapID),
+		Data:      reqData,
+		Timestamp: uint64(time.Now().UnixNano()),
+	}
+
+	data, err := proto.Marshal(baseMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal base message: %w", err)
+	}
+
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
+	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
+	if err != nil {
+		return err
+	}
+
+	zLog.Info("MapServer leave map request sent",
 		zap.Int64("player_id", int64(playerID)),
 		zap.Int32("map_id", int32(mapID)))
 
@@ -739,4 +767,150 @@ func (ms *MapService) SendMapEnterResponse(conn interface{}, playerID id.PlayerI
 	_ = respData
 	_ = conn
 	return nil
+}
+
+// EnterMap 实现 player.MapOperator 接口
+func (ms *MapService) EnterMap(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
+	return ms.HandlePlayerEnterMap(playerID, mapID, pos)
+}
+
+// LeaveMap 实现 player.MapOperator 接口
+func (ms *MapService) LeaveMap(playerID id.PlayerIdType, mapID id.MapIdType) error {
+	return ms.HandlePlayerLeaveMap(playerID, mapID)
+}
+
+// Move 实现 player.MapOperator 接口
+func (ms *MapService) Move(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
+	return ms.HandlePlayerMove(playerID, mapID, pos)
+}
+
+// Attack 实现 player.MapOperator 接口
+func (ms *MapService) Attack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
+	return ms.HandlePlayerAttack(playerID, mapID, targetID)
+}
+
+// BattleReward 战斗奖励
+type BattleReward struct {
+	PlayerID  id.PlayerIdType
+	Exp       int64
+	Gold      int64
+	ItemIDs   []int32
+	KillCount int32
+}
+
+// HandleBattleReward 处理 MapServer 回传的战斗奖励
+func (ms *MapService) HandleBattleReward(reward *BattleReward) error {
+	if reward == nil {
+		return nil
+	}
+
+	zLog.Info("Handling battle reward",
+		zap.Int64("player_id", int64(reward.PlayerID)),
+		zap.Int64("exp", reward.Exp),
+		zap.Int64("gold", reward.Gold),
+		zap.Int("item_count", len(reward.ItemIDs)),
+		zap.Int32("kill_count", reward.KillCount))
+
+	if ms.playerMapManager != nil {
+		ms.playerMapManager.UpdatePlayerBattleStats(reward.PlayerID, reward.KillCount, reward.Exp)
+	}
+
+	return nil
+}
+
+// HandleMonsterDeath 处理 MapServer 回传的怪物死亡事件
+func (ms *MapService) HandleMonsterDeath(playerID id.PlayerIdType, mapID id.MapIdType, monsterID id.ObjectIdType, expReward int64, itemDrops []int32) error {
+	zLog.Info("Monster death notification from MapServer",
+		zap.Int64("player_id", int64(playerID)),
+		zap.Int32("map_id", int32(mapID)),
+		zap.Int64("monster_id", int64(monsterID)),
+		zap.Int64("exp_reward", expReward),
+		zap.Int("item_drops", len(itemDrops)))
+
+	m, err := ms.GetMap(mapID)
+	if err != nil {
+		return err
+	}
+
+	m.RemoveObject(monsterID)
+
+	reward := &BattleReward{
+		PlayerID:  playerID,
+		Exp:       expReward,
+		ItemIDs:   itemDrops,
+		KillCount: 1,
+	}
+
+	return ms.HandleBattleReward(reward)
+}
+
+// subscribeAOIEvents 订阅 AOI 视野事件，将事件转发给 PlayerManager 投递到玩家 Actor
+func (ms *MapService) subscribeAOIEvents() {
+	event.Subscribe(event.EventAOIEnterView, func(evt *zEvent.Event) {
+		data, ok := evt.Data.(*event.AOIViewEventData)
+		if !ok || ms.playerManager == nil {
+			return
+		}
+		msg := player.NewPlayerMessage(
+			data.WatcherID, player.SourceMapServer, player.MsgAOIEnterView,
+			&player.AOIViewRequest{
+				WatcherID: data.WatcherID,
+				TargetID:  data.TargetID,
+				MapID:     data.MapID,
+				PosX:      data.PosX,
+				PosY:      data.PosY,
+			},
+		)
+		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
+			zLog.Debug("Failed to route AOI enter view message",
+				zap.Int64("watcher_id", int64(data.WatcherID)),
+				zap.Error(err))
+		}
+	})
+
+	event.Subscribe(event.EventAOILeaveView, func(evt *zEvent.Event) {
+		data, ok := evt.Data.(*event.AOIViewEventData)
+		if !ok || ms.playerManager == nil {
+			return
+		}
+		msg := player.NewPlayerMessage(
+			data.WatcherID, player.SourceMapServer, player.MsgAOILeaveView,
+			&player.AOIViewRequest{
+				WatcherID: data.WatcherID,
+				TargetID:  data.TargetID,
+				MapID:     data.MapID,
+				PosX:      data.PosX,
+				PosY:      data.PosY,
+			},
+		)
+		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
+			zLog.Debug("Failed to route AOI leave view message",
+				zap.Int64("watcher_id", int64(data.WatcherID)),
+				zap.Error(err))
+		}
+	})
+
+	event.Subscribe(event.EventAOIMove, func(evt *zEvent.Event) {
+		data, ok := evt.Data.(*event.AOIViewEventData)
+		if !ok || ms.playerManager == nil {
+			return
+		}
+		msg := player.NewPlayerMessage(
+			data.WatcherID, player.SourceMapServer, player.MsgAOIMove,
+			&player.AOIViewRequest{
+				WatcherID: data.WatcherID,
+				TargetID:  data.TargetID,
+				MapID:     data.MapID,
+				OldPosX:   data.OldPosX,
+				OldPosY:   data.OldPosY,
+				PosX:      data.PosX,
+				PosY:      data.PosY,
+			},
+		)
+		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
+			zLog.Debug("Failed to route AOI move message",
+				zap.Int64("watcher_id", int64(data.WatcherID)),
+				zap.Error(err))
+		}
+	})
 }

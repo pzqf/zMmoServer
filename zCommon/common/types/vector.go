@@ -1,4 +1,4 @@
-﻿package types
+package types
 
 import (
 	"math"
@@ -61,6 +61,17 @@ func (v Vector3) Distance(other Vector3) float32 {
 	dy := v.Y - other.Y
 	dz := v.Z - other.Z
 	return float32(math.Sqrt(float64(dx*dx + dy*dy + dz*dz)))
+}
+
+func (v Vector3) DistanceTo(other Vector3) float32 {
+	return v.Distance(other)
+}
+
+func (v Vector3) DistanceSquared(other Vector3) float32 {
+	dx := v.X - other.X
+	dy := v.Y - other.Y
+	dz := v.Z - other.Z
+	return dx*dx + dy*dy + dz*dz
 }
 
 func (v Vector3) Lerp(other Vector3, t float32) Vector3 {

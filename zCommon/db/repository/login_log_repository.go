@@ -14,40 +14,13 @@ func NewLoginLogRepository(logDAO *dao.LoginLogDAO) *LoginLogRepositoryImpl {
 }
 
 func (r *LoginLogRepositoryImpl) Create(loginLog *models.LoginLog) (int64, error) {
-	var result int64
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.CreateLoginLog(loginLog, func(id int64, err error) {
-		result = id
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.CreateLoginLog(loginLog)
 }
 
 func (r *LoginLogRepositoryImpl) GetByPlayerID(playerID int64, limit int) ([]*models.LoginLog, error) {
-	var result []*models.LoginLog
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.GetLoginLogsByPlayerID(playerID, limit, func(logs []*models.LoginLog, err error) {
-		result = logs
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.GetLoginLogsByPlayerID(playerID, limit)
 }
 
 func (r *LoginLogRepositoryImpl) GetByOpType(opType int32, limit int) ([]*models.LoginLog, error) {
-	var result []*models.LoginLog
-	var resultErr error
-	ch := make(chan struct{})
-	r.logDAO.GetLoginLogsByOpType(opType, limit, func(logs []*models.LoginLog, err error) {
-		result = logs
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.logDAO.GetLoginLogsByOpType(opType, limit)
 }

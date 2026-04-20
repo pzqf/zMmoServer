@@ -61,16 +61,13 @@ func (s *BaseServer) OnBeforeStart() error {
 	}
 
 	s.initMetrics()
-	handler.InitJWTSecret(s.Config.Server.JWTSecret)
+	handler.InitJWTSecret(s.Config.Server.JWTSecret, s.Config.Server.TokenExpiryHours)
 
 	if err := s.initHTTPService(); err != nil {
 		return err
 	}
 
 	s.DBService = db.NewDBService(s.Config)
-	if err := s.loadStaticServers(); err != nil {
-		zLog.Warn("Failed to load static servers", zap.Error(err))
-	}
 
 	if err := s.initServiceDiscovery(); err != nil {
 		return err
@@ -174,7 +171,7 @@ func (s *BaseServer) registerWithRetry() error {
 			}
 			time.Sleep(time.Duration(i+1) * time.Second)
 		} else {
-			zLog.Info("Service registered successfully",
+			zLog.Debug("Service registered successfully",
 				zap.String("service_id", s.serviceInfo.ID),
 				zap.String("address", s.serviceInfo.Address))
 			if s.Metrics != nil {
@@ -245,6 +242,10 @@ func (s *BaseServer) OnAfterStart() error {
 		if err := s.DBService.Start(); err != nil {
 			return err
 		}
+	}
+
+	if err := s.loadStaticServers(); err != nil {
+		zLog.Warn("Failed to load static servers", zap.Error(err))
 	}
 	if s.Metrics != nil {
 		if err := s.Metrics.Start(); err != nil {

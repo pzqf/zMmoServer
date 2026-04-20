@@ -1,194 +1,280 @@
 package player
 
 import (
+	"time"
+
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zCommon/common/id"
 )
 
-// ==================== 消息类型定义 ====================
-
-// MessageType 消息类型
 type MessageType uint32
 
 const (
+	// 网络协议映射 (0-999) - 与 Protobuf PlayerMsgId/MapMsgId 对应
+	MsgNetEnterGame MessageType = 202 // MSG_PLAYER_ENTER_GAME
+	MsgNetLeaveGame MessageType = 204 // MSG_PLAYER_LEAVE_GAME
+	MsgNetMapEnter  MessageType = 1200 // MSG_MAP_ENTER
+	MsgNetMapLeave  MessageType = 1202 // MSG_MAP_LEAVE
+	MsgNetMapMove   MessageType = 1204 // MSG_MAP_MOVE
+	MsgNetMapAttack MessageType = 1206 // MSG_MAP_ATTACK
+
 	// 资源相关 (10000-10999)
-	MsgAddGold       MessageType = 10001 // 增加金币
-	MsgDeductGold    MessageType = 10002 // 扣除金币
-	MsgAddDiamond    MessageType = 10003 // 增加钻石
-	MsgDeductDiamond MessageType = 10004 // 扣除钻石
+	MsgAddGold       MessageType = 10001
+	MsgDeductGold    MessageType = 10002
+	MsgAddDiamond    MessageType = 10003
+	MsgDeductDiamond MessageType = 10004
 
 	// 物品相关 (11000-11999)
-	MsgAddItem    MessageType = 11001 // 增加物品
-	MsgRemoveItem MessageType = 11002 // 移除物品
-	MsgUseItem    MessageType = 11003 // 使用物品
+	MsgAddItem     MessageType = 11001
+	MsgRemoveItem  MessageType = 11002
+	MsgUseItem     MessageType = 11003
+	MsgEquipItem   MessageType = 11004
+	MsgUnequipItem MessageType = 11005
 
-	// 任务相关 (12000-12999)
-	MsgAcceptQuest   MessageType = 12001 // 接受任务
-	MsgCompleteQuest MessageType = 12002 // 完成任务
+	// 技能相关 (12000-12999)
+	MsgLearnSkill   MessageType = 12001
+	MsgUseSkill     MessageType = 12002
+	MsgUpgradeSkill MessageType = 12003
 
-	// 社交相关 (13000-13999)
-	MsgAddFriend    MessageType = 13001 // 添加好友
-	MsgRemoveFriend MessageType = 13002 // 移除好友
+	// 任务相关 (13000-13999)
+	MsgAcceptQuest   MessageType = 13001
+	MsgCompleteQuest MessageType = 13002
 
-	// 队伍相关 (14000-14999)
-	MsgCreateTeam MessageType = 14001 // 创建队伍
-	MsgJoinTeam   MessageType = 14002 // 加入队伍
-	MsgLeaveTeam  MessageType = 14003 // 离开队伍
+	// Buff相关 (14000-14999)
+	MsgAddBuff    MessageType = 14001
+	MsgRemoveBuff MessageType = 14002
+
+	// 社交相关 (15000-15999)
+	MsgAddFriend    MessageType = 15001
+	MsgRemoveFriend MessageType = 15002
+
+	// 队伍相关 (16000-16999)
+	MsgCreateTeam MessageType = 16001
+	MsgJoinTeam   MessageType = 16002
+	MsgLeaveTeam  MessageType = 16003
+
+	// AOI 视野同步 (17000-17999)
+	MsgAOIEnterView MessageType = 17001
+	MsgAOILeaveView MessageType = 17002
+	MsgAOIMove      MessageType = 17003
 )
 
-// ==================== 消息来源定义 ====================
-
-// MessageSource 消息来源
 type MessageSource int
 
 const (
-	SourceGateway   MessageSource = iota // 来自Gateway（客户端）
-	SourceMapServer                      // 来自MapServer
-	SourceAuction                        // 来自拍卖行
+	SourceGateway   MessageSource = iota
+	SourceMapServer
+	SourceAuction
 )
 
-// ==================== 请求消息定义 ====================
+type NetEnterGameRequest struct {
+	PlayerID id.PlayerIdType
+}
 
-// GoldRequest 金币请求
+type NetLeaveGameRequest struct {
+	PlayerID id.PlayerIdType
+}
+
+type NetMapEnterRequest struct {
+	PlayerID id.PlayerIdType
+	MapID    id.MapIdType
+	PosX     float32
+	PosY     float32
+	PosZ     float32
+}
+
+type NetMapLeaveRequest struct {
+	PlayerID id.PlayerIdType
+	MapID    id.MapIdType
+}
+
+type NetMapMoveRequest struct {
+	PlayerID id.PlayerIdType
+	MapID    id.MapIdType
+	PosX     float32
+	PosY     float32
+	PosZ     float32
+}
+
+type NetMapAttackRequest struct {
+	PlayerID id.PlayerIdType
+	MapID    id.MapIdType
+	TargetID id.ObjectIdType
+}
+
+type NetResponse struct {
+	ProtoId int32
+	Data    []byte
+}
+
 type GoldRequest struct {
-	Amount int64 // 数量
+	Amount int64
 }
 
-// DiamondRequest 钻石请求
 type DiamondRequest struct {
-	Amount int64 // 数量
+	Amount int64
 }
 
-// AddItemRequest 增加物品请求
 type AddItemRequest struct {
-	ItemID    id.ItemIdType // 物品ID
-	ItemCount int32         // 物品数量
+	ItemID    id.ItemIdType
+	ItemCount int32
 }
 
-// RemoveItemRequest 移除物品请求
 type RemoveItemRequest struct {
-	ItemID    id.ItemIdType // 物品ID
-	ItemCount int32         // 物品数量
+	ItemID    id.ItemIdType
+	ItemCount int32
+	Slot      int32
 }
 
-// UseItemRequest 使用物品请求
 type UseItemRequest struct {
-	ItemID id.ItemIdType // 物品ID
-	Slot   int32         // 槽位
+	ItemID id.ItemIdType
+	Slot   int32
 }
 
-// AddFriendRequest 添加好友请求
+type EquipRequest struct {
+	Slot      int32
+	EquipSlot int32
+}
+
+type SkillRequest struct {
+	SkillID int32
+}
+
+type BuffRequest struct {
+	BuffID   int32
+	Duration time.Duration
+}
+
+type QuestRequest struct {
+	QuestID int64
+}
+
 type AddFriendRequest struct {
-	FriendID id.PlayerIdType // 好友ID
+	FriendID id.PlayerIdType
 }
 
-// RemoveFriendRequest 移除好友请求
 type RemoveFriendRequest struct {
-	FriendID id.PlayerIdType // 好友ID
+	FriendID id.PlayerIdType
 }
 
-// CreateTeamRequest 创建队伍请求
 type CreateTeamRequest struct {
-	TeamName string // 队伍名称
+	TeamName string
 }
 
-// JoinTeamRequest 加入队伍请求
 type JoinTeamRequest struct {
-	TeamID id.TeamIdType // 队伍ID
+	TeamID id.TeamIdType
 }
 
-// LeaveTeamRequest 离开队伍请求
-type LeaveTeamRequest struct {
+type LeaveTeamRequest struct{}
+
+type AOIViewRequest struct {
+	WatcherID id.PlayerIdType
+	TargetID  int64
+	MapID     id.MapIdType
+	PosX      float32
+	PosY      float32
+	PosZ      float32
+	OldPosX   float32
+	OldPosY   float32
+	OldPosZ   float32
 }
 
-// ==================== 响应消息定义 ====================
-
-// BaseResponse 基础响应
 type BaseResponse struct {
-	Success bool   // 是否成功
-	Error   string // 错误信息（失败时）
+	Success bool
+	Error   string
 }
 
-// GoldResponse 金币操作响应
 type GoldResponse struct {
 	BaseResponse
-	CurrentGold int64 // 当前金币
+	CurrentGold int64
 }
 
-// DiamondResponse 钻石操作响应
 type DiamondResponse struct {
 	BaseResponse
-	CurrentDiamond int64 // 当前钻石
+	CurrentDiamond int64
 }
 
-// ItemResponse 物品操作响应
 type ItemResponse struct {
 	BaseResponse
-	ItemID    id.ItemIdType // 物品ID
-	ItemCount int32         // 剩余数量
+	ItemID    id.ItemIdType
+	ItemCount int32
+	Slot      int32
 }
 
-// FriendResponse 好友操作响应
+type EquipResponse struct {
+	BaseResponse
+	EquipSlot int32
+}
+
+type SkillResponse struct {
+	BaseResponse
+	SkillID int32
+}
+
+type BuffResponse struct {
+	BaseResponse
+	BuffID int32
+}
+
+type QuestResponse struct {
+	BaseResponse
+	QuestID int64
+}
+
 type FriendResponse struct {
 	BaseResponse
-	FriendID id.PlayerIdType // 好友ID
+	FriendID id.PlayerIdType
 }
 
-// TeamResponse 队伍操作响应
 type TeamResponse struct {
 	BaseResponse
-	TeamID id.TeamIdType // 队伍ID
+	TeamID id.TeamIdType
 }
 
-// ==================== PlayerMessage 定义 ====================
-
-// PlayerMessage 玩家消息，实现zActor.ActorMessage接口
 type PlayerMessage struct {
 	zActor.BaseActorMessage
 	Source   MessageSource
 	Type     MessageType
 	Data     interface{}
-	Callback chan interface{} // 回调通道
+	Callback chan interface{}
 }
 
-// ==================== 便捷构造函数 ====================
-
-// NewGoldRequest 创建金币请求
 func NewGoldRequest(amount int64) *GoldRequest {
 	return &GoldRequest{Amount: amount}
 }
 
-// NewDiamondRequest 创建钻石请求
 func NewDiamondRequest(amount int64) *DiamondRequest {
 	return &DiamondRequest{Amount: amount}
 }
 
-// NewAddItemRequest 创建增加物品请求
 func NewAddItemRequest(itemID id.ItemIdType, count int32) *AddItemRequest {
 	return &AddItemRequest{ItemID: itemID, ItemCount: count}
 }
 
-// NewRemoveItemRequest 创建移除物品请求
-func NewRemoveItemRequest(itemID id.ItemIdType, count int32) *RemoveItemRequest {
-	return &RemoveItemRequest{ItemID: itemID, ItemCount: count}
+func NewRemoveItemRequest(itemID id.ItemIdType, count int32, slot int32) *RemoveItemRequest {
+	return &RemoveItemRequest{ItemID: itemID, ItemCount: count, Slot: slot}
 }
 
-// NewUseItemRequest 创建使用物品请求
 func NewUseItemRequest(itemID id.ItemIdType, slot int32) *UseItemRequest {
 	return &UseItemRequest{ItemID: itemID, Slot: slot}
 }
 
-// NewAddFriendRequest 创建添加好友请求
-func NewAddFriendRequest(friendID id.PlayerIdType) *AddFriendRequest {
-	return &AddFriendRequest{FriendID: friendID}
+func NewSkillRequest(skillID int32) *SkillRequest {
+	return &SkillRequest{SkillID: skillID}
 }
 
-// NewRemoveFriendRequest 创建移除好友请求
-func NewRemoveFriendRequest(friendID id.PlayerIdType) *RemoveFriendRequest {
-	return &RemoveFriendRequest{FriendID: friendID}
+func NewBuffRequest(buffID int32, duration time.Duration) *BuffRequest {
+	return &BuffRequest{BuffID: buffID, Duration: duration}
 }
 
-// NewPlayerMessage 创建玩家消息
+func NewQuestRequest(questID int64) *QuestRequest {
+	return &QuestRequest{QuestID: questID}
+}
+
+func NewEquipRequest(slot int32, equipSlot int32) *EquipRequest {
+	return &EquipRequest{Slot: slot, EquipSlot: equipSlot}
+}
+
 func NewPlayerMessage(playerID id.PlayerIdType, source MessageSource, msgType MessageType, data interface{}) *PlayerMessage {
 	return &PlayerMessage{
 		BaseActorMessage: zActor.BaseActorMessage{ActorID: int64(playerID)},
@@ -198,7 +284,6 @@ func NewPlayerMessage(playerID id.PlayerIdType, source MessageSource, msgType Me
 	}
 }
 
-// NewPlayerMessageWithCallback 创建带回调的玩家消息
 func NewPlayerMessageWithCallback(playerID id.PlayerIdType, source MessageSource, msgType MessageType, data interface{}) (*PlayerMessage, chan interface{}) {
 	callback := make(chan interface{}, 1)
 	msg := &PlayerMessage{
@@ -211,50 +296,76 @@ func NewPlayerMessageWithCallback(playerID id.PlayerIdType, source MessageSource
 	return msg, callback
 }
 
-// ==================== 便捷消息创建函数 ====================
-
-// NewAddGoldMessage 创建增加金币消息
 func NewAddGoldMessage(playerID id.PlayerIdType, source MessageSource, amount int64) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgAddGold, NewGoldRequest(amount))
 }
 
-// NewDeductGoldMessage 创建扣除金币消息
 func NewDeductGoldMessage(playerID id.PlayerIdType, source MessageSource, amount int64) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgDeductGold, NewGoldRequest(amount))
 }
 
-// NewAddDiamondMessage 创建增加钻石消息
 func NewAddDiamondMessage(playerID id.PlayerIdType, source MessageSource, amount int64) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgAddDiamond, NewDiamondRequest(amount))
 }
 
-// NewDeductDiamondMessage 创建扣除钻石消息
 func NewDeductDiamondMessage(playerID id.PlayerIdType, source MessageSource, amount int64) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgDeductDiamond, NewDiamondRequest(amount))
 }
 
-// NewAddItemMessage 创建增加物品消息
 func NewAddItemMessage(playerID id.PlayerIdType, source MessageSource, itemID id.ItemIdType, count int32) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgAddItem, NewAddItemRequest(itemID, count))
 }
 
-// NewRemoveItemMessage 创建移除物品消息
-func NewRemoveItemMessage(playerID id.PlayerIdType, source MessageSource, itemID id.ItemIdType, count int32) *PlayerMessage {
-	return NewPlayerMessage(playerID, source, MsgRemoveItem, NewRemoveItemRequest(itemID, count))
+func NewRemoveItemMessage(playerID id.PlayerIdType, source MessageSource, itemID id.ItemIdType, count int32, slot int32) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgRemoveItem, NewRemoveItemRequest(itemID, count, slot))
 }
 
-// NewUseItemMessage 创建使用物品消息
 func NewUseItemMessage(playerID id.PlayerIdType, source MessageSource, itemID id.ItemIdType, slot int32) *PlayerMessage {
 	return NewPlayerMessage(playerID, source, MsgUseItem, NewUseItemRequest(itemID, slot))
 }
 
-// NewAddFriendMessage 创建添加好友消息
-func NewAddFriendMessage(playerID id.PlayerIdType, source MessageSource, friendID id.PlayerIdType) *PlayerMessage {
-	return NewPlayerMessage(playerID, source, MsgAddFriend, NewAddFriendRequest(friendID))
+func NewLearnSkillMessage(playerID id.PlayerIdType, source MessageSource, skillID int32) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgLearnSkill, NewSkillRequest(skillID))
 }
 
-// NewRemoveFriendMessage 创建移除好友消息
-func NewRemoveFriendMessage(playerID id.PlayerIdType, source MessageSource, friendID id.PlayerIdType) *PlayerMessage {
-	return NewPlayerMessage(playerID, source, MsgRemoveFriend, NewRemoveFriendRequest(friendID))
+func NewUseSkillMessage(playerID id.PlayerIdType, source MessageSource, skillID int32) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgUseSkill, NewSkillRequest(skillID))
 }
 
+func NewAddBuffMessage(playerID id.PlayerIdType, source MessageSource, buffID int32, duration time.Duration) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgAddBuff, NewBuffRequest(buffID, duration))
+}
+
+func NewAcceptQuestMessage(playerID id.PlayerIdType, source MessageSource, questID int64) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgAcceptQuest, NewQuestRequest(questID))
+}
+
+func NewEquipItemMessage(playerID id.PlayerIdType, source MessageSource, slot int32, equipSlot int32) *PlayerMessage {
+	return NewPlayerMessage(playerID, source, MsgEquipItem, NewEquipRequest(slot, equipSlot))
+}
+
+// ProtoToMessageType 将 Protobuf 协议 ID 映射为 Actor MessageType
+func ProtoToMessageType(protoId int32) (MessageType, bool) {
+	switch protoId {
+	case 202:
+		return MsgNetEnterGame, true
+	case 204:
+		return MsgNetLeaveGame, true
+	case 1200:
+		return MsgNetMapEnter, true
+	case 1202:
+		return MsgNetMapLeave, true
+	case 1204:
+		return MsgNetMapMove, true
+	case 1206:
+		return MsgNetMapAttack, true
+	default:
+		return 0, false
+	}
+}
+
+// IsNetProto 判断协议 ID 是否为网络协议（需要通过 Actor 投递）
+func IsNetProto(protoId int32) bool {
+	_, ok := ProtoToMessageType(protoId)
+	return ok
+}

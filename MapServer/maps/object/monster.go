@@ -153,6 +153,14 @@ func (m *Monster) GetAttack() int32 {
 	return m.attack
 }
 
+func (m *Monster) GetExpReward() int64 {
+	return m.exp
+}
+
+func (m *Monster) SetExpReward(exp int64) {
+	m.exp = exp
+}
+
 // GetDefense 获取防御力
 func (m *Monster) GetDefense() int32 {
 	return m.defense

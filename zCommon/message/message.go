@@ -1,3 +1,7 @@
+// Package message 客户端-服务器消息编解码
+// 职责：定义客户端与网关/游戏服务器之间的二进制消息格式（Length+MsgID+Data）
+// 边界：仅处理客户端协议层的消息编码/解码，不涉及服务器间通信
+// 服务器间通信请使用 crossserver 包
 package message
 
 import (

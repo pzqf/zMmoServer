@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/aoi"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
@@ -61,6 +62,8 @@ func (r *Region) GetObjectCount() int {
 	return len(r.objects)
 }
 
+const defaultGridSize = 50.0
+
 // Map 游戏地图
 type Map struct {
 	mu           sync.RWMutex
@@ -73,6 +76,7 @@ type Map struct {
 	objects      map[id.ObjectIdType]common.IGameObject
 	regions      map[id.RegionIdType]*Region
 	players      map[id.PlayerIdType]bool
+	aoiManager   *aoi.GridManager
 	createdAt    time.Time
 }
 
@@ -88,9 +92,61 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 		objects:      make(map[id.ObjectIdType]common.IGameObject),
 		regions:      make(map[id.RegionIdType]*Region),
 		players:      make(map[id.PlayerIdType]bool),
+		aoiManager:   aoi.NewGridManager(float64(width), float64(height), defaultGridSize, defaultGridSize),
 		createdAt:    time.Now(),
 	}
+	m.aoiManager.SetListener(m.handleAOIEvent)
 	return m
+}
+
+// handleAOIEvent 处理 AOI 事件
+func (m *Map) handleAOIEvent(evt aoi.AOIEvent) {
+	switch evt.Type {
+	case aoi.AOIEventEnter:
+		event.Publish(event.NewEvent(event.EventAOIEnterView, m, &event.AOIViewEventData{
+			WatcherID: id.PlayerIdType(evt.Watcher),
+			TargetID:  evt.Target,
+			MapID:     m.mapID,
+			PosX:      float32(evt.NewCoord.X),
+			PosY:      float32(evt.NewCoord.Y),
+		}))
+		zLog.Debug("AOI: entity entered view",
+			zap.Int64("watcher", evt.Watcher),
+			zap.Int64("target", evt.Target))
+	case aoi.AOIEventLeave:
+		event.Publish(event.NewEvent(event.EventAOILeaveView, m, &event.AOIViewEventData{
+			WatcherID: id.PlayerIdType(evt.Watcher),
+			TargetID:  evt.Target,
+			MapID:     m.mapID,
+			PosX:      float32(evt.OldCoord.X),
+			PosY:      float32(evt.OldCoord.Y),
+		}))
+		zLog.Debug("AOI: entity left view",
+			zap.Int64("watcher", evt.Watcher),
+			zap.Int64("target", evt.Target))
+	case aoi.AOIEventMove:
+		event.Publish(event.NewEvent(event.EventAOIMove, m, &event.AOIViewEventData{
+			WatcherID: id.PlayerIdType(evt.Target),
+			TargetID:  evt.Target,
+			MapID:     m.mapID,
+			OldPosX:   float32(evt.OldCoord.X),
+			OldPosY:   float32(evt.OldCoord.Y),
+			PosX:      float32(evt.NewCoord.X),
+			PosY:      float32(evt.NewCoord.Y),
+		}))
+		zLog.Debug("AOI: entity moved",
+			zap.Int64("entity", evt.Target))
+	}
+}
+
+// posToCoord 将 Vector3 转换为 AOI 坐标
+func (m *Map) posToCoord(pos common.Vector3) aoi.Coord {
+	return aoi.Coord{X: float64(pos.X), Y: float64(pos.Y)}
+}
+
+// GetAOIManager 获取 AOI 管理器
+func (m *Map) GetAOIManager() *aoi.GridManager {
+	return m.aoiManager
 }
 
 // GetID 获取地图ID
@@ -148,6 +204,8 @@ func (m *Map) AddObject(object common.IGameObject) {
 
 	object.SetMap(m)
 
+	m.aoiManager.AddEntity(int64(objectID), m.posToCoord(object.GetPosition()))
+
 	zLog.Debug("Object added to map",
 		zap.Int64("object_id", int64(objectID)),
 		zap.Int32("map_id", int32(m.mapID)),
@@ -165,6 +223,8 @@ func (m *Map) RemoveObject(objectID id.ObjectIdType) {
 	}
 
 	delete(m.objects, objectID)
+
+	m.aoiManager.RemoveEntity(int64(objectID), m.posToCoord(object.GetPosition()))
 
 	regionID := m.getRegionID(object.GetPosition())
 	if region, ok := m.regions[regionID]; ok {
@@ -186,6 +246,7 @@ func (m *Map) MoveObject(object common.IGameObject, targetPos common.Vector3) er
 
 	if oldRegionID == newRegionID {
 		object.SetPosition(targetPos)
+		m.aoiManager.MoveEntity(int64(object.GetID()), m.posToCoord(oldPos), m.posToCoord(targetPos))
 		return nil
 	}
 
@@ -202,6 +263,7 @@ func (m *Map) MoveObject(object common.IGameObject, targetPos common.Vector3) er
 	m.regions[newRegionID].AddObject(object)
 
 	object.SetPosition(targetPos)
+	m.aoiManager.MoveEntity(int64(object.GetID()), m.posToCoord(oldPos), m.posToCoord(targetPos))
 
 	return nil
 }
@@ -300,6 +362,8 @@ func (m *Map) AddPlayer(playerID id.PlayerIdType, object common.IGameObject) {
 
 	object.SetMap(m)
 
+	m.aoiManager.AddEntity(int64(playerID), m.posToCoord(object.GetPosition()))
+
 	event.Publish(event.NewEvent(event.EventPlayerEnterMap, m, &event.PlayerMapEventData{
 		PlayerID: playerID,
 		MapID:    m.mapID,
@@ -323,6 +387,8 @@ func (m *Map) RemovePlayer(playerID id.PlayerIdType) {
 	for _, obj := range m.objects {
 		if obj.GetType() == common.GameObjectTypePlayer {
 			if obj.GetID() == id.ObjectIdType(playerID) {
+				m.aoiManager.RemoveEntity(int64(playerID), m.posToCoord(obj.GetPosition()))
+
 				regionID := m.getRegionID(obj.GetPosition())
 				if region, ok := m.regions[regionID]; ok {
 					region.RemoveObject(obj.GetID())

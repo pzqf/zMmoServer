@@ -2,6 +2,7 @@ package object
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
@@ -10,14 +11,14 @@ import (
 
 // ObjectManager 游戏对象管理器
 type ObjectManager struct {
-	objects       *zMap.Map
+	objects       *zMap.TypedMap[id.ObjectIdType, common.IGameObject]
 	objectsByType *zMap.TypedMap[common.GameObjectType, *zMap.TypedMap[id.ObjectIdType, common.IGameObject]]
 }
 
 // NewObjectManager 创建对象管理器
 func NewObjectManager() *ObjectManager {
 	return &ObjectManager{
-		objects:       zMap.NewMap(),
+		objects:       zMap.NewTypedMap[id.ObjectIdType, common.IGameObject](),
 		objectsByType: zMap.NewTypedMap[common.GameObjectType, *zMap.TypedMap[id.ObjectIdType, common.IGameObject]](),
 	}
 }
@@ -35,7 +36,7 @@ func (om *ObjectManager) AddObject(obj common.IGameObject) error {
 
 	_, exists := om.objects.Load(objectID)
 	if exists {
-		return errors.New("object already exists")
+		return fmt.Errorf("object already exists: %d", objectID)
 	}
 
 	om.objects.Store(objectID, obj)
@@ -53,21 +54,20 @@ func (om *ObjectManager) AddObject(obj common.IGameObject) error {
 
 // GetObject 获取对象
 func (om *ObjectManager) GetObject(objectID id.ObjectIdType) (common.IGameObject, error) {
-	v, ok := om.objects.Load(objectID)
+	obj, ok := om.objects.Load(objectID)
 	if !ok {
-		return nil, errors.New("object not found")
+		return nil, fmt.Errorf("object not found: %d", objectID)
 	}
-	return v.(common.IGameObject), nil
+	return obj, nil
 }
 
 // RemoveObject 移除对象
 func (om *ObjectManager) RemoveObject(objectID id.ObjectIdType) error {
-	v, ok := om.objects.Load(objectID)
+	obj, ok := om.objects.Load(objectID)
 	if !ok {
-		return errors.New("object not found")
+		return fmt.Errorf("object not found: %d", objectID)
 	}
 
-	obj := v.(common.IGameObject)
 	objectType := obj.GetType()
 
 	om.objects.Delete(objectID)
@@ -97,8 +97,8 @@ func (om *ObjectManager) GetObjectsByType(objectType common.GameObjectType) []co
 // GetAllObjects 获取所有对象
 func (om *ObjectManager) GetAllObjects() []common.IGameObject {
 	objs := make([]common.IGameObject, 0)
-	om.objects.Range(func(key, value interface{}) bool {
-		objs = append(objs, value.(common.IGameObject))
+	om.objects.Range(func(key id.ObjectIdType, value common.IGameObject) bool {
+		objs = append(objs, value)
 		return true
 	})
 	return objs
@@ -115,19 +115,12 @@ func (om *ObjectManager) GetObjectCountByType(objectType common.GameObjectType) 
 	if !ok {
 		return 0
 	}
-
-	count := 0
-	typeMap.Range(func(key id.ObjectIdType, value common.IGameObject) bool {
-		count++
-		return true
-	})
-	return count
+	return int(typeMap.Len())
 }
 
 // UpdateAll 更新所有对象
 func (om *ObjectManager) UpdateAll(deltaTime float64) {
-	om.objects.Range(func(key, value interface{}) bool {
-		obj := value.(common.IGameObject)
+	om.objects.Range(func(key id.ObjectIdType, obj common.IGameObject) bool {
 		if obj.IsActive() {
 			obj.Update(deltaTime)
 		}
@@ -137,8 +130,7 @@ func (om *ObjectManager) UpdateAll(deltaTime float64) {
 
 // ClearAll 清除所有对象
 func (om *ObjectManager) ClearAll() {
-	om.objects.Range(func(key, value interface{}) bool {
-		obj := value.(common.IGameObject)
+	om.objects.Range(func(key id.ObjectIdType, obj common.IGameObject) bool {
 		obj.Destroy()
 		return true
 	})
@@ -149,7 +141,5 @@ func (om *ObjectManager) ClearAll() {
 
 // Range 遍历所有对象
 func (om *ObjectManager) Range(f func(objectID id.ObjectIdType, obj common.IGameObject) bool) {
-	om.objects.Range(func(key, value interface{}) bool {
-		return f(key.(id.ObjectIdType), value.(common.IGameObject))
-	})
+	om.objects.Range(f)
 }

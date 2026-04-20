@@ -21,7 +21,7 @@ func (atl *AITableLoader) Load(dir string) error {
 	config := ExcelConfig{
 		FileName:   "ai.xlsx",
 		SheetName:  "Sheet1",
-		MinColumns: 10,
+		MinColumns: 9,
 		TableName:  "ais",
 	}
 

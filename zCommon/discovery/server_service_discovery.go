@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -50,13 +51,22 @@ func NewServerServiceDiscovery(cfg *ServerServiceDiscoveryConfig) (*ServerServic
 }
 
 func (sd *ServerServiceDiscovery) Register() error {
+	host, portStr, err := net.SplitHostPort(sd.config.ListenAddr)
+	if err != nil {
+		host = sd.config.ListenAddr
+		portStr = "0"
+	}
+
+	var port int
+	fmt.Sscanf(portStr, "%d", &port)
+
 	serviceInfo := &ServerInfo{
 		ID:            sd.serverID,
 		ServiceType:   sd.config.ServiceType,
 		GroupID:       sd.groupID,
 		Status:        zServer.ServerState("initializing"),
-		Address:       sd.config.ListenAddr,
-		Port:          0,
+		Address:       host,
+		Port:          port,
 		Load:          0,
 		Players:       0,
 		ReadyTime:     time.Now().Unix(),
@@ -71,7 +81,7 @@ func (sd *ServerServiceDiscovery) Register() error {
 			registerErr = err
 			time.Sleep(time.Duration(i+1) * time.Second)
 		} else {
-			zLog.Info("Service registered successfully", zap.String("service_id", serviceInfo.ID))
+			zLog.Debug("Service registered successfully", zap.String("service_id", serviceInfo.ID))
 			sd.serviceInfo = serviceInfo
 			return nil
 		}

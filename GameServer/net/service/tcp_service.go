@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -22,10 +21,10 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zMmoServer/GameServer/config"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
-	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/maps"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/handler"
+	msgHandler "github.com/pzqf/zMmoServer/GameServer/handler/message"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
 	playerservice "github.com/pzqf/zMmoServer/GameServer/services"
 	"github.com/pzqf/zMmoServer/GameServer/session"
@@ -42,9 +41,11 @@ type TCPService struct {
 	playerService     *playerservice.PlayerService
 	playerHandler     *handler.PlayerHandler
 	mapService        *maps.MapService
+	loginService      *player.LoginService
 	protocol          protolayer.Protocol
 	tcpServer         *zNet.TcpServer
 	mapServerListener net.Listener
+	messageRouter     *msgHandler.Router
 	isRunning         bool
 	wg                sync.WaitGroup
 	gatewayInbox      consistency.InboxStore
@@ -52,7 +53,7 @@ type TCPService struct {
 	onDedupeHit       func(total uint64)
 }
 
-func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *playerservice.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, protocol protolayer.Protocol) *TCPService {
+func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *playerservice.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, loginService *player.LoginService, protocol protolayer.Protocol) *TCPService {
 	return &TCPService{
 		config:         cfg,
 		connManager:    connManager,
@@ -61,10 +62,31 @@ func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager
 		playerService:  playerService,
 		playerHandler:  playerHandler,
 		mapService:     mapService,
+		loginService:   loginService,
 		protocol:       protocol,
 		isRunning:      false,
 		gatewayInbox:   consistency.NewMemoryInbox(),
+		messageRouter:  msgHandler.NewRouter(),
 	}
+}
+
+func (ts *TCPService) initMessageRouter() {
+	if ts.messageRouter == nil {
+		return
+	}
+
+	playerHandler := msgHandler.NewPlayerHandler(ts.sessionManager, ts.playerManager, ts.playerService, ts.loginService, int32(ts.config.Server.ServerID))
+	mapHandler := msgHandler.NewMapHandler(ts.mapService, ts.playerManager, int32(ts.config.Server.ServerID))
+	systemHandler := msgHandler.NewSystemHandler(ts.sessionManager)
+
+	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE), playerHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME), playerHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_ENTER), mapHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_LEAVE), mapHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_MOVE), mapHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_ATTACK), mapHandler)
 }
 
 func (ts *TCPService) Name() string {
@@ -82,6 +104,8 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	}
 
 	zLog.Info("Starting TCP service...", zap.String("addr", ts.config.Server.ListenAddr))
+
+	ts.initMessageRouter()
 
 	// 启动地图服务
 	if ts.mapService != nil {
@@ -110,7 +134,7 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	}
 
 	// 创建zNet.TcpServer（用于Gateway连接）
-	ts.tcpServer = zNet.NewTcpServer(tcpConfig)
+	ts.tcpServer = zNet.NewTcpServer(tcpConfig, zNet.WithLogger(zLog.GetStandardLogger()))
 
 	// 注册消息处理器
 	ts.tcpServer.RegisterDispatcher(ts.handleConnectionMessage)
@@ -410,41 +434,36 @@ func (ts *TCPService) forwardToGateway(playerID id.PlayerIdType, protoId int32, 
 		return fmt.Errorf("invalid session ID format: %s", sessionID)
 	}
 
-	baseMsg := crossserver.BaseMessage{
-		MsgID:     uint32(protoId),
-		SessionID: sessionIDUint,
-		PlayerID:  uint64(playerID),
-		ServerID:  uint32(ts.config.Server.ServerID),
+	baseMsg := &protocol.BaseMessage{
+		MsgId:     uint32(protoId),
+		SessionId: sessionIDUint,
+		PlayerId:  uint64(playerID),
+		ServerId:  uint32(ts.config.Server.ServerID),
 		Timestamp: uint64(time.Now().Unix()),
 		Data:      data,
 	}
 
-	crossMsg := crossserver.CrossServerMessage{
-		TraceID:      uint64(time.Now().UnixNano()),
-		FromService:  crossserver.ServiceTypeGame,
-		ToService:    crossserver.ServiceTypeGateway,
-		FromServerID: uint32(ts.config.Server.ServerID),
+	crossMsg := &protocol.CrossServerMessage{
+		TraceId:      uint64(time.Now().UnixNano()),
+		FromServerId: uint32(ts.config.Server.ServerID),
+		FromService:  uint32(crossserver.ServiceTypeGame),
+		ToService:    uint32(crossserver.ServiceTypeGateway),
 		Message:      baseMsg,
 	}
 
-	crossMsgData, err := json.Marshal(crossMsg)
+	crossMsgData, err := proto.Marshal(crossMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal cross server message: %w", err)
 	}
 
-	encodedMsg, err := message.Encode(uint32(protoId), crossMsgData)
-	if err != nil {
-		return fmt.Errorf("failed to encode message: %w", err)
-	}
-
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ts.config.Server.ServerID))
-	encodedMsg = crossserver.Wrap(meta, encodedMsg)
+	wrappedData := crossserver.Wrap(meta, crossMsgData)
 
 	if ts.connManager == nil {
 		return fmt.Errorf("connection manager not set")
 	}
 
-	return ts.connManager.SendToGateway(encodedMsg)
+	return ts.connManager.SendToGateway(wrappedData)
 }
 
 // handleConnectionMessage 处理来自客户端的消息
@@ -525,356 +544,36 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 		}
 	}
 
-	// 使用message包解码消息
-	msg, err := message.Decode(data)
-	if err != nil {
-		zLog.Error("Failed to decode message from Gateway", zap.Error(err))
-		return
-	}
-
-	zLog.Info("Received message from Gateway", zap.Int32("proto_id", protoId), zap.Int("data_size", len(data)))
-
-	// 解析跨服务器消息
 	crossMsg := &protocol.CrossServerMessage{}
-	if err := proto.Unmarshal(msg.Data, crossMsg); err != nil {
-		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
+	if err := proto.Unmarshal(data, crossMsg); err != nil {
+		zLog.Error("Failed to unmarshal cross server message", zap.Error(err), zap.Int("data_size", len(data)))
 		return
 	}
 
-	// 提取基础消息
-	baseMsg := crossMsg.Message
+	payload := crossMsg.Message.GetData()
+	actualProtoId := int32(crossMsg.Message.GetMsgId())
+	clientSessionID := zNet.SessionIdType(crossMsg.Message.GetSessionId())
 
-	// 提取数据部分
-	payload := baseMsg.GetData()
+	zLog.Info("Received message from Gateway",
+		zap.Int32("outer_proto_id", protoId),
+		zap.Int32("inner_proto_id", actualProtoId),
+		zap.Uint64("client_session_id", uint64(clientSessionID)),
+		zap.Int("data_size", len(payload)))
 
-	// 根据消息类型处理
-	switch protoId {
-	case int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME):
-		// 处理玩家进入游戏
-		zLog.Info("Handling player enter game from Gateway")
-		// 解析进入游戏请求
-		var req protocol.PlayerLoginRequest
-		if err := proto.Unmarshal(payload, &req); err != nil {
-			zLog.Error("Failed to unmarshal player enter game request", zap.Error(err))
-			return
-		}
-		zLog.Info("Player enter game request", zap.Int64("player_id", req.PlayerId))
-		// 处理进入游戏逻辑
-		if ts.playerManager == nil {
-			zLog.Error("PlayerManager is nil")
-			return
-		}
-		// 获取玩家
-		player, err := ts.playerManager.GetPlayer(id.PlayerIdType(req.PlayerId))
-		if err != nil {
-			zLog.Error("Failed to get player", zap.Error(err))
-			// 发送进入游戏失败的响应
-			resp := &protocol.PlayerLoginResponse{
-				Result:   1,
-				ErrorMsg: err.Error(),
-			}
-			respData, err := proto.Marshal(resp)
-			if err != nil {
-				zLog.Error("Failed to marshal player enter game response", zap.Error(err))
-				return
-			}
-			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
-			if err != nil {
-				zLog.Error("Failed to send player enter game response to Gateway", zap.Error(err))
-				return
-			}
-			return
-		}
-		zLog.Info("Player enter game successfully", zap.Uint64("player_id", uint64(player.GetPlayerID())))
-		// 发送进入游戏成功的响应
-		resp := &protocol.PlayerLoginResponse{
-			Result: 0,
-			PlayerInfo: &protocol.PlayerBasicInfo{
-				PlayerId:      int64(player.GetPlayerID()),
-				Name:          player.GetName(),
-				Level:         1, // 默认等级
-				Exp:           0,
-				Gold:          0,
-				VipLevel:      0,
-				ServerId:      int32(ts.config.Server.ServerID),
-				CreateTime:    time.Now().Unix(),
-				LastLoginTime: time.Now().Unix(),
-			},
-		}
-		// 序列化响应
-		respData, err := proto.Marshal(resp)
-		if err != nil {
-			zLog.Error("Failed to marshal player enter game response", zap.Error(err))
-			return
-		}
-		// 发送响应到Gateway
-		err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), respData)
-		if err != nil {
-			zLog.Error("Failed to send player enter game response to Gateway", zap.Error(err))
-			return
-		}
-		zLog.Info("Player enter game response sent to Gateway", zap.Uint64("player_id", uint64(player.GetPlayerID())))
-	case int32(protocol.PlayerMsgId_MSG_PLAYER_CREATE):
-		// 处理创建角色
-		zLog.Info("Handling player create from Gateway")
-		// 解析创建角色请求
-		var req protocol.PlayerCreateRequest
-		if err := proto.Unmarshal(payload, &req); err != nil {
-			zLog.Error("Failed to unmarshal player create request", zap.Error(err))
-			return
-		}
-		zLog.Info("Player create request", zap.String("name", req.Name), zap.Int32("sex", req.Sex), zap.Int32("age", req.Age))
-		// 处理创建角色逻辑
-		if ts.playerService == nil {
-			zLog.Error("PlayerService is nil")
-			return
-		}
-		if ts.playerManager == nil {
-			zLog.Error("PlayerManager is nil")
-			return
-		}
-		// 当前协议未透传 account_id，使用 session_id 作为临时账号标识，避免硬编码常量
-		accountID := id.AccountIdType(session.GetSid())
-		// 创建角色并写入数据库
-		playerID, err := ts.playerService.CreatePlayer(accountID, req.Name, req.Sex, req.Age)
-		if err != nil {
-			zLog.Error("Failed to create player in database", zap.Error(err))
-			// 发送创建角色失败的响应
-			resp := &protocol.PlayerCreateResponse{
-				Result:   1,
-				ErrorMsg: err.Error(),
-			}
-			respData, err := proto.Marshal(resp)
-			if err != nil {
-				zLog.Error("Failed to marshal player create response", zap.Error(err))
-				return
-			}
-			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
-			if err != nil {
-				zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
-				return
-			}
-			return
-		}
-		// 创建内存中的玩家对象
-		player, err := ts.playerManager.CreatePlayer(playerID, accountID, req.Name)
-		if err != nil {
-			zLog.Error("Failed to create player in memory", zap.Error(err))
-			// 发送创建角色失败的响应
-			resp := &protocol.PlayerCreateResponse{
-				Result:   1,
-				ErrorMsg: err.Error(),
-			}
-			respData, err := proto.Marshal(resp)
-			if err != nil {
-				zLog.Error("Failed to marshal player create response", zap.Error(err))
-				return
-			}
-			err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
-			if err != nil {
-				zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
-				return
-			}
-			return
-		}
-		zLog.Info("Player created successfully", zap.Uint64("player_id", uint64(player.GetPlayerID())))
-		// 发送角色创建成功的响应
-		resp := &protocol.PlayerCreateResponse{
-			Result: 0,
-			PlayerInfo: &protocol.PlayerBasicInfo{
-				PlayerId:      int64(player.GetPlayerID()),
-				Name:          player.GetName(),
-				Level:         1, // 默认等级
-				Exp:           0,
-				Gold:          1000, // 初始金币
-				VipLevel:      0,
-				ServerId:      int32(ts.config.Server.ServerID),
-				CreateTime:    time.Now().Unix(),
-				LastLoginTime: time.Now().Unix(),
-			},
-		}
-		// 序列化响应
-		respData, err := proto.Marshal(resp)
-		if err != nil {
-			zLog.Error("Failed to marshal player create response", zap.Error(err))
-			return
-		}
-		// 发送响应到Gateway
-		err = session.Send(zNet.ProtoIdType(protocol.PlayerMsgId_MSG_PLAYER_CREATE_RESPONSE), respData)
-		if err != nil {
-			zLog.Error("Failed to send player create response to Gateway", zap.Error(err))
-			return
-		}
-		zLog.Info("Player create response sent to Gateway", zap.Uint64("player_id", uint64(player.GetPlayerID())))
-
-	case int32(protocol.MapMsgId_MSG_MAP_ENTER):
-		// 处理玩家进入地图
-		zLog.Info("Handling player enter map from Gateway")
-		var req protocol.ClientMapEnterRequest
-		if err := proto.Unmarshal(payload, &req); err != nil {
-			zLog.Error("Failed to unmarshal map enter request", zap.Error(err))
-			return
-		}
-		zLog.Info("Map enter request", zap.Int64("player_id", req.PlayerId), zap.Int32("map_id", req.MapId))
-
-		mapID := id.MapIdType(req.MapId)
-		if mapID <= 0 {
-			mapID = ts.mapService.GetDefaultMapID()
-		}
-		pos := common.Vector3{X: 250, Y: 250, Z: 0}
-
-		if ts.mapService != nil {
-			err := ts.mapService.HandlePlayerEnterMap(id.PlayerIdType(req.PlayerId), mapID, pos)
-			if err != nil {
-				zLog.Error("Failed to handle player enter map", zap.Error(err))
-				// 发送进入地图失败的响应
-				resp := &protocol.ClientMapEnterResponse{
-					Result:   1,
-					ErrorMsg: err.Error(),
-				}
-				respData, err := proto.Marshal(resp)
-				if err != nil {
-					zLog.Error("Failed to marshal map enter response", zap.Error(err))
-					return
-				}
-				err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
-				if err != nil {
-					zLog.Error("Failed to send map enter response to Gateway", zap.Error(err))
-					return
-				}
-				return
-			}
-		}
-
-		// 发送进入地图成功的响应
-		resp := &protocol.ClientMapEnterResponse{
-			Result: 0,
-			MapId:  int32(mapID),
-			Pos: &protocol.Position{
-				X: pos.X,
-				Y: pos.Y,
-				Z: pos.Z,
-			},
-		}
-		respData, err := proto.Marshal(resp)
-		if err != nil {
-			zLog.Error("Failed to marshal map enter response", zap.Error(err))
-			return
-		}
-		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), respData)
-		if err != nil {
-			zLog.Error("Failed to send map enter response to Gateway", zap.Error(err))
-			return
-		}
-		zLog.Info("Map enter response sent to Gateway", zap.Int64("player_id", req.PlayerId), zap.Int32("map_id", int32(mapID)))
-
-	case int32(protocol.MapMsgId_MSG_MAP_MOVE):
-		// 处理玩家移动
-		zLog.Info("Handling player move from Gateway")
-		var req protocol.ClientMapMoveRequest
-		if err := proto.Unmarshal(payload, &req); err != nil {
-			zLog.Error("Failed to unmarshal map move request", zap.Error(err))
-			return
-		}
-		zLog.Info("Map move request",
-			zap.Int64("player_id", req.PlayerId),
-			zap.Int32("map_id", req.MapId),
-			zap.Float32("x", req.Pos.X),
-			zap.Float32("y", req.Pos.Y),
-			zap.Float32("z", req.Pos.Z))
-
-		// 处理玩家移动
-		pos := common.Vector3{X: req.Pos.X, Y: req.Pos.Y, Z: req.Pos.Z}
-		if ts.mapService != nil {
-			err := ts.mapService.HandlePlayerMove(id.PlayerIdType(req.PlayerId), id.MapIdType(req.MapId), pos)
-			if err != nil {
-				zLog.Error("Failed to handle player move", zap.Error(err))
-			}
-		}
-
-		// 发送移动成功的响应
-		resp := &protocol.ClientMapMoveResponse{
-			Result: 0,
-			Pos: &protocol.Position{
-				X: req.Pos.X,
-				Y: req.Pos.Y,
-				Z: req.Pos.Z,
-			},
-		}
-		respData, err := proto.Marshal(resp)
-		if err != nil {
-			zLog.Error("Failed to marshal map move response", zap.Error(err))
-			return
-		}
-		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE), respData)
-		if err != nil {
-			zLog.Error("Failed to send map move response to Gateway", zap.Error(err))
-			return
-		}
-		zLog.Info("Map move response sent to Gateway", zap.Int64("player_id", req.PlayerId))
-
-	case int32(protocol.MapMsgId_MSG_MAP_ATTACK):
-		// 处理玩家攻击
-		zLog.Info("Handling player attack from Gateway")
-		var req protocol.ClientMapAttackRequest
-		if err := proto.Unmarshal(payload, &req); err != nil {
-			zLog.Error("Failed to unmarshal map attack request", zap.Error(err))
-			return
-		}
-		zLog.Info("Map attack request",
-			zap.Int64("player_id", req.PlayerId),
-			zap.Int32("map_id", req.MapId),
-			zap.Int64("target_id", req.TargetId))
-
-		// 处理玩家攻击
-		damage := int64(0)
-		targetHP := int64(0)
-		if ts.mapService != nil {
-			damage, targetHP, err = ts.mapService.HandlePlayerAttack(id.PlayerIdType(req.PlayerId), id.MapIdType(req.MapId), id.ObjectIdType(req.TargetId))
-			if err != nil {
-				zLog.Error("Failed to handle player attack", zap.Error(err))
-				resp := &protocol.ClientMapAttackResponse{
-					Result:   1,
-					TargetId: req.TargetId,
-				}
-				respData, marshalErr := proto.Marshal(resp)
-				if marshalErr != nil {
-					zLog.Error("Failed to marshal map attack error response", zap.Error(marshalErr))
-					return
-				}
-				if sendErr := session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData); sendErr != nil {
-					zLog.Error("Failed to send map attack error response to Gateway", zap.Error(sendErr))
-				}
-				return
-			}
-			zLog.Info("Player attack handled", zap.Int64("damage", damage), zap.Int64("target_hp", targetHP))
-		}
-
-		// 发送攻击成功的响应（由 mapService 返回真实处理结果）
-		resp := &protocol.ClientMapAttackResponse{
-			Result:   0,
-			TargetId: req.TargetId,
-			Damage:   damage,
-			TargetHp: targetHP,
-		}
-		respData, err := proto.Marshal(resp)
-		if err != nil {
-			zLog.Error("Failed to marshal map attack response", zap.Error(err))
-			return
-		}
-		err = session.Send(zNet.ProtoIdType(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), respData)
-		if err != nil {
-			zLog.Error("Failed to send map attack response to Gateway", zap.Error(err))
-			return
-		}
-		zLog.Info("Map attack response sent to Gateway", zap.Int64("player_id", req.PlayerId))
-
-	case int32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME):
-		// 处理玩家离开游戏
-		zLog.Info("Handling player leave game from Gateway")
-	default:
-		zLog.Info("Received unknown message from Gateway", zap.Int32("proto_id", protoId))
+	if tcpSess, ok := session.(*zNet.TcpServerSession); ok {
+		tcpSess.SetObj(clientSessionID)
 	}
+
+	if ts.messageRouter != nil {
+		if err := ts.messageRouter.Handle(session, actualProtoId, payload); err != nil {
+			zLog.Error("Failed to handle message via router",
+				zap.Int32("proto_id", actualProtoId),
+				zap.Error(err))
+		}
+		return
+	}
+
+	zLog.Warn("No message router configured", zap.Int32("proto_id", protoId))
 }
 
 // GetGatewayDedupeHits 返回Gateway重复请求去重命中次数
@@ -1086,44 +785,33 @@ func (ts *TCPService) sendResponse(conn net.Conn, msgID uint32, msg proto.Messag
 
 // SendResponseToGateway 发送响应给Gateway，使用新的消息结构
 func (ts *TCPService) SendResponseToGateway(session zNet.Session, protoId int32, sessionID uint64, playerID uint64, data []byte) error {
-	// 创建基础消息
-	baseMsg := crossserver.BaseMessage{
-		MsgID:     uint32(protoId),
-		SessionID: sessionID,
-		PlayerID:  playerID,
-		ServerID:  uint32(ts.config.Server.ServerID),
+	baseMsg := &protocol.BaseMessage{
+		MsgId:     uint32(protoId),
+		SessionId: sessionID,
+		PlayerId:  playerID,
+		ServerId:  uint32(ts.config.Server.ServerID),
 		Timestamp: uint64(time.Now().Unix()),
 		Data:      data,
 	}
 
-	// 创建跨服务器消息
-	crossMsg := crossserver.CrossServerMessage{
-		TraceID:      uint64(time.Now().UnixNano()),
-		FromService:  crossserver.ServiceTypeGame,
-		ToService:    crossserver.ServiceTypeGateway,
-		FromServerID: uint32(ts.config.Server.ServerID),
+	crossMsg := &protocol.CrossServerMessage{
+		TraceId:      uint64(time.Now().UnixNano()),
+		FromServerId: uint32(ts.config.Server.ServerID),
+		FromService:  uint32(crossserver.ServiceTypeGame),
+		ToService:    uint32(crossserver.ServiceTypeGateway),
 		Message:      baseMsg,
 	}
 
-	// 序列化消息
-	crossMsgData, err := json.Marshal(crossMsg)
+	crossMsgData, err := proto.Marshal(crossMsg)
 	if err != nil {
 		zLog.Error("Failed to marshal cross server message", zap.Error(err))
 		return err
 	}
 
-	// 编码消息
-	encodedMsg, err := message.Encode(uint32(protoId), crossMsgData)
-	if err != nil {
-		zLog.Error("Failed to encode message", zap.Error(err))
-		return err
-	}
-
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ts.config.Server.ServerID))
-	encodedMsg = crossserver.Wrap(meta, encodedMsg)
+	wrappedData := crossserver.Wrap(meta, crossMsgData)
 
-	// 发送消息
-	err = session.Send(zNet.ProtoIdType(protoId), encodedMsg)
+	err = session.Send(zNet.ProtoIdType(protoId), wrappedData)
 	if err != nil {
 		zLog.Error("Failed to send response to Gateway", zap.Error(err))
 		return err

@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -113,12 +114,12 @@ func NewService(cfg *config.Config, netServer *zNet.TcpServer, etcdClient *clien
 }
 
 // Init 初始化客户端服务
-func (s *Service) Init() {
+func (s *Service) Init(ctx context.Context) {
 	// 启动安全管理器的清理任务
 	s.ipManager.StartCleanupTask()
 
 	// 启动防作弊管理器的清理任务
-	s.antiCheatManager.StartCleanupTask()
+	s.antiCheatManager.StartCleanupTask(ctx)
 
 	zLog.Info("Client service initialized successfully")
 }
@@ -148,9 +149,12 @@ func (s *Service) Stop() error {
 
 // SetGameServerProxy 设置GameServer代理
 func (s *Service) SetGameServerProxy(gameServerProxy proxy.GameServerProxy) {
-	// 重新创建消息处理器，注入GameServer代理
-	s.messageHandler = NewMessageHandler(s.ipManager, s.antiCheatManager, gameServerProxy)
+	s.messageHandler = NewMessageHandler(s.ipManager, s.antiCheatManager, gameServerProxy, s.authHandler)
 	s.netServer.RegisterDispatcher(s.messageHandler.HandleMessage)
+
+	if s.authHandler != nil {
+		s.authHandler.SetGameServerProxy(gameServerProxy)
+	}
 
 	zLog.Info("GameServer proxy set successfully")
 }
@@ -181,14 +185,14 @@ func (s *Service) GetTokenManager() *auth.TokenManager {
 }
 
 // SendToClient 发送消息给客户端
-func (s *Service) SendToClient(sessionID zNet.SessionIdType, data []byte) error {
+func (s *Service) SendToClient(sessionID zNet.SessionIdType, msgID uint32, data []byte) error {
 	session := s.netServer.GetSession(sessionID)
 	if session == nil {
 		zLog.Warn("Session not found", zap.Uint64("session_id", uint64(sessionID)))
 		return fmt.Errorf("session not found")
 	}
 
-	return session.Send(0, data)
+	return session.Send(zNet.ProtoIdType(msgID), data)
 }
 
 // GetSessionCount 获取会话数量

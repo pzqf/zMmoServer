@@ -2,11 +2,13 @@ package maps
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/connection"
+	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -14,14 +16,21 @@ import (
 // MapManager 地图管理器
 // 负责管理多个地图实例
 type MapManager struct {
-	maps *zMap.TypedMap[id.MapIdType, *Map]
+	maps                *zMap.TypedMap[id.MapIdType, *Map]
+	dungeonLifecycleMgr *dungeon.DungeonLifecycleManager
+	nextDungeonMapID    int64
 }
 
 // NewMapManager 创建新的地图管理器
 func NewMapManager() *MapManager {
 	return &MapManager{
-		maps: zMap.NewTypedMap[id.MapIdType, *Map](),
+		maps:             zMap.NewTypedMap[id.MapIdType, *Map](),
+		nextDungeonMapID: 100000,
 	}
+}
+
+func (mm *MapManager) SetDungeonLifecycleManager(dlm *dungeon.DungeonLifecycleManager) {
+	mm.dungeonLifecycleMgr = dlm
 }
 
 // Start 启动地图管理器
@@ -228,6 +237,19 @@ func (mm *MapManager) UpdateAllMapsBuffs(deltaTime time.Duration) {
 	}
 }
 
+// UpdateAllMapsPlayers 更新所有地图的玩家状态
+func (mm *MapManager) UpdateAllMapsPlayers() {
+	maps := make([]*Map, 0)
+	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
+		maps = append(maps, value)
+		return true
+	})
+
+	for _, m := range maps {
+		m.UpdatePlayers()
+	}
+}
+
 // UpdateAllMapsDungeons 更新所有地图的副本
 func (mm *MapManager) UpdateAllMapsDungeons(deltaTime time.Duration) {
 	maps := make([]*Map, 0)
@@ -288,4 +310,128 @@ func (mm *MapManager) GetAllMapIDs() []int32 {
 		return true
 	})
 	return mapIDs
+}
+
+func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.PlayerIdType, connManager *connection.ConnectionManager) (*Map, *dungeon.DungeonInstance, error) {
+	dungeonMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
+
+	dungeonMap := NewMap(dungeonMapID, int32(dungeonID), fmt.Sprintf("Dungeon_%d", dungeonID), 500, 500, connManager)
+	dungeonMap.SetIsDungeon(true)
+	dungeonMap.SetMapMode(MapModeSingleServer)
+
+	mm.maps.Store(dungeonMapID, dungeonMap)
+
+	if mm.dungeonLifecycleMgr == nil {
+		dm := dungeon.NewDungeonManager()
+		mm.dungeonLifecycleMgr = dungeon.NewDungeonLifecycleManager(dm, connManager)
+	}
+
+	instance, err := mm.dungeonLifecycleMgr.CreateAndStartDungeon(dungeonID, players, dungeonMapID)
+	if err != nil {
+		mm.maps.Delete(dungeonMapID)
+		return nil, nil, fmt.Errorf("create dungeon lifecycle: %w", err)
+	}
+
+	dungeonMap.SetDungeonInstanceID(instance.InstanceID)
+
+	zLog.Info("Dungeon map created",
+		zap.Int32("dungeon_id", int32(dungeonID)),
+		zap.Int32("map_id", int32(dungeonMapID)),
+		zap.Int64("instance_id", int64(instance.InstanceID)),
+		zap.Int("player_count", len(players)))
+
+	return dungeonMap, instance, nil
+}
+
+func (mm *MapManager) DestroyDungeonMap(instanceID id.InstanceIdType) error {
+	if mm.dungeonLifecycleMgr == nil {
+		return fmt.Errorf("dungeon lifecycle manager not initialized")
+	}
+
+	lifecycle, exists := mm.dungeonLifecycleMgr.GetLifecycle(instanceID)
+	if !exists {
+		return fmt.Errorf("dungeon lifecycle not found: %d", instanceID)
+	}
+
+	mapID := lifecycle.MapID
+
+	if err := mm.dungeonLifecycleMgr.DestroyDungeon(instanceID); err != nil {
+		return fmt.Errorf("destroy dungeon: %w", err)
+	}
+
+	m, exists := mm.maps.Load(mapID)
+	if exists {
+		m.Cleanup()
+		mm.maps.Delete(mapID)
+	}
+
+	zLog.Info("Dungeon map destroyed",
+		zap.Int32("map_id", int32(mapID)),
+		zap.Int64("instance_id", int64(instanceID)))
+
+	return nil
+}
+
+func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width, height float32, mode MapMode, serverGroupID int32, connManager *connection.ConnectionManager) *Map {
+	crossMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
+
+	crossMap := NewMap(crossMapID, mapConfigID, name, width, height, connManager)
+	crossMap.SetMapMode(mode)
+	crossMap.SetServerGroupID(serverGroupID)
+
+	mm.maps.Store(crossMapID, crossMap)
+
+	zLog.Info("Cross-server map created",
+		zap.Int32("map_config_id", mapConfigID),
+		zap.Int32("map_id", int32(crossMapID)),
+		zap.Int("mode", int(mode)),
+		zap.Int32("server_group_id", serverGroupID))
+
+	return crossMap
+}
+
+func (mm *MapManager) GetDungeonLifecycleManager() *dungeon.DungeonLifecycleManager {
+	return mm.dungeonLifecycleMgr
+}
+
+func (mm *MapManager) GetDungeonMapByInstanceID(instanceID id.InstanceIdType) *Map {
+	if mm.dungeonLifecycleMgr == nil {
+		return nil
+	}
+
+	lifecycle, exists := mm.dungeonLifecycleMgr.GetLifecycle(instanceID)
+	if !exists {
+		return nil
+	}
+
+	m, _ := mm.maps.Load(lifecycle.MapID)
+	return m
+}
+
+func (mm *MapManager) UpdateDungeonLifecycles(deltaTime time.Duration) {
+	if mm.dungeonLifecycleMgr != nil {
+		mm.dungeonLifecycleMgr.Update(deltaTime)
+	}
+}
+
+func (mm *MapManager) GetCrossServerMaps() []*Map {
+	maps := make([]*Map, 0)
+	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
+		if value.IsCrossServer() {
+			maps = append(maps, value)
+		}
+		return true
+	})
+	return maps
+}
+
+func (mm *MapManager) GetDungeonMaps() []*Map {
+	maps := make([]*Map, 0)
+	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
+		if value.IsDungeon() {
+			maps = append(maps, value)
+		}
+		return true
+	})
+	return maps
 }

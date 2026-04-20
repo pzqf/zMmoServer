@@ -7,18 +7,18 @@ import (
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zMmoServer/GatewayServer/client/connection"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
+	"github.com/pzqf/zMmoServer/GatewayServer/proxy"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
-// AuthHandler 认证处理器
 type AuthHandler struct {
-	config       *config.Config
-	connMgr      *connection.ClientConnMgr
-	tokenManager *TokenManager
+	config          *config.Config
+	connMgr         *connection.ClientConnMgr
+	tokenManager    *TokenManager
+	gameServerProxy proxy.GameServerProxy
 }
 
-// NewAuthHandler 创建认证处理器
 func NewAuthHandler(cfg *config.Config, connMgr *connection.ClientConnMgr, tokenManager *TokenManager) *AuthHandler {
 	return &AuthHandler{
 		config:       cfg,
@@ -27,7 +27,10 @@ func NewAuthHandler(cfg *config.Config, connMgr *connection.ClientConnMgr, token
 	}
 }
 
-// HandleTokenVerify 处理Token验证
+func (ah *AuthHandler) SetGameServerProxy(gsp proxy.GameServerProxy) {
+	ah.gameServerProxy = gsp
+}
+
 func (ah *AuthHandler) HandleTokenVerify(session zNet.Session, tokenString string) error {
 	sessionID := session.GetSid()
 	zLog.Info("Handling token verify", zap.Uint64("session_id", uint64(sessionID)))
@@ -48,14 +51,33 @@ func (ah *AuthHandler) HandleTokenVerify(session zNet.Session, tokenString strin
 
 	ah.connMgr.SetAccountInfo(sessionID, id.AccountIdType(claims.AccountID), claims.AccountName)
 
+	if ah.gameServerProxy != nil {
+		notify := &protocol.AccountLoginNotify{
+			SessionId:   uint64(sessionID),
+			AccountId:   claims.AccountID,
+			AccountName: claims.AccountName,
+		}
+		notifyData, err := proto.Marshal(notify)
+		if err != nil {
+			zLog.Error("Failed to marshal AccountLoginNotify", zap.Error(err))
+		} else {
+			if err := ah.gameServerProxy.SendToGameServer(sessionID, int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), notifyData); err != nil {
+				zLog.Error("Failed to send AccountLoginNotify to GameServer", zap.Error(err))
+			} else {
+				zLog.Info("AccountLoginNotify sent to GameServer",
+					zap.Uint64("session_id", uint64(sessionID)),
+					zap.Int64("account_id", claims.AccountID))
+			}
+		}
+	}
+
 	response := &protocol.ServerMessage{
-		Result:   0, // 临时使用0表示成功
+		Result:   0,
 		ErrorMsg: "Success",
 	}
 	return ah.sendResponse(session, response)
 }
 
-// sendResponse 发送响应
 func (ah *AuthHandler) sendResponse(session zNet.Session, message proto.Message) error {
 	data, err := proto.Marshal(message)
 	if err != nil {
@@ -63,5 +85,5 @@ func (ah *AuthHandler) sendResponse(session zNet.Session, message proto.Message)
 		return err
 	}
 
-	return session.Send(1, data) // 临时使用1表示登录响应
+	return session.Send(zNet.ProtoIdType(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY_RESPONSE), data)
 }

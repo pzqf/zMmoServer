@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/game"
 	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
@@ -11,34 +12,56 @@ import (
 	"go.uber.org/zap"
 )
 
-// Player 玩家对象，继承zActor.BaseActor
+type MapOperator interface {
+	EnterMap(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error
+	LeaveMap(playerID id.PlayerIdType, mapID id.MapIdType) error
+	Move(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error
+	Attack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error)
+}
+
 type Player struct {
 	*zActor.BaseActor
 	*object.LivingObject
-	mu        sync.RWMutex
-	accountID id.AccountIdType
-	gold      int64
-	diamond   int64
-	vipLevel  int32
-	vipExp    int32
+	mu          sync.RWMutex
+	accountID   id.AccountIdType
+	attrs       *game.PlayerAttributes
+	inventory   *game.Inventory
+	equipment   *game.Equipment
+	skillMgr    *game.SkillManager
+	buffMgr     *game.BuffManager
+	taskMgr     *game.TaskManager
+	mapOp       MapOperator
+	currentMap  id.MapIdType
+	sessionID   interface{}
+	clientSender common.ClientSender
 }
 
-// NewPlayer 创建新的玩家对象
 func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string) *Player {
 	baseActor := zActor.NewBaseActor(int64(playerID), 100)
 	p := &Player{
 		BaseActor:    baseActor,
 		LivingObject: object.NewLivingObject(id.ObjectIdType(playerID), name, common.GameObjectTypePlayer),
 		accountID:    accountID,
-		gold:         0,
-		diamond:      0,
-		vipLevel:     0,
-		vipExp:       0,
+		attrs:        game.NewPlayerAttributes(),
+		inventory:    game.NewInventory(60),
+		equipment:    game.NewEquipment(),
+		skillMgr:     game.NewSkillManager(50),
+		buffMgr:      game.NewBuffManager(),
+		taskMgr:      game.NewTaskManager(20),
 	}
+	baseActor.SetSelf(p)
 	return p
 }
 
-// Start 启动玩家Actor
+func (p *Player) SetMapOperator(op MapOperator) {
+	p.mapOp = op
+}
+
+func (p *Player) SetSessionInfo(sessionID interface{}, sender common.ClientSender) {
+	p.sessionID = sessionID
+	p.clientSender = sender
+}
+
 func (p *Player) Start() error {
 	if err := p.BaseActor.Start(); err != nil {
 		return err
@@ -47,7 +70,6 @@ func (p *Player) Start() error {
 	return nil
 }
 
-// Stop 停止玩家Actor
 func (p *Player) Stop() error {
 	if err := p.BaseActor.Stop(); err != nil {
 		return err
@@ -56,7 +78,6 @@ func (p *Player) Stop() error {
 	return nil
 }
 
-// ProcessMessage 实现zActor.Actor接口的消息处理方法
 func (p *Player) ProcessMessage(msg zActor.ActorMessage) {
 	switch typedMsg := msg.(type) {
 	case *PlayerMessage:
@@ -68,10 +89,30 @@ func (p *Player) ProcessMessage(msg zActor.ActorMessage) {
 	}
 }
 
-// update 玩家更新
-func (p *Player) update() {
-	// 更新组件（暂时注释，组件还未实现Update方法）
-	// if p.teamComp != nil {
-	// 	p.teamComp.Update()
-	// }
+func (p *Player) Update(deltaTime float64) {
+	p.buffMgr.Update(deltaTime)
+}
+
+func (p *Player) GetAttrs() *game.PlayerAttributes {
+	return p.attrs
+}
+
+func (p *Player) GetInventory() *game.Inventory {
+	return p.inventory
+}
+
+func (p *Player) GetEquipment() *game.Equipment {
+	return p.equipment
+}
+
+func (p *Player) GetSkillManager() *game.SkillManager {
+	return p.skillMgr
+}
+
+func (p *Player) GetBuffManager() *game.BuffManager {
+	return p.buffMgr
+}
+
+func (p *Player) GetTaskManager() *game.TaskManager {
+	return p.taskMgr
 }

@@ -138,6 +138,7 @@ func (bs *BaseServer) OnBeforeStart() error {
 
 	go bs.startServiceDiscoveryMonitor()
 	go bs.startHeartbeat()
+	go bs.startGameLoop()
 
 	bs.healthChecker.LogStatus()
 	return nil
@@ -226,6 +227,30 @@ func (bs *BaseServer) startHeartbeat() {
 	}
 }
 
+func (bs *BaseServer) startGameLoop() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	lastTime := time.Now()
+
+	for {
+		select {
+		case <-bs.GetContext().Done():
+			return
+		case <-ticker.C:
+			now := time.Now()
+			deltaTime := now.Sub(lastTime)
+			lastTime = now
+
+			bs.mapManager.UpdateAllMapsAI(deltaTime)
+			bs.mapManager.UpdateAllMapsBuffs(deltaTime)
+			bs.mapManager.UpdateAllMapsPlayers()
+			bs.mapManager.UpdateAllMapsSkills()
+			bs.mapManager.UpdateAllMapsEvents()
+		}
+	}
+}
+
 func (bs *BaseServer) startServiceDiscoveryMonitor() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -255,6 +280,53 @@ func (bs *BaseServer) startServiceDiscoveryMonitor() {
 }
 
 func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
+	tm := tables.GetTableManager()
+	mapLoader := tm.GetMapLoader()
+	allMaps := mapLoader.GetAllMaps()
+
+	if len(allMaps) == 0 {
+		zLog.Warn("No maps found in map.xlsx, skipping map creation")
+		return "excel", nil
+	}
+
+	configuredMapIDs := bs.config.Maps.MapIDs
+	createdCount := 0
+
+	for _, mapCfg := range allMaps {
+		if len(configuredMapIDs) > 0 {
+			found := false
+			for _, id := range configuredMapIDs {
+				if int32(id) == mapCfg.MapID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		mapID := id.MapIdType(mapCfg.MapID)
+		newMap := bs.mapManager.CreateMap(
+			mapID,
+			mapCfg.MapID,
+			mapCfg.Name,
+			float32(mapCfg.Width),
+			float32(mapCfg.Height),
+			bs.connManager,
+		)
+
+		if newMap != nil {
+			newMap.SetMaxPlayers(mapCfg.MaxPlayers)
+			newMap.SetDescription(mapCfg.Description)
+			newMap.SetWeatherType(mapCfg.WeatherType)
+			newMap.SetMinLevel(mapCfg.MinLevel)
+			newMap.SetMaxLevel(mapCfg.MaxLevel)
+			createdCount++
+		}
+	}
+
+	zLog.Info("Maps created from excel tables", zap.Int("count", createdCount))
 	return "excel", nil
 }
 

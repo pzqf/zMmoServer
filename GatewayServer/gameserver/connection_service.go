@@ -73,3 +73,10 @@ func (s *ConnectionService) UpdateHeartbeat(status interface{}, players int) err
 	}
 	return nil
 }
+
+func (s *ConnectionService) IsGameServerConnected() bool {
+	if s.gameServerProxy == nil {
+		return false
+	}
+	return s.gameServerProxy.IsConnected()
+}

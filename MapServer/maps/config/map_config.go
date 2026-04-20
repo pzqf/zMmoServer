@@ -178,8 +178,6 @@ func parseMapIDFromFilename(filename string) (int32, error) {
 
 // ApplyMapConfig 应用地图配置到地图实例
 func (loader *MapConfigLoader) ApplyMapConfig(mapInstance *maps.Map, config *MapConfig) error {
-	// 设置地图基本属性
-	mapInstance.SetRegionSize(config.RegionSize)
 
 	// 添加刷新点
 	for _, spawnPoint := range config.SpawnPoints {

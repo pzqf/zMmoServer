@@ -14,53 +14,17 @@ func NewPlayerSkillRepository(skillDAO *dao.PlayerSkillDAO) *PlayerSkillReposito
 }
 
 func (r *PlayerSkillRepositoryImpl) GetByPlayerID(playerID int64) ([]*models.PlayerSkill, error) {
-	var result []*models.PlayerSkill
-	var resultErr error
-	ch := make(chan struct{})
-	r.skillDAO.GetSkillsByPlayerID(playerID, func(skills []*models.PlayerSkill, err error) {
-		result = skills
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.skillDAO.GetSkillsByPlayerID(playerID)
 }
 
 func (r *PlayerSkillRepositoryImpl) Create(skill *models.PlayerSkill) (int64, error) {
-	var result int64
-	var resultErr error
-	ch := make(chan struct{})
-	r.skillDAO.CreateSkill(skill, func(id int64, err error) {
-		result = id
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.skillDAO.CreateSkill(skill)
 }
 
 func (r *PlayerSkillRepositoryImpl) Update(skill *models.PlayerSkill) (bool, error) {
-	var result bool
-	var resultErr error
-	ch := make(chan struct{})
-	r.skillDAO.UpdateSkill(skill, func(updated bool, err error) {
-		result = updated
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.skillDAO.UpdateSkill(skill)
 }
 
 func (r *PlayerSkillRepositoryImpl) Delete(id int64) (bool, error) {
-	var result bool
-	var resultErr error
-	ch := make(chan struct{})
-	r.skillDAO.DeleteSkill(id, func(deleted bool, err error) {
-		result = deleted
-		resultErr = err
-		close(ch)
-	})
-	<-ch
-	return result, resultErr
+	return r.skillDAO.DeleteSkill(id)
 }

@@ -1,12 +1,21 @@
 package economy
 
 import (
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"go.uber.org/zap"
+)
+
+var (
+	ErrTradeNotFound      = errors.New("trade not found")
+	ErrTradeInvalidStatus = errors.New("invalid trade status")
+	ErrTradeNotParticipant = errors.New("player is not a trade participant")
+	ErrTradeAlreadyTrading = errors.New("player is already in a trade")
+	ErrInsufficientCurrency = errors.New("insufficient currency")
 )
 
 // TradeStatus 交易状态
@@ -41,17 +50,21 @@ type Trade struct {
 
 // TradeManager 交易管理器
 type TradeManager struct {
-	mu           sync.RWMutex
-	trades       map[int64]*Trade
-	playerTrades map[id.PlayerIdType]int64
+	mu              sync.RWMutex
+	trades          map[int64]*Trade
+	playerTrades    map[id.PlayerIdType]int64
+	currencyManager *CurrencyManager
 }
 
-// NewTradeManager 创建交易管理器
 func NewTradeManager() *TradeManager {
 	return &TradeManager{
 		trades:       make(map[int64]*Trade),
 		playerTrades: make(map[id.PlayerIdType]int64),
 	}
+}
+
+func (tm *TradeManager) SetCurrencyManager(cm *CurrencyManager) {
+	tm.currencyManager = cm
 }
 
 // InitiateTrade 发起交易
@@ -167,39 +180,78 @@ func (tm *TradeManager) CompleteTrade(tradeID int64, playerID id.PlayerIdType) e
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	// 检查交易是否存在
 	trade, exists := tm.trades[tradeID]
 	if !exists {
-		return nil
+		return ErrTradeNotFound
 	}
 
-	// 检查交易状态
 	if trade.Status != TradeStatusAccepted {
-		return nil
+		return ErrTradeInvalidStatus
 	}
 
-	// 检查玩家是否是交易的发起者
-	if trade.InitiatorID != playerID {
-		return nil
+	if trade.InitiatorID != playerID && trade.TargetID != playerID {
+		return ErrTradeNotParticipant
 	}
 
-	// 这里需要添加交易物品和货币的转移逻辑
-	// 1. 检查双方物品是否足够
-	// 2. 检查双方货币是否足够
-	// 3. 转移物品
-	// 4. 转移货币
+	if tm.currencyManager != nil {
+		for currencyType, amount := range trade.InitiatorCurrency {
+			if amount > 0 && !tm.currencyManager.HasEnoughCurrency(trade.InitiatorID, currencyType, amount) {
+				return ErrInsufficientCurrency
+			}
+		}
+		for currencyType, amount := range trade.TargetCurrency {
+			if amount > 0 && !tm.currencyManager.HasEnoughCurrency(trade.TargetID, currencyType, amount) {
+				return ErrInsufficientCurrency
+			}
+		}
 
-	// 更新交易状态
+		for currencyType, amount := range trade.InitiatorCurrency {
+			if amount > 0 {
+				if err := tm.currencyManager.RemoveCurrency(trade.InitiatorID, currencyType, amount); err != nil {
+					zLog.Warn("Failed to remove currency from initiator",
+						zap.Int64("trade_id", tradeID),
+						zap.Int32("currency_type", int32(currencyType)),
+						zap.Error(err))
+				}
+				if err := tm.currencyManager.AddCurrency(trade.TargetID, currencyType, amount); err != nil {
+					zLog.Warn("Failed to add currency to target",
+						zap.Int64("trade_id", tradeID),
+						zap.Int32("currency_type", int32(currencyType)),
+						zap.Error(err))
+				}
+			}
+		}
+
+		for currencyType, amount := range trade.TargetCurrency {
+			if amount > 0 {
+				if err := tm.currencyManager.RemoveCurrency(trade.TargetID, currencyType, amount); err != nil {
+					zLog.Warn("Failed to remove currency from target",
+						zap.Int64("trade_id", tradeID),
+						zap.Int32("currency_type", int32(currencyType)),
+						zap.Error(err))
+				}
+				if err := tm.currencyManager.AddCurrency(trade.InitiatorID, currencyType, amount); err != nil {
+					zLog.Warn("Failed to add currency to initiator",
+						zap.Int64("trade_id", tradeID),
+						zap.Int32("currency_type", int32(currencyType)),
+						zap.Error(err))
+				}
+			}
+		}
+	}
+
 	trade.Status = TradeStatusCompleted
 	trade.UpdatedAt = time.Now()
 
-	// 清理玩家交易关系
 	delete(tm.playerTrades, trade.InitiatorID)
 	delete(tm.playerTrades, trade.TargetID)
 
-	zLog.Debug("Trade completed",
+	zLog.Info("Trade completed",
 		zap.Int64("trade_id", tradeID),
-		zap.Int64("player_id", int64(playerID)))
+		zap.Int64("initiator_id", int64(trade.InitiatorID)),
+		zap.Int64("target_id", int64(trade.TargetID)),
+		zap.Int("initiator_items", len(trade.InitiatorItems)),
+		zap.Int("target_items", len(trade.TargetItems)))
 
 	return nil
 }

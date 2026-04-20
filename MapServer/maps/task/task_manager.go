@@ -1,49 +1,87 @@
 package task
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/config/tables"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
-
-	"github.com/pzqf/zEngine/zLog"
 )
 
-// PlayerTask 玩家任务
+type TaskType int32
+
+const (
+	TaskTypeMain        TaskType = 1
+	TaskTypeSide        TaskType = 2
+	TaskTypeDaily       TaskType = 3
+	TaskTypeAchievement TaskType = 4
+)
+
+type TaskStatus int32
+
+const (
+	TaskStatusNotAccepted TaskStatus = 1
+	TaskStatusInProgress  TaskStatus = 2
+	TaskStatusCompleted   TaskStatus = 3
+	TaskStatusRewarded    TaskStatus = 4
+)
+
+type TaskReward struct {
+	Type   string `json:"type"`
+	Target int32  `json:"target"`
+	Count  int32  `json:"count"`
+}
+
 type PlayerTask struct {
 	TaskID       int32      `json:"task_id"`
 	Status       TaskStatus `json:"status"`
-	Progress     []int32    `json:"progress"` // 每个条件的进度
+	Progress     []int32    `json:"progress"`
 	AcceptTime   int64      `json:"accept_time"`
 	CompleteTime int64      `json:"complete_time"`
 }
 
-// TaskManager 任务管理器
 type TaskManager struct {
-	playerTasks   *zMap.TypedMap[id.PlayerIdType, *zMap.TypedMap[int32, *PlayerTask]] // 玩家ID -> 任务ID -> 任务
-	configManager *TaskConfigManager
+	playerTasks  *zMap.TypedMap[id.PlayerIdType, *zMap.TypedMap[int32, *PlayerTask]]
+	tableManager *tables.TableManager
 }
 
-// NewTaskManager 创建任务管理器
 func NewTaskManager() *TaskManager {
 	return &TaskManager{
-		playerTasks:   zMap.NewTypedMap[id.PlayerIdType, *zMap.TypedMap[int32, *PlayerTask]](),
-		configManager: NewTaskConfigManager(),
+		playerTasks: zMap.NewTypedMap[id.PlayerIdType, *zMap.TypedMap[int32, *PlayerTask]](),
 	}
 }
 
-// LoadTaskConfig 加载任务配置
-func (tm *TaskManager) LoadTaskConfig(filePath string) error {
-	return tm.configManager.LoadConfig(filePath)
+func (tm *TaskManager) SetTableManager(t *tables.TableManager) {
+	tm.tableManager = t
 }
 
-// GetTaskConfig 获取任务配置
-func (tm *TaskManager) GetTaskConfig(taskID int32) *TaskConfig {
-	return tm.configManager.GetConfig(taskID)
+func (tm *TaskManager) GetTaskConfig(taskID int32) *models.Quest {
+	if tm.tableManager == nil {
+		return nil
+	}
+	quest, ok := tm.tableManager.GetQuestLoader().GetQuest(taskID)
+	if !ok {
+		return nil
+	}
+	return quest
 }
 
-// GetPlayerTasks 获取玩家的任务列表
+func (tm *TaskManager) ParseTaskRewards(rewardsJSON string) []*TaskReward {
+	if rewardsJSON == "" {
+		return nil
+	}
+	var rewards []*TaskReward
+	if err := json.Unmarshal([]byte(rewardsJSON), &rewards); err != nil {
+		zLog.Warn("Failed to parse task rewards", zap.String("json", rewardsJSON), zap.Error(err))
+		return nil
+	}
+	return rewards
+}
+
 func (tm *TaskManager) GetPlayerTasks(playerID id.PlayerIdType) []*PlayerTask {
 	tasks, exists := tm.playerTasks.Load(playerID)
 	if !exists {
@@ -59,7 +97,6 @@ func (tm *TaskManager) GetPlayerTasks(playerID id.PlayerIdType) []*PlayerTask {
 	return playerTasks
 }
 
-// GetPlayerTask 获取玩家的特定任务
 func (tm *TaskManager) GetPlayerTask(playerID id.PlayerIdType, taskID int32) *PlayerTask {
 	tasks, exists := tm.playerTasks.Load(playerID)
 	if !exists {
@@ -70,28 +107,24 @@ func (tm *TaskManager) GetPlayerTask(playerID id.PlayerIdType, taskID int32) *Pl
 	return task
 }
 
-// AcceptTask 玩家接取任务
 func (tm *TaskManager) AcceptTask(playerID id.PlayerIdType, taskID int32) error {
-	// 检查任务配置是否存在
-	taskConfig := tm.configManager.GetConfig(taskID)
+	taskConfig := tm.GetTaskConfig(taskID)
 	if taskConfig == nil {
 		return nil
 	}
 
-	// 初始化玩家任务映射
 	tasks, exists := tm.playerTasks.Load(playerID)
 	if !exists {
 		tasks = zMap.NewTypedMap[int32, *PlayerTask]()
 		tm.playerTasks.Store(playerID, tasks)
 	}
 
-	// 检查任务是否已接取
 	if _, exists := tasks.Load(taskID); exists {
 		return nil
 	}
 
-	// 创建新任务
-	progress := make([]int32, len(taskConfig.Conditions))
+	conditions := ParseTaskConditions(taskConfig.Objectives)
+	progress := make([]int32, len(conditions))
 	playerTask := &PlayerTask{
 		TaskID:     taskID,
 		Status:     TaskStatusInProgress,
@@ -107,9 +140,7 @@ func (tm *TaskManager) AcceptTask(playerID id.PlayerIdType, taskID int32) error 
 	return nil
 }
 
-// CompleteTask 完成任务
 func (tm *TaskManager) CompleteTask(playerID id.PlayerIdType, taskID int32) error {
-	// 检查玩家任务是否存在
 	tasks, exists := tm.playerTasks.Load(playerID)
 	if !exists {
 		return nil
@@ -120,12 +151,10 @@ func (tm *TaskManager) CompleteTask(playerID id.PlayerIdType, taskID int32) erro
 		return nil
 	}
 
-	// 检查任务状态
 	if task.Status != TaskStatusInProgress {
 		return nil
 	}
 
-	// 更新任务状态
 	task.Status = TaskStatusCompleted
 	task.CompleteTime = GetCurrentTimestamp()
 
@@ -136,9 +165,7 @@ func (tm *TaskManager) CompleteTask(playerID id.PlayerIdType, taskID int32) erro
 	return nil
 }
 
-// RewardTask 领取任务奖励
 func (tm *TaskManager) RewardTask(playerID id.PlayerIdType, taskID int32) error {
-	// 检查玩家任务是否存在
 	tasks, exists := tm.playerTasks.Load(playerID)
 	if !exists {
 		return nil
@@ -149,12 +176,10 @@ func (tm *TaskManager) RewardTask(playerID id.PlayerIdType, taskID int32) error 
 		return nil
 	}
 
-	// 检查任务状态
 	if task.Status != TaskStatusCompleted {
 		return nil
 	}
 
-	// 更新任务状态
 	task.Status = TaskStatusRewarded
 
 	zLog.Debug("Player received task reward",
@@ -164,41 +189,33 @@ func (tm *TaskManager) RewardTask(playerID id.PlayerIdType, taskID int32) error 
 	return nil
 }
 
-// UpdateTaskProgress 更新任务进度
 func (tm *TaskManager) UpdateTaskProgress(playerID id.PlayerIdType, conditionType string, target int32, count int32) {
-	// 检查玩家任务是否存在
 	if tasks, exists := tm.playerTasks.Load(playerID); exists {
-		// 遍历玩家的所有任务
 		tasks.Range(func(taskID int32, task *PlayerTask) bool {
-			// 只处理进行中的任务
 			if task.Status != TaskStatusInProgress {
 				return true
 			}
 
-			// 获取任务配置
-			taskConfig := tm.configManager.GetConfig(taskID)
+			taskConfig := tm.GetTaskConfig(taskID)
 			if taskConfig == nil {
 				return true
 			}
 
-			// 检查任务条件
+			conditions := ParseTaskConditions(taskConfig.Objectives)
 			allCompleted := true
-			for i, condition := range taskConfig.Conditions {
+			for i, condition := range conditions {
 				if condition.Type == conditionType && condition.Target == target {
-					// 更新进度
 					task.Progress[i] += count
 					if task.Progress[i] > condition.Count {
 						task.Progress[i] = condition.Count
 					}
 				}
 
-				// 检查是否所有条件都已完成
 				if task.Progress[i] < condition.Count {
 					allCompleted = false
 				}
 			}
 
-			// 如果所有条件都已完成，标记任务为已完成
 			if allCompleted {
 				task.Status = TaskStatusCompleted
 				task.CompleteTime = GetCurrentTimestamp()
@@ -212,9 +229,11 @@ func (tm *TaskManager) UpdateTaskProgress(playerID id.PlayerIdType, conditionTyp
 	}
 }
 
-// GetAvailableTasks 获取玩家可接取的任务
-func (tm *TaskManager) GetAvailableTasks(playerID id.PlayerIdType, playerLevel int32) []*TaskConfig {
-	// 获取玩家已完成的任务
+func (tm *TaskManager) GetAvailableTasks(playerID id.PlayerIdType, playerLevel int32) []*models.Quest {
+	if tm.tableManager == nil {
+		return nil
+	}
+
 	completedTasks := make([]int32, 0)
 	if tasks, exists := tm.playerTasks.Load(playerID); exists {
 		tasks.Range(func(taskID int32, task *PlayerTask) bool {
@@ -225,11 +244,61 @@ func (tm *TaskManager) GetAvailableTasks(playerID id.PlayerIdType, playerLevel i
 		})
 	}
 
-	// 获取可接取的任务
-	return tm.configManager.GetAvailableTasks(playerLevel, completedTasks)
+	allQuests := tm.tableManager.GetQuestLoader().GetAllQuests()
+	available := make([]*models.Quest, 0)
+
+	for _, quest := range allQuests {
+		if quest.Level > playerLevel {
+			continue
+		}
+
+		isCompleted := false
+		for _, tid := range completedTasks {
+			if tid == quest.QuestID {
+				isCompleted = true
+				break
+			}
+		}
+		if isCompleted {
+			continue
+		}
+
+		if quest.PreQuestID > 0 {
+			hasPrev := false
+			for _, tid := range completedTasks {
+				if tid == quest.PreQuestID {
+					hasPrev = true
+					break
+				}
+			}
+			if !hasPrev {
+				continue
+			}
+		}
+
+		available = append(available, quest)
+	}
+
+	return available
 }
 
-// GetCurrentTimestamp 获取当前时间戳
+type TaskCondition struct {
+	Type   string `json:"type"`
+	Target int32  `json:"target"`
+	Count  int32  `json:"count"`
+}
+
+func ParseTaskConditions(objectivesJSON string) []TaskCondition {
+	if objectivesJSON == "" {
+		return nil
+	}
+	var conditions []TaskCondition
+	if err := json.Unmarshal([]byte(objectivesJSON), &conditions); err != nil {
+		return nil
+	}
+	return conditions
+}
+
 func GetCurrentTimestamp() int64 {
 	return time.Now().Unix()
 }

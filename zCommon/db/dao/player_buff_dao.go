@@ -1,7 +1,6 @@
 package dao
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/pzqf/zCommon/db/connector"
@@ -17,15 +16,12 @@ func NewPlayerBuffDAO(dbConnector connector.DBConnector) *PlayerBuffDAO {
 	return &PlayerBuffDAO{connector: dbConnector}
 }
 
-func (dao *PlayerBuffDAO) GetBuffsByPlayerID(playerID int64, callback func([]*models.PlayerBuff, error)) {
+func (dao *PlayerBuffDAO) GetBuffsByPlayerID(playerID int64) ([]*models.PlayerBuff, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.PlayerBuff{}.TableName())
 		cursor, err := collection.Find(nil, bson.M{"player_id": playerID})
 		if err != nil {
-			if callback != nil {
-				callback(nil, err)
-			}
-			return
+			return nil, err
 		}
 		defer cursor.Close(nil)
 
@@ -33,85 +29,59 @@ func (dao *PlayerBuffDAO) GetBuffsByPlayerID(playerID int64, callback func([]*mo
 		for cursor.Next(nil) {
 			var buff models.PlayerBuff
 			if err := cursor.Decode(&buff); err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
+				return nil, err
 			}
 			buffs = append(buffs, &buff)
 		}
-		if callback != nil {
-			callback(buffs, nil)
-		}
-	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ?", models.PlayerBuff{}.TableName())
-		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
-			}
-			defer rows.Close()
-
-			var buffs []*models.PlayerBuff
-			for rows.Next() {
-				var buff models.PlayerBuff
-				if err := rows.Scan(
-					&buff.ID, &buff.PlayerID, &buff.BuffID, &buff.StackCount,
-					&buff.Duration, &buff.EndTime, &buff.CasterID,
-					&buff.CreatedAt, &buff.UpdatedAt,
-				); err != nil {
-					if callback != nil {
-						callback(nil, err)
-					}
-					return
-				}
-				buffs = append(buffs, &buff)
-			}
-			if callback != nil {
-				callback(buffs, nil)
-			}
-		})
+		return buffs, nil
 	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ?", models.PlayerBuff{}.TableName())
+	rows, err := dao.connector.QuerySync(query, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var buffs []*models.PlayerBuff
+	for rows.Next() {
+		var buff models.PlayerBuff
+		if err := rows.Scan(
+			&buff.ID, &buff.PlayerID, &buff.BuffID, &buff.StackCount,
+			&buff.Duration, &buff.EndTime, &buff.CasterID,
+			&buff.CreatedAt, &buff.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		buffs = append(buffs, &buff)
+	}
+	return buffs, nil
 }
 
-func (dao *PlayerBuffDAO) CreateBuff(buff *models.PlayerBuff, callback func(int64, error)) {
+func (dao *PlayerBuffDAO) CreateBuff(buff *models.PlayerBuff) (int64, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.PlayerBuff{}.TableName())
 		_, err := collection.InsertOne(nil, buff)
 		if err != nil {
-			if callback != nil {
-				callback(0, err)
-			}
-			return
+			return 0, err
 		}
-		if callback != nil {
-			callback(buff.ID, nil)
-		}
-	} else {
-		query := fmt.Sprintf("INSERT INTO %s (id, player_id, buff_id, stack_count, duration, end_time, caster_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", models.PlayerBuff{}.TableName())
-		args := []interface{}{
-			buff.ID, buff.PlayerID, buff.BuffID, buff.StackCount,
-			buff.Duration, buff.EndTime, buff.CasterID,
-			buff.CreatedAt, buff.UpdatedAt,
-		}
-		dao.connector.Execute(query, args, func(result sql.Result, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(0, err)
-				}
-				return
-			}
-			id, err := result.LastInsertId()
-			if callback != nil {
-				callback(id, err)
-			}
-		})
+		return buff.ID, nil
 	}
+
+	query := fmt.Sprintf("INSERT INTO %s (id, player_id, buff_id, stack_count, duration, end_time, caster_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", models.PlayerBuff{}.TableName())
+	args := []interface{}{
+		buff.ID, buff.PlayerID, buff.BuffID, buff.StackCount,
+		buff.Duration, buff.EndTime, buff.CasterID,
+		buff.CreatedAt, buff.UpdatedAt,
+	}
+	result, err := dao.connector.ExecSync(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
-func (dao *PlayerBuffDAO) UpdateBuff(buff *models.PlayerBuff, callback func(bool, error)) {
+func (dao *PlayerBuffDAO) UpdateBuff(buff *models.PlayerBuff) (bool, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.PlayerBuff{}.TableName())
 		update := bson.M{"$set": bson.M{
@@ -120,59 +90,42 @@ func (dao *PlayerBuffDAO) UpdateBuff(buff *models.PlayerBuff, callback func(bool
 		}}
 		result, err := collection.UpdateOne(nil, bson.M{"id": buff.ID}, update)
 		if err != nil {
-			if callback != nil {
-				callback(false, err)
-			}
-			return
+			return false, err
 		}
-		if callback != nil {
-			callback(result.ModifiedCount > 0, nil)
-		}
-	} else {
-		query := fmt.Sprintf("UPDATE %s SET stack_count = ?, duration = ?, end_time = ?, updated_at = ? WHERE id = ?", models.PlayerBuff{}.TableName())
-		args := []interface{}{buff.StackCount, buff.Duration, buff.EndTime, buff.UpdatedAt, buff.ID}
-		dao.connector.Execute(query, args, func(result sql.Result, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(false, err)
-				}
-				return
-			}
-			rowsAffected, err := result.RowsAffected()
-			if callback != nil {
-				callback(rowsAffected > 0, err)
-			}
-		})
+		return result.ModifiedCount > 0, nil
 	}
+
+	query := fmt.Sprintf("UPDATE %s SET stack_count = ?, duration = ?, end_time = ?, updated_at = ? WHERE id = ?", models.PlayerBuff{}.TableName())
+	args := []interface{}{buff.StackCount, buff.Duration, buff.EndTime, buff.UpdatedAt, buff.ID}
+	result, err := dao.connector.ExecSync(query, args...)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
 }
 
-func (dao *PlayerBuffDAO) DeleteBuff(id int64, callback func(bool, error)) {
+func (dao *PlayerBuffDAO) DeleteBuff(id int64) (bool, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.PlayerBuff{}.TableName())
 		result, err := collection.DeleteOne(nil, bson.M{"id": id})
 		if err != nil {
-			if callback != nil {
-				callback(false, err)
-			}
-			return
+			return false, err
 		}
-		if callback != nil {
-			callback(result.DeletedCount > 0, nil)
-		}
-	} else {
-		query := fmt.Sprintf("DELETE FROM %s WHERE id = ?", models.PlayerBuff{}.TableName())
-		dao.connector.Execute(query, []interface{}{id}, func(result sql.Result, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(false, err)
-				}
-				return
-			}
-			rowsAffected, err := result.RowsAffected()
-			if callback != nil {
-				callback(rowsAffected > 0, err)
-			}
-		})
+		return result.DeletedCount > 0, nil
 	}
-}
 
+	query := fmt.Sprintf("DELETE FROM %s WHERE id = ?", models.PlayerBuff{}.TableName())
+	result, err := dao.connector.ExecSync(query, id)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}

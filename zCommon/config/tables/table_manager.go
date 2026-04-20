@@ -21,6 +21,8 @@ type TableManager struct {
 	buffLoader        *BuffTableLoader
 	aiLoader          *AITableLoader
 	spawnPointLoader  *SpawnPointTableLoader
+	lootLoader        *LootTableLoader
+	dungeonLoader     *DungeonTableLoader
 	loaders           []TableLoaderInterface
 	initialized       bool
 }
@@ -42,6 +44,8 @@ func NewTableManager() *TableManager {
 	buffLoader := NewBuffTableLoader()
 	aiLoader := NewAITableLoader()
 	spawnPointLoader := NewSpawnPointTableLoader()
+	lootLoader := NewLootTableLoader()
+	dungeonLoader := NewDungeonTableLoader()
 
 	return &TableManager{
 		itemLoader:        itemLoader,
@@ -53,6 +57,8 @@ func NewTableManager() *TableManager {
 		buffLoader:        buffLoader,
 		aiLoader:          aiLoader,
 		spawnPointLoader:  spawnPointLoader,
+		lootLoader:        lootLoader,
+		dungeonLoader:     dungeonLoader,
 		loaders: []TableLoaderInterface{
 			itemLoader,
 			mapLoader,
@@ -63,6 +69,8 @@ func NewTableManager() *TableManager {
 			buffLoader,
 			aiLoader,
 			spawnPointLoader,
+			lootLoader,
+			dungeonLoader,
 		},
 		initialized: false,
 	}
@@ -130,8 +138,6 @@ func (tm *TableManager) GetMonsterLoader() *MonsterTableLoader {
 	return tm.monsterLoader
 }
 
-
-
 // GetBuffLoader ��ȡbuff���������
 func (tm *TableManager) GetBuffLoader() *BuffTableLoader {
 	return tm.buffLoader
@@ -147,6 +153,14 @@ func (tm *TableManager) GetSpawnPointLoader() *SpawnPointTableLoader {
 	return tm.spawnPointLoader
 }
 
+func (tm *TableManager) GetLootLoader() *LootTableLoader {
+	return tm.lootLoader
+}
+
+func (tm *TableManager) GetDungeonLoader() *DungeonTableLoader {
+	return tm.dungeonLoader
+}
+
 // GetSpawnPointsByMap ��ȡָ����ͼ��ˢ�µ��б�
 func (tm *TableManager) GetSpawnPointsByMap(mapID int32) []*models.SpawnPoint {
 	return tm.spawnPointLoader.GetSpawnPointsByMap(mapID)
@@ -156,4 +170,3 @@ func (tm *TableManager) GetSpawnPointsByMap(mapID int32) []*models.SpawnPoint {
 func (tm *TableManager) IsInitialized() bool {
 	return tm.initialized
 }
-

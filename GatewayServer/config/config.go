@@ -3,17 +3,17 @@ package config
 import (
 	"fmt"
 
-	cfgutil "github.com/pzqf/zCommon/config"
 	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zCommon/metrics"
+	"github.com/pzqf/zEngine/zConfig"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
-	"github.com/pzqf/zUtil/zConfig"
 )
 
 type Config struct {
 	Server      ServerConfig           `ini:"Server"`
 	Security    SecurityConfig         `ini:"Security"`
+	AntiCheat   AntiCheatConfig        `ini:"AntiCheat"`
 	DDoS        zNet.DDoSConfig        `ini:"DDoS"`
 	Compression zNet.CompressionConfig `ini:"Compression"`
 	GameServer  GameServerConfig       `ini:"GameServer"`
@@ -51,6 +51,16 @@ type SecurityConfig struct {
 	TokenExpiry      int `ini:"TokenExpiry"`
 	MaxLoginAttempts int `ini:"MaxLoginAttempts"`
 	BanDuration      int `ini:"BanDuration"`
+	MaxIPConnections int `ini:"MaxIPConnections"`
+}
+
+type AntiCheatConfig struct {
+	MaxActionsPerMinute    int     `ini:"MaxActionsPerMinute"`
+	MaxErrorRatio          float64 `ini:"MaxErrorRatio"`
+	MaxAbnormalActions     int     `ini:"MaxAbnormalActions"`
+	MaxHighSeverityReports int     `ini:"MaxHighSeverityReports"`
+	InactiveTimeoutMinutes int     `ini:"InactiveTimeoutMinutes"`
+	CleanupIntervalMinutes int     `ini:"CleanupIntervalMinutes"`
 }
 
 type GameServerConfig struct {
@@ -72,104 +82,114 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("failed to load config file: %v", err)
 	}
 
-	serverID := cfgutil.GetConfigInt(zcfg, "Server.ServerID", 1)
+	serverID := zConfig.GetIntWithDefault(zcfg, "Server.ServerID", 1)
 
 	c := &Config{}
 
-	listenAddr := cfgutil.GetConfigString(zcfg, "Server.ListenAddr", cfgutil.GetEnv("LISTEN_ADDR", "0.0.0.0:10001"))
-	externalAddr := cfgutil.GetConfigString(zcfg, "Server.ExternalAddr", cfgutil.GetEnv("EXTERNAL_ADDR", ""))
+	listenAddr := zConfig.GetStringWithDefault(zcfg, "Server.ListenAddr", zConfig.GetEnv("LISTEN_ADDR", "0.0.0.0:10001"))
+	externalAddr := zConfig.GetStringWithDefault(zcfg, "Server.ExternalAddr", zConfig.GetEnv("EXTERNAL_ADDR", ""))
 	if externalAddr == "" {
 		externalAddr = listenAddr
 	}
 
 	c.Server = ServerConfig{
-		ServerName:          cfgutil.GetConfigString(zcfg, "Server.ServerName", cfgutil.GetEnv("SERVER_NAME", "GatewayServer")),
+		ServerName:          zConfig.GetStringWithDefault(zcfg, "Server.ServerName", zConfig.GetEnv("SERVER_NAME", "GatewayServer")),
 		ServerID:            serverID,
-		GroupID:             cfgutil.GetConfigInt(zcfg, "Server.GroupID", 1),
+		GroupID:             zConfig.GetIntWithDefault(zcfg, "Server.GroupID", 1),
 		ListenAddr:          listenAddr,
 		ExternalAddr:        externalAddr,
-		MaxConnections:      cfgutil.GetConfigInt(zcfg, "Server.MaxConnections", 10000),
-		ConnectionTimeout:   cfgutil.GetConfigInt(zcfg, "Server.ConnectionTimeout", 300),
-		HeartbeatInterval:   cfgutil.GetConfigInt(zcfg, "Server.HeartbeatInterval", 30),
-		JWTSecret:           cfgutil.GetConfigString(zcfg, "Server.JWTSecret", cfgutil.GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
-		UseWorkerPool:       cfgutil.GetConfigBool(zcfg, "Server.UseWorkerPool", true),
-		WorkerPoolSize:      cfgutil.GetConfigInt(zcfg, "Server.WorkerPoolSize", 100),
-		WorkerQueueSize:     cfgutil.GetConfigInt(zcfg, "Server.WorkerQueueSize", 10000),
-		ChanSize:            cfgutil.GetConfigInt(zcfg, "Server.ChanSize", 1024),
-		MaxPacketDataSize:   cfgutil.GetConfigInt(zcfg, "Server.MaxPacketDataSize", 1024*1024),
-		DisableEncryption:   cfgutil.GetConfigBool(zcfg, "Server.DisableEncryption", cfgutil.GetEnvAsBool("DISABLE_ENCRYPTION", false)),
-		EnableKeyRotation:   cfgutil.GetConfigBool(zcfg, "Server.EnableKeyRotation", false),
-		KeyRotationInterval: cfgutil.GetConfigInt(zcfg, "Server.KeyRotationInterval", 1800),
-		MaxHistoryKeys:      cfgutil.GetConfigInt(zcfg, "Server.MaxHistoryKeys", 3),
-		EnableSequenceCheck: cfgutil.GetConfigBool(zcfg, "Server.EnableSequenceCheck", false),
-		SequenceWindowSize:  uint64(cfgutil.GetConfigInt(zcfg, "Server.SequenceWindowSize", 1000)),
-		TimestampTolerance:  int64(cfgutil.GetConfigInt(zcfg, "Server.TimestampTolerance", 30)),
+		MaxConnections:      zConfig.GetIntWithDefault(zcfg, "Server.MaxConnections", 10000),
+		ConnectionTimeout:   zConfig.GetIntWithDefault(zcfg, "Server.ConnectionTimeout", 300),
+		HeartbeatInterval:   zConfig.GetIntWithDefault(zcfg, "Server.HeartbeatInterval", 30),
+		JWTSecret:           zConfig.GetStringWithDefault(zcfg, "Server.JWTSecret", zConfig.GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
+		UseWorkerPool:       zConfig.GetBoolWithDefault(zcfg, "Server.UseWorkerPool", true),
+		WorkerPoolSize:      zConfig.GetIntWithDefault(zcfg, "Server.WorkerPoolSize", 100),
+		WorkerQueueSize:     zConfig.GetIntWithDefault(zcfg, "Server.WorkerQueueSize", 10000),
+		ChanSize:            zConfig.GetIntWithDefault(zcfg, "Server.ChanSize", 1024),
+		MaxPacketDataSize:   zConfig.GetIntWithDefault(zcfg, "Server.MaxPacketDataSize", 1024*1024),
+		DisableEncryption:   zConfig.GetBoolWithDefault(zcfg, "Server.DisableEncryption", zConfig.GetEnvAsBool("DISABLE_ENCRYPTION", false)),
+		EnableKeyRotation:   zConfig.GetBoolWithDefault(zcfg, "Server.EnableKeyRotation", false),
+		KeyRotationInterval: zConfig.GetIntWithDefault(zcfg, "Server.KeyRotationInterval", 1800),
+		MaxHistoryKeys:      zConfig.GetIntWithDefault(zcfg, "Server.MaxHistoryKeys", 3),
+		EnableSequenceCheck: zConfig.GetBoolWithDefault(zcfg, "Server.EnableSequenceCheck", false),
+		SequenceWindowSize:  uint64(zConfig.GetIntWithDefault(zcfg, "Server.SequenceWindowSize", 1000)),
+		TimestampTolerance:  int64(zConfig.GetIntWithDefault(zcfg, "Server.TimestampTolerance", 30)),
 	}
 
 	c.Security = SecurityConfig{
-		TokenExpiry:      cfgutil.GetConfigInt(zcfg, "Security.TokenExpiry", 86400),
-		MaxLoginAttempts: cfgutil.GetConfigInt(zcfg, "Security.MaxLoginAttempts", 5),
-		BanDuration:      cfgutil.GetConfigInt(zcfg, "Security.BanDuration", 3600),
+		TokenExpiry:      zConfig.GetIntWithDefault(zcfg, "Security.TokenExpiry", 86400),
+		MaxLoginAttempts: zConfig.GetIntWithDefault(zcfg, "Security.MaxLoginAttempts", 5),
+		BanDuration:      zConfig.GetIntWithDefault(zcfg, "Security.BanDuration", 3600),
+		MaxIPConnections: zConfig.GetIntWithDefault(zcfg, "Security.MaxIPConnections", 5000),
+	}
+
+	c.AntiCheat = AntiCheatConfig{
+		MaxActionsPerMinute:    zConfig.GetIntWithDefault(zcfg, "AntiCheat.MaxActionsPerMinute", 1000),
+		MaxErrorRatio:          zConfig.GetFloatWithDefault(zcfg, "AntiCheat.MaxErrorRatio", 0.5),
+		MaxAbnormalActions:     zConfig.GetIntWithDefault(zcfg, "AntiCheat.MaxAbnormalActions", 5),
+		MaxHighSeverityReports: zConfig.GetIntWithDefault(zcfg, "AntiCheat.MaxHighSeverityReports", 3),
+		InactiveTimeoutMinutes: zConfig.GetIntWithDefault(zcfg, "AntiCheat.InactiveTimeoutMinutes", 30),
+		CleanupIntervalMinutes: zConfig.GetIntWithDefault(zcfg, "AntiCheat.CleanupIntervalMinutes", 10),
 	}
 
 	c.DDoS = zNet.DDoSConfig{
-		MaxConnPerIP:      cfgutil.GetConfigInt(zcfg, "DDoS.MaxConnPerIP", 10),
-		ConnTimeWindow:    cfgutil.GetConfigInt(zcfg, "DDoS.ConnTimeWindow", 60),
-		MaxPacketsPerIP:   cfgutil.GetConfigInt(zcfg, "DDoS.MaxPacketsPerIP", 100),
-		PacketTimeWindow:  cfgutil.GetConfigInt(zcfg, "DDoS.PacketTimeWindow", 1),
-		MaxBytesPerIP:     int64(cfgutil.GetConfigInt(zcfg, "DDoS.MaxBytesPerIP", 10*1024*1024)),
-		TrafficTimeWindow: cfgutil.GetConfigInt(zcfg, "DDoS.TrafficTimeWindow", 3600),
-		BanDuration:       cfgutil.GetConfigInt(zcfg, "DDoS.BanDuration", 24*3600),
+		MaxConnPerIP:      zConfig.GetIntWithDefault(zcfg, "DDoS.MaxConnPerIP", 10),
+		ConnTimeWindow:    zConfig.GetIntWithDefault(zcfg, "DDoS.ConnTimeWindow", 60),
+		MaxPacketsPerIP:   zConfig.GetIntWithDefault(zcfg, "DDoS.MaxPacketsPerIP", 100),
+		PacketTimeWindow:  zConfig.GetIntWithDefault(zcfg, "DDoS.PacketTimeWindow", 1),
+		MaxBytesPerIP:     int64(zConfig.GetIntWithDefault(zcfg, "DDoS.MaxBytesPerIP", 10*1024*1024)),
+		TrafficTimeWindow: zConfig.GetIntWithDefault(zcfg, "DDoS.TrafficTimeWindow", 3600),
+		BanDuration:       zConfig.GetIntWithDefault(zcfg, "DDoS.BanDuration", 24*3600),
 	}
 
 	c.Compression = zNet.CompressionConfig{
-		Enabled:              cfgutil.GetConfigBool(zcfg, "Compression.Enabled", false),
-		CompressionThreshold: cfgutil.GetConfigInt(zcfg, "Compression.CompressionThreshold", 1024),
-		MaxCompressSize:      cfgutil.GetConfigInt(zcfg, "Compression.MaxCompressSize", 1024*1024),
+		Enabled:              zConfig.GetBoolWithDefault(zcfg, "Compression.Enabled", false),
+		CompressionThreshold: zConfig.GetIntWithDefault(zcfg, "Compression.CompressionThreshold", 1024),
+		MaxCompressSize:      zConfig.GetIntWithDefault(zcfg, "Compression.MaxCompressSize", 1024*1024),
 	}
 
 	c.GameServer = GameServerConfig{
-		GameServerID:             cfgutil.GetConfigInt(zcfg, "GameServer.GameServerID", 1),
-		GameServerAddr:           cfgutil.GetConfigString(zcfg, "GameServer.GameServerAddr", cfgutil.GetEnv("GAME_SERVER_ADDR", "game-service.game:9001")),
-		GameServerConnectTimeout: cfgutil.GetConfigInt(zcfg, "GameServer.GameServerConnectTimeout", 10),
+		GameServerID:             zConfig.GetIntWithDefault(zcfg, "GameServer.GameServerID", 1),
+		GameServerAddr:           zConfig.GetStringWithDefault(zcfg, "GameServer.GameServerAddr", zConfig.GetEnv("GAME_SERVER_ADDR", "game-service.game:9001")),
+		GameServerConnectTimeout: zConfig.GetIntWithDefault(zcfg, "GameServer.GameServerConnectTimeout", 10),
 	}
 
 	c.Log = zLog.Config{
-		Level:              cfgutil.GetConfigInt(zcfg, "Log.Level", cfgutil.GetEnvAsInt("LOG_LEVEL", 0)),
-		Console:            cfgutil.GetConfigBool(zcfg, "Log.Console", true),
-		ConsoleLevel:       cfgutil.GetConfigInt(zcfg, "Log.ConsoleLevel", 0),
-		Filename:           cfgutil.ReplacePlaceholder(cfgutil.GetConfigString(zcfg, "Log.Filename", "./logs/gateway_server_{ServerID}.log"), "{ServerID}", serverID),
-		MaxSize:            cfgutil.GetConfigInt(zcfg, "Log.MaxSize", 100),
-		MaxDays:            cfgutil.GetConfigInt(zcfg, "Log.MaxDays", 15),
-		MaxBackups:         cfgutil.GetConfigInt(zcfg, "Log.MaxBackups", 10),
-		Compress:           cfgutil.GetConfigBool(zcfg, "Log.Compress", true),
-		ShowCaller:         cfgutil.GetConfigBool(zcfg, "Log.ShowCaller", true),
-		Stacktrace:         cfgutil.GetConfigInt(zcfg, "Log.Stacktrace", 3),
-		Sampling:           cfgutil.GetConfigBool(zcfg, "Log.Sampling", true),
-		SamplingInitial:    cfgutil.GetConfigInt(zcfg, "Log.SamplingInitial", 100),
-		SamplingThereafter: cfgutil.GetConfigInt(zcfg, "Log.SamplingThereafter", 10),
-		Async:              cfgutil.GetConfigBool(zcfg, "Log.Async", true),
-		AsyncBufferSize:    cfgutil.GetConfigInt(zcfg, "Log.AsyncBufferSize", 2048),
-		AsyncFlushInterval: cfgutil.GetConfigInt(zcfg, "Log.AsyncFlushInterval", 50),
+		Level:              zConfig.GetIntWithDefault(zcfg, "Log.Level", zConfig.GetEnvAsInt("LOG_LEVEL", 0)),
+		Console:            zConfig.GetBoolWithDefault(zcfg, "Log.Console", true),
+		ConsoleLevel:       zConfig.GetIntWithDefault(zcfg, "Log.ConsoleLevel", 0),
+		Filename:           zConfig.ReplacePlaceholder(zConfig.GetStringWithDefault(zcfg, "Log.Filename", "./logs/gateway_server_{ServerID}.log"), "{ServerID}", serverID),
+		MaxSize:            zConfig.GetIntWithDefault(zcfg, "Log.MaxSize", 100),
+		MaxDays:            zConfig.GetIntWithDefault(zcfg, "Log.MaxDays", 15),
+		MaxBackups:         zConfig.GetIntWithDefault(zcfg, "Log.MaxBackups", 10),
+		Compress:           zConfig.GetBoolWithDefault(zcfg, "Log.Compress", true),
+		ShowCaller:         zConfig.GetBoolWithDefault(zcfg, "Log.ShowCaller", true),
+		Stacktrace:         zConfig.GetIntWithDefault(zcfg, "Log.Stacktrace", 3),
+		Sampling:           zConfig.GetBoolWithDefault(zcfg, "Log.Sampling", true),
+		SamplingInitial:    zConfig.GetIntWithDefault(zcfg, "Log.SamplingInitial", 100),
+		SamplingThereafter: zConfig.GetIntWithDefault(zcfg, "Log.SamplingThereafter", 10),
+		Async:              zConfig.GetBoolWithDefault(zcfg, "Log.Async", true),
+		AsyncBufferSize:    zConfig.GetIntWithDefault(zcfg, "Log.AsyncBufferSize", 2048),
+		AsyncFlushInterval: zConfig.GetIntWithDefault(zcfg, "Log.AsyncFlushInterval", 50),
 	}
 
 	c.Metrics = MetricsConfig{
-		Enabled:       cfgutil.GetConfigBool(zcfg, "Metrics.Enabled", true),
-		ListenAddress: cfgutil.GetConfigString(zcfg, "Metrics.ListenAddress", cfgutil.GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
+		Enabled:       zConfig.GetBoolWithDefault(zcfg, "Metrics.Enabled", true),
+		ListenAddress: zConfig.GetStringWithDefault(zcfg, "Metrics.ListenAddress", zConfig.GetEnv("METRICS_ADDR", "0.0.0.0:9091")),
 	}
 
 	c.Pprof = PprofConfig{
-		Enabled:       cfgutil.GetConfigBool(zcfg, "Pprof.Enabled", false),
-		ListenAddress: cfgutil.GetConfigString(zcfg, "Pprof.ListenAddress", "localhost:6062"),
+		Enabled:       zConfig.GetBoolWithDefault(zcfg, "Pprof.Enabled", false),
+		ListenAddress: zConfig.GetStringWithDefault(zcfg, "Pprof.ListenAddress", "localhost:6062"),
 	}
 
 	c.Etcd = discovery.EtcdConfig{
-		Endpoints:      cfgutil.GetConfigString(zcfg, "Etcd.Endpoints", cfgutil.GetEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
-		Username:       cfgutil.GetConfigString(zcfg, "Etcd.Username", ""),
-		Password:       cfgutil.GetConfigString(zcfg, "Etcd.Password", ""),
-		CACertPath:     cfgutil.GetConfigString(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
-		ClientCertPath: cfgutil.GetConfigString(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
-		ClientKeyPath:  cfgutil.GetConfigString(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
+		Endpoints:      zConfig.GetStringWithDefault(zcfg, "Etcd.Endpoints", zConfig.GetEnv("ETCD_ENDPOINTS", "etcd-cluster.kube-system.svc.cluster.local:2379")),
+		Username:       zConfig.GetStringWithDefault(zcfg, "Etcd.Username", ""),
+		Password:       zConfig.GetStringWithDefault(zcfg, "Etcd.Password", ""),
+		CACertPath:     zConfig.GetStringWithDefault(zcfg, "Etcd.CACertPath", "../resources/etcd/ca.crt"),
+		ClientCertPath: zConfig.GetStringWithDefault(zcfg, "Etcd.ClientCertPath", "../resources/etcd/server.crt"),
+		ClientKeyPath:  zConfig.GetStringWithDefault(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 	}
 
 	if err := c.Validate(); err != nil {

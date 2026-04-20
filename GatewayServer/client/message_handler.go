@@ -3,43 +3,41 @@ package client
 import (
 	"fmt"
 
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
+	"github.com/pzqf/zMmoServer/GatewayServer/client/auth"
 	"github.com/pzqf/zMmoServer/GatewayServer/client/security"
 	"github.com/pzqf/zMmoServer/GatewayServer/proxy"
 	"go.uber.org/zap"
 )
 
-// MessageHandler 消息处理器
 type MessageHandler struct {
 	ipManager        *security.IPManager
 	antiCheatManager *security.AntiCheatManager
 	gameServerProxy  proxy.GameServerProxy
+	authHandler      *auth.AuthHandler
 }
 
-// NewMessageHandler 创建消息处理器
-func NewMessageHandler(ipManager *security.IPManager, antiCheatManager *security.AntiCheatManager, gameServerProxy proxy.GameServerProxy) *MessageHandler {
+func NewMessageHandler(ipManager *security.IPManager, antiCheatManager *security.AntiCheatManager, gameServerProxy proxy.GameServerProxy, authHandler *auth.AuthHandler) *MessageHandler {
 	return &MessageHandler{
 		ipManager:        ipManager,
 		antiCheatManager: antiCheatManager,
 		gameServerProxy:  gameServerProxy,
+		authHandler:      authHandler,
 	}
 }
 
-// HandleMessage 处理客户端消息
 func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPacket) error {
-	// 处理客户端消息
 	clientIP := session.GetClientIP()
 	sessionID := session.GetSid()
 
-	// 检查IP是否被封禁
 	if !mh.ipManager.CheckIPAllowed(clientIP) {
 		zLog.Warn("IP is banned, closing connection", zap.String("client_ip", clientIP))
 		session.Close()
 		return fmt.Errorf("IP banned")
 	}
 
-	// 检查防作弊状态
 	clientID := fmt.Sprintf("client_%d", sessionID)
 	allowed, reason := mh.antiCheatManager.CheckClientStatus(clientID)
 	if !allowed {
@@ -50,17 +48,32 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 		return fmt.Errorf("cheat detected: %s", reason)
 	}
 
-	// 记录客户端行为
 	mh.antiCheatManager.RecordClientAction(clientID, int(packet.DataSize))
 
-	// 转发消息到GameServer
+	protoId := int32(packet.ProtoId)
+
+	if protoId == int32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY) {
+		if mh.authHandler != nil {
+			tokenString := string(packet.Data)
+			if err := mh.authHandler.HandleTokenVerify(session, tokenString); err != nil {
+				zLog.Error("Token verify failed", zap.Error(err), zap.Uint64("session_id", uint64(sessionID)))
+				return err
+			}
+		}
+		return nil
+	}
+
+	if protoId == int32(protocol.SystemMsgId_MSG_SYSTEM_HEARTBEAT) || protoId == int32(protocol.SystemMsgId_MSG_SYSTEM_PING) {
+		return nil
+	}
+
 	if mh.gameServerProxy != nil {
-		err := mh.gameServerProxy.SendToGameServer(sessionID, int32(packet.ProtoId), packet.Data)
+		err := mh.gameServerProxy.SendToGameServer(sessionID, protoId, packet.Data)
 		if err != nil {
 			zLog.Error("Failed to forward message to GameServer",
 				zap.Error(err),
 				zap.Uint64("session_id", uint64(sessionID)),
-				zap.Int32("proto_id", int32(packet.ProtoId)))
+				zap.Int32("proto_id", protoId))
 			return err
 		}
 	}

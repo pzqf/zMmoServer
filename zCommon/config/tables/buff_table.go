@@ -32,7 +32,7 @@ func (btl *BuffTableLoader) Load(dir string) error {
 	config := ExcelConfig{
 		FileName:   "buff.xlsx",
 		SheetName:  "Sheet1",
-		MinColumns: 9,
+		MinColumns: 8,
 		TableName:  "buffs",
 	}
 

@@ -14,8 +14,8 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GlobalServer/gameserverlist"
 	"github.com/pzqf/zMmoServer/GlobalServer/metrics"
-	"github.com/pzqf/zUtil/zCrypto"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type TokenClaims struct {
@@ -24,11 +24,18 @@ type TokenClaims struct {
 	jwt.RegisteredClaims
 }
 
-var jwtSecret string
+var (
+	jwtSecret   string
+	tokenExpiry time.Duration
+)
 
-// InitJWTSecret 初始化JWT密钥
-func InitJWTSecret(secret string) {
+// InitJWTSecret 初始化JWT密钥和Token有效期
+func InitJWTSecret(secret string, expiryHours int) {
 	jwtSecret = secret
+	if expiryHours <= 0 {
+		expiryHours = 24
+	}
+	tokenExpiry = time.Duration(expiryHours) * time.Hour
 }
 
 // generateToken 生成JWT token
@@ -37,7 +44,7 @@ func generateToken(accountID int64, accountName string) (string, error) {
 		AccountID:   accountID,
 		AccountName: accountName,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour * 24 * 7)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExpiry)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			NotBefore: jwt.NewNumericDate(time.Now()),
 		},
@@ -136,22 +143,32 @@ func HandleAccountCreate(c echo.Context) error {
 
 	now := time.Now()
 
-	// Hash password
-	hashedPassword := zCrypto.SHA256(req.Password)
+	// Hash password with bcrypt
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		zLog.Error("Failed to hash password", zap.Error(err))
+		if m := getMetricsFromContext(c); m != nil {
+			m.RecordAccountOperationTime(time.Since(start))
+		}
+		return c.JSON(http.StatusInternalServerError, protocol.AccountCreateResponse{
+			Result:   int32(protocol.ErrorCode_ERR_UNKNOWN),
+			ErrorMsg: "服务器错误",
+		})
+	}
 
 	newAccount := &models.Account{
 		AccountID:   int64(accountID),
 		AccountName: req.Account,
-		Password:    hashedPassword,
+		Password:    string(hashedPassword),
 		Status:      1,
 		CreatedAt:   now,
 		LastLoginAt: now,
 	}
 
 	// Save to database
-	createdID, err := db.GetMgr().AccountRepository.Create(newAccount)
-	if err != nil || createdID <= 0 {
-		zLog.Error("Failed to create account", zap.Error(err))
+	_, err = db.GetMgr().AccountRepository.Create(newAccount)
+	if err != nil {
+		zLog.Error("Failed to create account", zap.Error(err), zap.Int64("accountID", int64(accountID)))
 		if m := getMetricsFromContext(c); m != nil {
 			m.RecordAccountOperationTime(time.Since(start))
 		}
@@ -235,10 +252,8 @@ func HandleAccountLogin(c echo.Context) error {
 		})
 	}
 
-	// Hash input password for comparison
-	hashedPassword := zCrypto.SHA256(req.Password)
-
-	if account.Password != hashedPassword {
+	// Verify password with bcrypt
+	if err := bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(req.Password)); err != nil {
 		zLog.Info("Password mismatch", zap.String("account", req.Account))
 		// 记录登录失败指标
 		if m := getMetricsFromContext(c); m != nil {

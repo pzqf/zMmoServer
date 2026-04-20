@@ -4,7 +4,10 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
+	"github.com/pzqf/zMmoServer/MapServer/maps/buff"
+	"go.uber.org/zap"
 )
 
 // PlayerStatus 玩家状态
@@ -79,6 +82,13 @@ type Player struct {
 	skillCooldowns   map[int32]time.Time // 技能冷却时间
 	skillHistory     []int32             // 技能释放历史
 	skillHistoryTime time.Time           // 技能释放历史开始时间
+	buffManager      *buff.BuffManager
+	equipAttack      int32
+	equipDefense     int32
+	equipHP          int32
+	equipMP          int32
+	equipCritRate    float32
+	equipSpeed       float32
 }
 
 // NewPlayer 创建新玩家
@@ -311,6 +321,18 @@ func (p *Player) AddExperience(exp int64) {
 	p.AddExp(exp)
 }
 
+func (p *Player) GetExperience() int64 {
+	return p.GetExp()
+}
+
+func (p *Player) SetExperience(exp int64) {
+	p.exp = exp
+}
+
+func (p *Player) GetAttackRange() float32 {
+	return 3.0
+}
+
 // TakeDamage 受到伤害
 func (p *Player) TakeDamage(damage int32) {
 	if p.health > damage {
@@ -334,14 +356,20 @@ func (p *Player) SetMana(mana int32) {
 
 // GetAttack 获取攻击力
 func (p *Player) GetAttack() int32 {
-	// 基础攻击力 + 力量加成
-	return int32(10 + p.strength*2)
+	attack := int32(10 + p.strength*2) + p.equipAttack
+	if p.buffManager != nil {
+		attack += p.buffManager.CalculateTotalAttackMod(p.playerID)
+	}
+	return attack
 }
 
 // GetDefense 获取防御力
 func (p *Player) GetDefense() int32 {
-	// 基础防御力 + 耐力加成
-	return int32(5 + p.stamina)
+	defense := int32(5 + p.stamina) + p.equipDefense
+	if p.buffManager != nil {
+		defense += p.buffManager.CalculateTotalDefenseMod(p.playerID)
+	}
+	return defense
 }
 
 // GetStrength 获取力量
@@ -553,36 +581,26 @@ func (p *Player) AllocateAttribute(attribute string, points int32) bool {
 
 // CalculateAttack 计算攻击力
 func (p *Player) CalculateAttack() int32 {
-	// 基础攻击力 = 力量 * 2
-	attack := p.strength * 2
-
-	// 可以添加装备和buff 加成
-
+	attack := p.strength*2 + p.equipAttack
+	if p.buffManager != nil {
+		attack += p.buffManager.CalculateTotalAttackMod(p.playerID)
+	}
 	return attack
 }
 
-// CalculateDefense 计算防御力
 func (p *Player) CalculateDefense() int32 {
-	// 基础防御力 = 耐力 * 1 + 敏捷 * 0.5
-	defense := p.stamina*1 + p.agility/2
-
-	// 可以添加装备和buff 加成
-
+	defense := p.stamina*1 + p.agility/2 + p.equipDefense
+	if p.buffManager != nil {
+		defense += p.buffManager.CalculateTotalDefenseMod(p.playerID)
+	}
 	return defense
 }
 
-// CalculateCriticalRate 计算暴击率
 func (p *Player) CalculateCriticalRate() float32 {
-	// 基础暴击率 = 敏捷 * 0.1%
-	criticalRate := float32(p.agility) * 0.1
-
-	// 可以添加装备和buff 加成
-
-	// 上限 50%
+	criticalRate := float32(p.agility)*0.1 + p.equipCritRate
 	if criticalRate > 50 {
 		criticalRate = 50
 	}
-
 	return criticalRate
 }
 
@@ -648,11 +666,9 @@ func (p *Player) CalculateHealthRegen() float32 {
 
 // UpdateStats 更新玩家属性
 func (p *Player) UpdateStats() {
-	// 更新生命值和魔法值
-	p.maxHealth = int32(100 + p.stamina*10)
-	p.maxMana = int32(50 + p.spirit*5)
+	p.maxHealth = int32(100+p.stamina*10) + p.equipHP
+	p.maxMana = int32(50+p.spirit*5) + p.equipMP
 
-	// 确保生命值和魔法值不超过最大值
 	if p.health > p.maxHealth {
 		p.health = p.maxHealth
 	}
@@ -663,8 +679,79 @@ func (p *Player) UpdateStats() {
 
 // ApplyBuffEffects 应用 buff 效果
 func (p *Player) ApplyBuffEffects() {
-	// 这里可以实现 buff 效果的应用逻辑
-	// 例如：增加属性、回复生命值等
+	if p.buffManager == nil {
+		return
+	}
+
+	attackMod := p.buffManager.CalculateTotalAttackMod(p.playerID)
+	defenseMod := p.buffManager.CalculateTotalDefenseMod(p.playerID)
+	hpMod := p.buffManager.CalculateTotalHPMod(p.playerID)
+	speedMod := p.buffManager.CalculateTotalSpeedMod(p.playerID)
+
+	if attackMod != 0 || defenseMod != 0 || hpMod != 0 || speedMod != 0 {
+		zLog.Debug("Applying buff effects",
+			zap.Int64("player_id", int64(p.playerID)),
+			zap.Int32("attack_mod", attackMod),
+			zap.Int32("defense_mod", defenseMod),
+			zap.Int32("hp_mod", hpMod),
+			zap.Int32("speed_mod", speedMod))
+	}
+
+	if hpMod > 0 {
+		newHealth := p.health + hpMod
+		if newHealth > p.maxHealth {
+			newHealth = p.maxHealth
+		}
+		p.health = newHealth
+	}
+
+	dotEffects := p.buffManager.ProcessDotEffects(p.playerID, 0)
+	for effectType, value := range dotEffects {
+		switch effectType {
+		case "poison", "burn":
+			newHP := p.health - value
+			if newHP < 0 {
+				newHP = 0
+			}
+			p.health = newHP
+		case "heal":
+			newHP := p.health + value
+			if newHP > p.maxHealth {
+				newHP = p.maxHealth
+			}
+			p.health = newHP
+		}
+	}
+}
+
+// SetBuffManager 设置Buff管理器
+func (p *Player) SetBuffManager(bm *buff.BuffManager) {
+	p.buffManager = bm
+}
+
+func (p *Player) SetEquipStats(attack, defense, hp, mp int32, critRate, speed float32) {
+	p.equipAttack = attack
+	p.equipDefense = defense
+	p.equipHP = hp
+	p.equipMP = mp
+	p.equipCritRate = critRate
+	p.equipSpeed = speed
+}
+
+func (p *Player) GetEquipAttack() int32 {
+	return p.equipAttack
+}
+
+func (p *Player) GetEquipDefense() int32 {
+	return p.equipDefense
+}
+
+func (p *Player) GetEquipHP() int32 {
+	return p.equipHP
+}
+
+func (p *Player) GetEquipCritRate() float32 {
+	return p.equipCritRate
 }
 
 // RemoveExpiredBuffs 移除过期�?buff

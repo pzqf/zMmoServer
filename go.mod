@@ -9,3 +9,8 @@ replace (
 	github.com/pzqf/zMmoServer/resources/protocol/net/protocol => ./resources/protocol/net/protocol
 	github.com/pzqf/zUtil => ../zUtil
 )
+
+require (
+	github.com/pzqf/zCommon v0.0.0-00010101000000-000000000000
+	google.golang.org/protobuf v1.36.11
+)

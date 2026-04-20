@@ -7,6 +7,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zEngine/zServer"
@@ -94,11 +95,17 @@ func (s *BaseServer) initNetServer() {
 
 func (s *BaseServer) initEtcdClient() error {
 	cfg := s.Config
+	tlsConfig, err := discovery.CreateTLSConfig(&cfg.Etcd)
+	if err != nil {
+		return fmt.Errorf("create etcd TLS config: %w", err)
+	}
+
 	etcdClient, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{cfg.Etcd.Endpoints},
 		Username:    cfg.Etcd.Username,
 		Password:    cfg.Etcd.Password,
 		DialTimeout: 5 * time.Second,
+		TLS:         tlsConfig,
 	})
 	if err != nil {
 		return fmt.Errorf("create etcd client: %w", err)
@@ -109,7 +116,7 @@ func (s *BaseServer) initEtcdClient() error {
 
 func (s *BaseServer) initServices() {
 	s.ClientService = client.NewService(s.Config, s.NetServer, s.EtcdClient)
-	s.ClientService.Init()
+	s.ClientService.Init(s.GetContext())
 
 	s.GameServerConnService = gameserver.NewConnectionService(s.Config, s.ClientService)
 	if err := s.GameServerConnService.Init(); err != nil {
@@ -151,9 +158,45 @@ func (s *BaseServer) OnAfterStart() error {
 	}
 
 	s.SetState(zServer.StateReady, "server ready")
-	s.SetState(zServer.StateHealthy, "server healthy")
-	zLog.Info("Gateway server is healthy")
+
+	if s.GameServerConnService != nil && s.GameServerConnService.IsGameServerConnected() {
+		s.SetState(zServer.StateHealthy, "server healthy")
+		zLog.Info("Gateway server is healthy")
+	} else {
+		zLog.Warn("Gateway server started but GameServer not connected, marking as ready (not healthy)")
+	}
+
+	go s.healthCheckLoop()
 	return nil
+}
+
+func (s *BaseServer) healthCheckLoop() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.GetContext().Done():
+			return
+		case <-ticker.C:
+			connected := s.GameServerConnService != nil && s.GameServerConnService.IsGameServerConnected()
+			currentState := s.GetState()
+
+			if connected && currentState != zServer.StateHealthy {
+				s.SetState(zServer.StateHealthy, "game server connected")
+				zLog.Info("Gateway server is now healthy, GameServer connected")
+				if s.GameServerConnService != nil {
+					_ = s.GameServerConnService.UpdateHeartbeat(string(zServer.StateHealthy), 0)
+				}
+			} else if !connected && currentState == zServer.StateHealthy {
+				s.SetState(zServer.StateReady, "game server disconnected")
+				zLog.Warn("Gateway server lost GameServer connection, downgrading to ready")
+				if s.GameServerConnService != nil {
+					_ = s.GameServerConnService.UpdateHeartbeat(string(zServer.StateReady), 0)
+				}
+			}
+		}
+	}
 }
 
 func (s *BaseServer) OnBeforeStop() {

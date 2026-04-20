@@ -1,7 +1,6 @@
 package dao
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -19,13 +18,10 @@ func NewQuestLogDAO(dbConnector connector.DBConnector) *QuestLogDAO {
 	return &QuestLogDAO{connector: dbConnector}
 }
 
-func (dao *QuestLogDAO) CreateQuestLog(questLog *models.QuestLog, callback func(int64, error)) {
+func (dao *QuestLogDAO) CreateQuestLog(questLog *models.QuestLog) (int64, error) {
 	logID, err := id.GenerateLogID()
 	if err != nil {
-		if callback != nil {
-			callback(0, err)
-		}
-		return
+		return 0, err
 	}
 	questLog.LogID = int64(logID)
 
@@ -33,36 +29,24 @@ func (dao *QuestLogDAO) CreateQuestLog(questLog *models.QuestLog, callback func(
 		collection := dao.connector.GetMongoDB().Collection(models.QuestLog{}.TableName())
 		_, err := collection.InsertOne(nil, questLog)
 		if err != nil {
-			if callback != nil {
-				callback(0, err)
-			}
-			return
+			return 0, err
 		}
-		if callback != nil {
-			callback(questLog.LogID, nil)
-		}
-	} else {
-		query := fmt.Sprintf("INSERT INTO %s (log_id, player_id, quest_id, op_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", models.QuestLog{}.TableName())
-		args := []interface{}{
-			questLog.LogID, questLog.PlayerID, questLog.QuestID,
-			questLog.OpType, questLog.Detail, questLog.CreatedAt,
-		}
-		dao.connector.Execute(query, args, func(result sql.Result, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(0, err)
-				}
-				return
-			}
-			id, err := result.LastInsertId()
-			if callback != nil {
-				callback(id, err)
-			}
-		})
+		return questLog.LogID, nil
 	}
+
+	query := fmt.Sprintf("INSERT INTO %s (log_id, player_id, quest_id, op_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", models.QuestLog{}.TableName())
+	args := []interface{}{
+		questLog.LogID, questLog.PlayerID, questLog.QuestID,
+		questLog.OpType, questLog.Detail, questLog.CreatedAt,
+	}
+	result, err := dao.connector.ExecSync(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
-func (dao *QuestLogDAO) GetQuestLogsByPlayerID(playerID int64, limit int, callback func([]*models.QuestLog, error)) {
+func (dao *QuestLogDAO) GetQuestLogsByPlayerID(playerID int64, limit int) ([]*models.QuestLog, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.QuestLog{}.TableName())
 		filter := bson.M{"player_id": playerID}
@@ -74,10 +58,7 @@ func (dao *QuestLogDAO) GetQuestLogsByPlayerID(playerID int64, limit int, callba
 
 		cursor, err := collection.Find(nil, filter, opts)
 		if err != nil {
-			if callback != nil {
-				callback(nil, err)
-			}
-			return
+			return nil, err
 		}
 		defer cursor.Close(nil)
 
@@ -85,52 +66,38 @@ func (dao *QuestLogDAO) GetQuestLogsByPlayerID(playerID int64, limit int, callba
 		for cursor.Next(nil) {
 			var log models.QuestLog
 			if err := cursor.Decode(&log); err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
+				return nil, err
 			}
 			logs = append(logs, &log)
 		}
-		if callback != nil {
-			callback(logs, nil)
-		}
-	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ? ORDER BY created_at DESC", models.QuestLog{}.TableName())
-		if limit > 0 {
-			query = fmt.Sprintf("%s LIMIT %d", query, limit)
-		}
-		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
-			}
-			defer rows.Close()
-
-			var logs []*models.QuestLog
-			for rows.Next() {
-				var log models.QuestLog
-				if err := rows.Scan(
-					&log.LogID, &log.PlayerID, &log.QuestID,
-					&log.OpType, &log.Detail, &log.CreatedAt,
-				); err != nil {
-					if callback != nil {
-						callback(nil, err)
-					}
-					return
-				}
-				logs = append(logs, &log)
-			}
-			if callback != nil {
-				callback(logs, nil)
-			}
-		})
+		return logs, nil
 	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ? ORDER BY created_at DESC", models.QuestLog{}.TableName())
+	if limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
+	rows, err := dao.connector.QuerySync(query, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*models.QuestLog
+	for rows.Next() {
+		var log models.QuestLog
+		if err := rows.Scan(
+			&log.LogID, &log.PlayerID, &log.QuestID,
+			&log.OpType, &log.Detail, &log.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, &log)
+	}
+	return logs, nil
 }
 
-func (dao *QuestLogDAO) GetQuestLogsByQuestID(questID int32, limit int, callback func([]*models.QuestLog, error)) {
+func (dao *QuestLogDAO) GetQuestLogsByQuestID(questID int32, limit int) ([]*models.QuestLog, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.QuestLog{}.TableName())
 		filter := bson.M{"quest_id": questID}
@@ -142,10 +109,7 @@ func (dao *QuestLogDAO) GetQuestLogsByQuestID(questID int32, limit int, callback
 
 		cursor, err := collection.Find(nil, filter, opts)
 		if err != nil {
-			if callback != nil {
-				callback(nil, err)
-			}
-			return
+			return nil, err
 		}
 		defer cursor.Close(nil)
 
@@ -153,48 +117,33 @@ func (dao *QuestLogDAO) GetQuestLogsByQuestID(questID int32, limit int, callback
 		for cursor.Next(nil) {
 			var log models.QuestLog
 			if err := cursor.Decode(&log); err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
+				return nil, err
 			}
 			logs = append(logs, &log)
 		}
-		if callback != nil {
-			callback(logs, nil)
-		}
-	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE quest_id = ? ORDER BY created_at DESC", models.QuestLog{}.TableName())
-		if limit > 0 {
-			query = fmt.Sprintf("%s LIMIT %d", query, limit)
-		}
-		dao.connector.Query(query, []interface{}{questID}, func(rows *sql.Rows, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
-			}
-			defer rows.Close()
-
-			var logs []*models.QuestLog
-			for rows.Next() {
-				var log models.QuestLog
-				if err := rows.Scan(
-					&log.LogID, &log.PlayerID, &log.QuestID,
-					&log.OpType, &log.Detail, &log.CreatedAt,
-				); err != nil {
-					if callback != nil {
-						callback(nil, err)
-					}
-					return
-				}
-				logs = append(logs, &log)
-			}
-			if callback != nil {
-				callback(logs, nil)
-			}
-		})
+		return logs, nil
 	}
-}
 
+	query := fmt.Sprintf("SELECT * FROM %s WHERE quest_id = ? ORDER BY created_at DESC", models.QuestLog{}.TableName())
+	if limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
+	rows, err := dao.connector.QuerySync(query, questID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*models.QuestLog
+	for rows.Next() {
+		var log models.QuestLog
+		if err := rows.Scan(
+			&log.LogID, &log.PlayerID, &log.QuestID,
+			&log.OpType, &log.Detail, &log.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, &log)
+	}
+	return logs, nil
+}

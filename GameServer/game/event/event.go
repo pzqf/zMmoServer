@@ -35,6 +35,11 @@ const (
 	EventPlayerLeaveMap zEvent.EventType = 1041
 	EventPlayerMove     zEvent.EventType = 1042
 
+	// AOI 视野事件
+	EventAOIEnterView zEvent.EventType = 1043
+	EventAOILeaveView zEvent.EventType = 1044
+	EventAOIMove      zEvent.EventType = 1045
+
 	// 社交相关事件
 	EventPlayerJoinGuild  zEvent.EventType = 1050
 	EventPlayerLeaveGuild zEvent.EventType = 1051
@@ -146,6 +151,19 @@ type PlayerMapEventData struct {
 	PosX     float32
 	PosY     float32
 	PosZ     float32
+}
+
+// AOIViewEventData AOI 视野事件数据
+type AOIViewEventData struct {
+	WatcherID id.PlayerIdType
+	TargetID  int64
+	MapID     id.MapIdType
+	PosX      float32
+	PosY      float32
+	PosZ      float32
+	OldPosX   float32
+	OldPosY   float32
+	OldPosZ   float32
 }
 
 // PlayerGuildEventData 玩家公会事件数据

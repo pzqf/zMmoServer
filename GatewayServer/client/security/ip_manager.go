@@ -55,8 +55,8 @@ func (sm *IPManager) CheckIPAllowed(ip string) bool {
 	connCount, exists := sm.connections[ip]
 	sm.connMutex.RUnlock()
 
-	if exists && connCount >= 5000 { // 暂时硬编码，后续从配置读取
-		zLog.Warn("IP connection limit reached", zap.String("ip", ip), zap.Int("count", connCount))
+	if exists && connCount >= sm.config.MaxIPConnections {
+		zLog.Warn("IP connection limit reached", zap.String("ip", ip), zap.Int("count", connCount), zap.Int("limit", sm.config.MaxIPConnections))
 		return false
 	}
 

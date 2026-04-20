@@ -28,7 +28,7 @@ func (stl *SkillTableLoader) Load(dir string) error {
 	config := ExcelConfig{
 		FileName:   "skill.xlsx",
 		SheetName:  "Sheet1",
-		MinColumns: 25,
+		MinColumns: 10,
 		TableName:  "skills",
 	}
 

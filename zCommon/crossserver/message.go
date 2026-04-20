@@ -1,3 +1,7 @@
+// Package crossserver 服务器间跨服通信
+// 职责：定义服务器间（GameServer↔MapServer、Gateway↔GameServer 等）的消息格式、路由和可靠投递
+// 边界：仅处理服务器间通信，不涉及客户端协议层的消息编解码
+// 客户端协议层消息编解码请使用 message 包
 package crossserver
 
 // BaseMessage 基础消息结构

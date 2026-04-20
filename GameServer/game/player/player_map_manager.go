@@ -2,7 +2,9 @@ package player
 
 import (
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zMap"
+	"go.uber.org/zap"
 )
 
 type MapInfo struct {
@@ -62,4 +64,19 @@ func (pmm *PlayerMapManager) Clear() {
 	pmm.playerMapInfo.Clear()
 	pmm.mapServerInfo.Clear()
 	pmm.mapServerAddr.Clear()
+}
+
+func (pmm *PlayerMapManager) UpdatePlayerBattleStats(playerID id.PlayerIdType, killCount int32, expGained int64) {
+	info, exists := pmm.playerMapInfo.Load(playerID)
+	if !exists {
+		zLog.Debug("Player map info not found for battle stats update",
+			zap.Int64("player_id", int64(playerID)))
+		return
+	}
+
+	zLog.Debug("Player battle stats updated",
+		zap.Int64("player_id", int64(playerID)),
+		zap.Int32("map_id", int32(info.MapID)),
+		zap.Int32("kill_count", killCount),
+		zap.Int64("exp_gained", expGained))
 }

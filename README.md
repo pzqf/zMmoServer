@@ -1,6 +1,6 @@
 # zMmoServer
 
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat\&logo=go)](https://golang.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 zMmoServer 是一个基于 Go 语言的分布式 MMORPG 游戏服务器，采用微服务架构设计，支持多服务器协同工作。
@@ -15,60 +15,60 @@ zMmoServer 是一个基于 Go 语言的分布式 MMORPG 游戏服务器，采用
                            │ etcd 服务发现
               ┌────────────┼────────────┐
               │            │            │
-     ┌────────▼───┐  ┌────▼───────┐    │
+     ┌────────▼───┐  ┌────▼───────┐     │
      │GatewayServer│  │GatewayServer│   │  1:1 配对
      │  :8001 TCP  │  │ :8002 TCP  │    │
      └──────┬──────┘  └─────┬──────┘    │
             │               │           │
-     ┌──────▼──────┐  ┌─────▼──────┐   │
-     │ GameServer  │  │ GameServer │   │  玩家数据、逻辑调度
-     │ :20001 TCP  │  │ :20002 TCP │   │
-     └──────┬──────┘  └─────┬──────┘   │
+     ┌──────▼──────┐  ┌─────▼──────┐    │
+     │ GameServer  │  │ GameServer │    │  玩家数据、逻辑调度
+     │ :20001 TCP  │  │ :20002 TCP │    │
+     └──────┬──────┘  └─────┬──────┘    │
             │               │           │
-     ┌──────▼──────┐  ┌─────▼──────┐   │
-     │ MapServer   │  │ MapServer  │   │  地图实例、战斗、AI
-     │ :30001 TCP  │  │ :30002 TCP │   │
-     └─────────────┘  └────────────┘   │
-                                       │
-     ┌─────────────┐  ┌──────────────┐ │
-     │ MapServer   │  │ MapServer    │ │  跨服地图（cross_group）
-     │ :30003 TCP  │  │ :30004 TCP   │ │  多服共享
-     │ (mirror)    │  │ (cross_group)│ │
-     └─────────────┘  └──────────────┘ │
+     ┌──────▼──────┐  ┌─────▼──────┐    │
+     │ MapServer   │  │ MapServer  │    │  地图实例、战斗、AI
+     │ :30001 TCP  │  │ :30002 TCP │    │
+     └─────────────┘  └────────────┘    │
+                                        │
+     ┌─────────────┐  ┌──────────────┐  │
+     │ MapServer   │  │ MapServer    │  │  跨服地图（cross_group）
+     │ :30003 TCP  │  │ :30004 TCP   │  │  多服共享
+     │ (mirror)    │  │ (cross_group)│  │
+     └─────────────┘  └──────────────┘  │
 ```
 
 ### 服务器组件
 
-| 服务器                  | 职责                                                         | 成熟度 |
-| ----------------------- | ------------------------------------------------------------ | ------ |
-| **GlobalServer**  | 账号注册/登录、JWT认证、服务器列表管理、服务发现中枢         | 中高   |
-| **GatewayServer** | 客户端TCP连接管理、消息路由转发、JWT验证、DDoS防护、防作弊   | 中高   |
-| **GameServer**    | 玩家数据管理、游戏逻辑调度、地图服务协调、Outbox/Inbox一致性 | 中     |
-| **MapServer**     | 地图实例管理、战斗计算、AI状态机、技能系统、经济系统         | 中     |
-| **AdminServer**   | 后台管理、监控（暂未实现）                                   | -      |
+| 服务器               | 职责                                   | 成熟度 |
+| ----------------- | ------------------------------------ | --- |
+| **GlobalServer**  | 账号注册/登录、JWT认证、服务器列表管理、服务发现中枢         | 中高  |
+| **GatewayServer** | 客户端TCP连接管理、消息路由转发、JWT验证、DDoS防护、防作弊   | 中高  |
+| **GameServer**    | 玩家数据管理、游戏逻辑调度、地图服务协调、Outbox/Inbox一致性 | 中   |
+| **MapServer**     | 地图实例管理、战斗计算、AI状态机、技能系统、经济系统          | 中   |
+| **AdminServer**   | 后台管理、监控（暂未实现）                        | -   |
 
 ### 三种地图模式
 
-| 模式              | 说明                   | 配置文件          |
-| ----------------- | ---------------------- | ----------------- |
-| `single_server` | 单服地图，仅本服玩家   | config_single.ini |
-| `mirror`        | 镜像地图，各服独立副本 | config_mirror.ini |
-| `cross_group`   | 世界地图，多服玩家共享 | config_cross.ini  |
+| 模式              | 说明          | 配置文件               |
+| --------------- | ----------- | ------------------ |
+| `single_server` | 单服地图，仅本服玩家  | config\_single.ini |
+| `mirror`        | 镜像地图，各服独立副本 | config\_mirror.ini |
+| `cross_group`   | 世界地图，多服玩家共享 | config\_cross.ini  |
 
 ## 技术栈
 
-| 类别               | 技术                            |
-| ------------------ | ------------------------------- |
-| **语言**     | Go 1.25+                        |
-| **网络**     | zEngine/zNet (TCP + Protobuf)   |
-| **日志**     | zEngine/zLog (zap + lumberjack) |
+| 类别       | 技术                              |
+| -------- | ------------------------------- |
+| **语言**   | Go 1.25+                        |
+| **网络**   | zEngine/zNet (TCP + Protobuf)   |
+| **日志**   | zEngine/zLog (zap + lumberjack) |
 | **服务发现** | etcd                            |
-| **数据库**   | MySQL (go-sql-driver/mysql)     |
-| **缓存**     | Redis (go-redis/v9)             |
-| **序列化**   | Protocol Buffers (v1.36.10)     |
-| **监控**     | Prometheus                      |
+| **数据库**  | MySQL (go-sql-driver/mysql)     |
+| **缓存**   | Redis (go-redis/v9)             |
+| **序列化**  | Protocol Buffers (v1.36.10)     |
+| **监控**   | Prometheus                      |
 | **容器编排** | Kubernetes                      |
-| **框架**     | zEngine + zUtil                 |
+| **框架**   | zEngine + zUtil                 |
 
 ## 项目结构
 
@@ -115,6 +115,7 @@ zMmoServer/
 │   │   ├── event/       # 事件系统
 │   │   ├── dungeon/     # 副本系统
 │   │   ├── item/        # 物品管理
+│   │   ├── loot/        # 掉落系统（配置表驱动）
 │   │   └── task/        # 任务系统
 │   └── connection/      # 连接管理
 ├── zCommon/             # 共享公共库（132文件/19432行）
@@ -198,47 +199,57 @@ Handler → Service → DAO → DBConnector → MySQL
 
 ### 已完成
 
-- [X] 四服务器框架搭建（Global/Gateway/Game/Map）
-- [X] 统一生命周期管理（BaseServer 重构，独立 init* 方法）
-- [X] 统一启动流程（flag→config→log→server）
-- [X] 网络通信模块（TCP + Protobuf）
-- [X] 服务发现与注册（etcd，统一使用 zCommon/discovery）
-- [X] 统一配置文件管理（INI + Excel 配置表 + 热更新）
-- [X] 账号注册/登录（JWT + SHA256）
-- [X] 服务器列表管理（静态MySQL + 动态etcd合并）
-- [X] DDoS 防护（无锁设计）
-- [X] 防作弊检测（IP管理、行为频率统计）
-- [X] Prometheus 监控指标（各服务器统一）
-- [X] 健康检查框架
-- [X] Actor 并发模型（玩家对象）
-- [X] 游戏对象体系（GameObject → LivingObject → Player）
-- [X] 战斗系统（物理/魔法/真实伤害，暴击判定）
-- [X] AI 状态机（Idle/Patrol/Chase/Attack/Flee/Return/Dead）
-- [X] 技能系统（含连招 ComboManager）
-- [X] 经济系统（交易/拍卖/商店/货币）
-- [X] 统一通信模式（BaseMessage/CrossServerMessage/Envelope）
-- [X] 数据一致性机制（Outbox/Inbox + 事务管理器）
-- [X] ID 类型规范（20+ 类型化 ID + Snowflake）
-- [X] DAO 同步化（PlayerDAO/AccountDAO/GameServerDAO）
-- [X] Repository 精简（移除 Async 方法，新增 GameServerRepository）
-- [X] 代码冗余消除（统一 metrics/health/discovery/config/container/utils/request）
-- [X] 对象池扩展（Event/ByteSlice/SizedBytePool/TypedPool）
-- [X] Map分区并行（PartitionScheduler）
-- [X] Gateway多连接池（ConnectionPool + RoundRobin）
-- [X] 内存监控 + 告警
-- [X] 压力测试框架
+- [x] 四服务器框架搭建（Global/Gateway/Game/Map）
+- [x] 统一生命周期管理（BaseServer 重构，独立 init\* 方法）
+- [x] 统一启动流程（flag→config→log→server）
+- [x] 网络通信模块（TCP + Protobuf）
+- [x] 服务发现与注册（etcd，统一使用 zCommon/discovery）
+- [x] 统一配置文件管理（INI + Excel 配置表 + 热更新）
+- [x] 账号注册/登录（JWT + SHA256）
+- [x] 服务器列表管理（静态MySQL + 动态etcd合并）
+- [x] DDoS 防护（无锁设计）
+- [x] 防作弊检测（IP管理、行为频率统计）
+- [x] Prometheus 监控指标（各服务器统一）
+- [x] 健康检查框架
+- [x] Actor 并发模型（玩家对象）
+- [x] 游戏对象体系（GameObject → LivingObject → Player）
+- [x] 战斗系统（物理/魔法/真实伤害，暴击判定）
+- [x] AI 状态机（Idle/Patrol/Chase/Attack/Flee/Return/Dead）
+- [x] 技能系统（含连招 ComboManager）
+- [x] 经济系统（交易/拍卖/商店/货币）
+- [x] 统一通信模式（BaseMessage/CrossServerMessage/Envelope）
+- [x] 数据一致性机制（Outbox/Inbox + 事务管理器）
+- [x] ID 类型规范（20+ 类型化 ID + Snowflake）
+- [x] DAO 同步化（PlayerDAO/AccountDAO/GameServerDAO）
+- [x] Repository 精简（移除 Async 方法，新增 GameServerRepository）
+- [x] 代码冗余消除（统一 metrics/health/discovery/config/container/utils/request）
+- [x] 对象池扩展（Event/ByteSlice/SizedBytePool/TypedPool）
+- [x] Map分区并行（PartitionScheduler）
+- [x] Gateway多连接池（ConnectionPool + RoundRobin）
+- [x] 内存监控 + 告警
+- [x] 压力测试框架
+- [x] AOI 系统集成到 MapServer（Grid AOI + 视野推送）
+- [x] 玩家移动同步完整流程（AOI事件驱动 + 客户端推送）
+- [x] 技能释放完整流程（技能配置→伤害计算→效果施加→冷却管理）
+- [x] 怪物生成与 AI 集成（PlayerQuerier接口 + 配置表驱动）
+- [x] GameServer 与 MapServer 职责边界明确化（Actor消息路由 + 会话绑定）
+- [x] 技能效果完整实现（伤害/治疗/Buff增益/控制Debuff）
+- [x] Buff 属性修正系统（攻击/防御/HP/MP/速度修正 + DoT/HoT处理）
+- [x] 交易结算逻辑（CompleteTrade/completeAuction 货币转移）
+- [x] 怪物重生机制（配置表驱动 + 定时重生）
+- [x] 掉落系统（LootGroup配置表 + 掉落率计算 + 物品生成）
+- [x] 装备属性加成接入战斗计算（Equipment属性汇总 + CombatSystem集成）
+- [x] 游戏主循环（MapServer 100ms Tick + AI/Buff/Player/Skill/Event 更新）
+- [x] Gateway 健康状态联动（GameServer连接状态 → Gateway健康状态）
+- [x] Gateway etcd TLS 支持
+- [x] zUtil/zConfig 配置工具函数统一（GetStringWithDefault/GetEnv等）
+- [x] GlobalServer 数据库连接复用（DBService复用DBManager连接器）
 
 ### 待开发
 
-- [ ] 剩余8个 DAO 同步化（auction/login_log/player_buff 等）
-- [ ] AOI 系统集成到 MapServer
-- [ ] 玩家移动同步完整流程
-- [ ] 技能释放完整流程
-- [ ] 怪物生成与 AI 集成
-- [ ] GameServer 与 MapServer 职责边界明确化
+- [ ] 剩余8个 DAO 同步化（auction/login\_log/player\_buff 等）
 - [ ] GatewayServer 多 GameServer 负载均衡
-- [ ] 背包/物品/装备完整实现
-- [ ] 技能效果完整实现（Buff/Debuff/DoT/HoT）
+- [ ] 背包/物品/装备完整实现（装备属性同步到MapServer）
 - [ ] 任务系统完整实现
 - [ ] 副本系统完整实现
 - [ ] 跨服地图功能验证
@@ -267,20 +278,20 @@ go build -o bin/map_server.exe     ./MapServer/main.go
 
 ### 配置文件
 
-| 服务器        | 配置文件          | 说明                                             |
-| ------------- | ----------------- | ------------------------------------------------ |
-| GlobalServer  | config.ini        | HTTP/Database/Redis/Etcd/Metrics/Pprof           |
-| GatewayServer | config.ini        | TCP/Security/DDoS/Compression/Etcd/Metrics/Pprof |
-| GameServer    | config.ini        | TCP/Database/Etcd/Metrics/Pprof                  |
-| MapServer     | config_single.ini | 单服地图模式                                     |
-| MapServer     | config_mirror.ini | 镜像地图模式                                     |
-| MapServer     | config_cross.ini  | 世界地图模式                                     |
-| MapServer     | config_test.ini   | 测试配置                                         |
+| 服务器           | 配置文件               | 说明                                               |
+| ------------- | ------------------ | ------------------------------------------------ |
+| GlobalServer  | config.ini         | HTTP/Database/Redis/Etcd/Metrics/Pprof           |
+| GatewayServer | config.ini         | TCP/Security/DDoS/Compression/Etcd/Metrics/Pprof |
+| GameServer    | config.ini         | TCP/Database/Etcd/Metrics/Pprof                  |
+| MapServer     | config\_single.ini | 单服地图模式                                           |
+| MapServer     | config\_mirror.ini | 镜像地图模式                                           |
+| MapServer     | config\_cross.ini  | 世界地图模式                                           |
+| MapServer     | config\_test.ini   | 测试配置                                             |
 
 ## 许可证
 
 MIT License
 
----
+***
 
-*最后更新: 2026-04-15*
+*最后更新: 2026-04-16*

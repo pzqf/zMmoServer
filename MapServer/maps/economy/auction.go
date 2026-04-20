@@ -39,15 +39,19 @@ type Auction struct {
 type AuctionManager struct {
 	auctions       *zMap.TypedMap[int64, *Auction]
 	activeAuctions []*Auction
-	activeMu       sync.RWMutex // 用于保护activeAuctions切片
+	activeMu       sync.RWMutex
+	currencyManager *CurrencyManager
 }
 
-// NewAuctionManager 创建拍卖行管理器
 func NewAuctionManager() *AuctionManager {
 	return &AuctionManager{
 		auctions:       zMap.NewTypedMap[int64, *Auction](),
 		activeAuctions: make([]*Auction, 0),
 	}
+}
+
+func (am *AuctionManager) SetCurrencyManager(cm *CurrencyManager) {
+	am.currencyManager = cm
 }
 
 // CreateAuction 创建拍卖
@@ -242,21 +246,39 @@ func (am *AuctionManager) UpdateAuctions() {
 // completeAuction 完成拍卖
 func (am *AuctionManager) completeAuction(auction *Auction) {
 	if auction.BuyerID > 0 {
-		// 有买家，拍卖成功
 		auction.Status = AuctionStatusCompleted
-		// 这里需要添加物品和货币的转移逻辑
+
+		if am.currencyManager != nil {
+			if err := am.currencyManager.RemoveCurrency(auction.BuyerID, auction.CurrencyType, auction.CurrentPrice); err != nil {
+				zLog.Warn("Failed to deduct buyer currency",
+					zap.Int64("auction_id", auction.AuctionID),
+					zap.Int64("buyer_id", int64(auction.BuyerID)),
+					zap.Error(err))
+			} else {
+				if err := am.currencyManager.AddCurrency(auction.SellerID, auction.CurrencyType, auction.CurrentPrice); err != nil {
+					zLog.Warn("Failed to add seller currency",
+						zap.Int64("auction_id", auction.AuctionID),
+						zap.Int64("seller_id", int64(auction.SellerID)),
+						zap.Error(err))
+				}
+			}
+		}
+
+		zLog.Info("Auction completed with buyer",
+			zap.Int64("auction_id", auction.AuctionID),
+			zap.Int64("seller_id", int64(auction.SellerID)),
+			zap.Int64("buyer_id", int64(auction.BuyerID)),
+			zap.Int32("item_id", auction.ItemID),
+			zap.Int64("final_price", auction.CurrentPrice))
 	} else {
-		// 无买家，拍卖失败
 		auction.Status = AuctionStatusCancelled
-		// 这里需要将物品返还给卖家
+
+		zLog.Info("Auction cancelled, no buyer",
+			zap.Int64("auction_id", auction.AuctionID),
+			zap.Int64("seller_id", int64(auction.SellerID)),
+			zap.Int32("item_id", auction.ItemID))
 	}
 	auction.UpdatedAt = time.Now()
-
-	zLog.Debug("Auction completed",
-		zap.Int64("auction_id", auction.AuctionID),
-		zap.Int64("seller_id", int64(auction.SellerID)),
-		zap.Int64("buyer_id", int64(auction.BuyerID)),
-		zap.Int64("final_price", auction.CurrentPrice))
 }
 
 // removeFromActiveAuctions 从活跃拍卖列表中移除

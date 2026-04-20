@@ -1,21 +1,22 @@
 package security
 
 import (
-	"sync"
+	"context"
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GatewayServer/config"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 // AntiCheatManager 防作弊管理器
 type AntiCheatManager struct {
-	config            *config.Config
-	clientStats       map[string]*ClientStats
-	cheatReports      map[string][]CheatReport
-	clientStatsMutex  sync.RWMutex
-	cheatReportsMutex sync.RWMutex
+	config       *config.Config
+	clientStats  *zMap.TypedMap[string, *ClientStats]
+	cheatReports *zMap.TypedMap[string, []*CheatReport]
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 // ClientStats 客户端行为统计
@@ -41,87 +42,81 @@ type CheatReport struct {
 func NewAntiCheatManager(cfg *config.Config) *AntiCheatManager {
 	return &AntiCheatManager{
 		config:       cfg,
-		clientStats:  make(map[string]*ClientStats),
-		cheatReports: make(map[string][]CheatReport),
+		clientStats:  zMap.NewTypedMap[string, *ClientStats](),
+		cheatReports: zMap.NewTypedMap[string, []*CheatReport](),
 	}
 }
 
 // RecordClientAction 记录客户端行为
 func (acm *AntiCheatManager) RecordClientAction(ip string, packetSize int) {
-	acm.clientStatsMutex.Lock()
-	defer acm.clientStatsMutex.Unlock()
-
-	stats, exists := acm.clientStats[ip]
+	stats, exists := acm.clientStats.Load(ip)
 	if !exists {
 		stats = &ClientStats{
 			IP:             ip,
 			LoginTime:      time.Now(),
 			LastActionTime: time.Now(),
 		}
-		acm.clientStats[ip] = stats
+		acm.clientStats.Store(ip, stats)
 	}
 
 	stats.LastActionTime = time.Now()
 	stats.ActionCount++
 	stats.PacketCount++
 
-	// 检查异常行为
 	acm.checkAbnormalBehavior(stats)
 }
 
 // RecordError 记录错误
 func (acm *AntiCheatManager) RecordError(ip string, errorType string) {
-	acm.clientStatsMutex.Lock()
-	defer acm.clientStatsMutex.Unlock()
-
-	stats, exists := acm.clientStats[ip]
+	stats, exists := acm.clientStats.Load(ip)
 	if !exists {
 		return
 	}
 
 	stats.ErrorCount++
 
-	// 记录作弊报告
-	report := CheatReport{
+	report := &CheatReport{
 		Time:        time.Now(),
 		Type:        errorType,
 		Description: "Client error detected",
 		Severity:    1,
 	}
 
-	acm.cheatReportsMutex.Lock()
-	acm.cheatReports[ip] = append(acm.cheatReports[ip], report)
-	acm.cheatReportsMutex.Unlock()
+	reports, _ := acm.cheatReports.Load(ip)
+	reports = append(reports, report)
+	acm.cheatReports.Store(ip, reports)
 }
 
 // checkAbnormalBehavior 检查异常行为
 func (acm *AntiCheatManager) checkAbnormalBehavior(stats *ClientStats) {
-	// 检查操作频率
-	if stats.ActionCount > 1000 && time.Since(stats.LoginTime) < time.Minute {
+	ac := acm.config.AntiCheat
+
+	if ac.MaxActionsPerMinute > 0 && stats.ActionCount > ac.MaxActionsPerMinute && time.Since(stats.LoginTime) < time.Minute {
 		acm.reportCheat(stats.IP, "HighActionRate", "Too many actions in short time", 3)
 		stats.AbnormalActions++
 	}
 
-	// 检查错误率
-	if stats.ErrorCount > stats.ActionCount/2 {
-		acm.reportCheat(stats.IP, "HighErrorRate", "Too many errors", 2)
-		stats.AbnormalActions++
+	if ac.MaxErrorRatio > 0 && stats.ActionCount > 0 {
+		errorRatio := float64(stats.ErrorCount) / float64(stats.ActionCount)
+		if errorRatio > ac.MaxErrorRatio {
+			acm.reportCheat(stats.IP, "HighErrorRate", "Too many errors", 2)
+			stats.AbnormalActions++
+		}
 	}
 }
 
 // reportCheat 报告作弊行为
 func (acm *AntiCheatManager) reportCheat(ip, cheatType, description string, severity int) {
-	acm.cheatReportsMutex.Lock()
-	defer acm.cheatReportsMutex.Unlock()
-
-	report := CheatReport{
+	report := &CheatReport{
 		Time:        time.Now(),
 		Type:        cheatType,
 		Description: description,
 		Severity:    severity,
 	}
 
-	acm.cheatReports[ip] = append(acm.cheatReports[ip], report)
+	reports, _ := acm.cheatReports.Load(ip)
+	reports = append(reports, report)
+	acm.cheatReports.Store(ip, reports)
 
 	zLog.Warn("Cheat detected",
 		zap.String("ip", ip),
@@ -132,23 +127,26 @@ func (acm *AntiCheatManager) reportCheat(ip, cheatType, description string, seve
 
 // CheckClientStatus 检查客户端状态
 func (acm *AntiCheatManager) CheckClientStatus(ip string) (bool, string) {
-	acm.clientStatsMutex.RLock()
-	stats, exists := acm.clientStats[ip]
-	acm.clientStatsMutex.RUnlock()
+	ac := acm.config.AntiCheat
 
+	stats, exists := acm.clientStats.Load(ip)
 	if !exists {
 		return true, ""
 	}
 
-	// 检查异常行为次数
-	if stats.AbnormalActions > 5 {
+	maxAbnormal := ac.MaxAbnormalActions
+	if maxAbnormal <= 0 {
+		maxAbnormal = 5
+	}
+	if stats.AbnormalActions > maxAbnormal {
 		return false, "Too many abnormal actions"
 	}
 
-	// 检查作弊报告
-	acm.cheatReportsMutex.RLock()
-	reports := acm.cheatReports[ip]
-	acm.cheatReportsMutex.RUnlock()
+	reports, _ := acm.cheatReports.Load(ip)
+	maxHighSeverity := ac.MaxHighSeverityReports
+	if maxHighSeverity <= 0 {
+		maxHighSeverity = 3
+	}
 
 	highSeverityCount := 0
 	for _, report := range reports {
@@ -157,7 +155,7 @@ func (acm *AntiCheatManager) CheckClientStatus(ip string) (bool, string) {
 		}
 	}
 
-	if highSeverityCount >= 3 {
+	if highSeverityCount >= maxHighSeverity {
 		return false, "Multiple high severity cheat attempts"
 	}
 
@@ -166,31 +164,59 @@ func (acm *AntiCheatManager) CheckClientStatus(ip string) (bool, string) {
 
 // CleanupInactiveClients 清理不活跃的客户端
 func (acm *AntiCheatManager) CleanupInactiveClients() {
-	acm.clientStatsMutex.Lock()
-	defer acm.clientStatsMutex.Unlock()
+	ac := acm.config.AntiCheat
+	inactiveTimeout := time.Duration(ac.InactiveTimeoutMinutes) * time.Minute
+	if inactiveTimeout <= 0 {
+		inactiveTimeout = 30 * time.Minute
+	}
 
 	now := time.Now()
-	for ip, stats := range acm.clientStats {
-		if now.Sub(stats.LastActionTime) > 30*time.Minute {
-			delete(acm.clientStats, ip)
+	var toDelete []string
 
-			// 清理对应的作弊报告
-			acm.cheatReportsMutex.Lock()
-			delete(acm.cheatReports, ip)
-			acm.cheatReportsMutex.Unlock()
+	acm.clientStats.Range(func(ip string, stats *ClientStats) bool {
+		if now.Sub(stats.LastActionTime) > inactiveTimeout {
+			toDelete = append(toDelete, ip)
 		}
+		return true
+	})
+
+	for _, ip := range toDelete {
+		acm.clientStats.Delete(ip)
+		acm.cheatReports.Delete(ip)
 	}
 }
 
 // StartCleanupTask 启动清理任务
-func (acm *AntiCheatManager) StartCleanupTask() {
+func (acm *AntiCheatManager) StartCleanupTask(ctx context.Context) {
+	acm.ctx, acm.cancel = context.WithCancel(ctx)
+
 	go func() {
-		ticker := time.NewTicker(10 * time.Minute)
+		ac := acm.config.AntiCheat
+		cleanupInterval := time.Duration(ac.CleanupIntervalMinutes) * time.Minute
+		if cleanupInterval <= 0 {
+			cleanupInterval = 10 * time.Minute
+		}
+
+		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
 
 		for {
-			<-ticker.C
-			acm.CleanupInactiveClients()
+			select {
+			case <-acm.ctx.Done():
+				return
+			case <-ticker.C:
+				acm.CleanupInactiveClients()
+			}
 		}
 	}()
+}
+
+// Stop 停止防作弊管理器
+func (acm *AntiCheatManager) Stop() {
+	if acm.cancel != nil {
+		acm.cancel()
+	}
+	acm.clientStats.Clear()
+	acm.cheatReports.Clear()
+	zLog.Info("AntiCheatManager stopped")
 }

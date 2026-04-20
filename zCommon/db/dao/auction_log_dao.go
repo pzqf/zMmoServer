@@ -1,7 +1,6 @@
 package dao
 
 import (
-	"database/sql"
 	"fmt"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -19,13 +18,10 @@ func NewAuctionLogDAO(dbConnector connector.DBConnector) *AuctionLogDAO {
 	return &AuctionLogDAO{connector: dbConnector}
 }
 
-func (dao *AuctionLogDAO) CreateAuctionLog(auctionLog *models.AuctionLog, callback func(int64, error)) {
+func (dao *AuctionLogDAO) CreateAuctionLog(auctionLog *models.AuctionLog) (int64, error) {
 	logID, err := id.GenerateLogID()
 	if err != nil {
-		if callback != nil {
-			callback(0, err)
-		}
-		return
+		return 0, err
 	}
 	auctionLog.LogID = int64(logID)
 
@@ -33,36 +29,24 @@ func (dao *AuctionLogDAO) CreateAuctionLog(auctionLog *models.AuctionLog, callba
 		collection := dao.connector.GetMongoDB().Collection(models.AuctionLog{}.TableName())
 		_, err := collection.InsertOne(nil, auctionLog)
 		if err != nil {
-			if callback != nil {
-				callback(0, err)
-			}
-			return
+			return 0, err
 		}
-		if callback != nil {
-			callback(auctionLog.LogID, nil)
-		}
-	} else {
-		query := fmt.Sprintf("INSERT INTO %s (log_id, auction_id, player_id, op_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", models.AuctionLog{}.TableName())
-		args := []interface{}{
-			auctionLog.LogID, auctionLog.AuctionID, auctionLog.PlayerID,
-			auctionLog.OpType, auctionLog.Detail, auctionLog.CreatedAt,
-		}
-		dao.connector.Execute(query, args, func(result sql.Result, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(0, err)
-				}
-				return
-			}
-			id, err := result.LastInsertId()
-			if callback != nil {
-				callback(id, err)
-			}
-		})
+		return auctionLog.LogID, nil
 	}
+
+	query := fmt.Sprintf("INSERT INTO %s (log_id, auction_id, player_id, op_type, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)", models.AuctionLog{}.TableName())
+	args := []interface{}{
+		auctionLog.LogID, auctionLog.AuctionID, auctionLog.PlayerID,
+		auctionLog.OpType, auctionLog.Detail, auctionLog.CreatedAt,
+	}
+	result, err := dao.connector.ExecSync(query, args...)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
-func (dao *AuctionLogDAO) GetAuctionLogsByAuctionID(auctionID int64, limit int, callback func([]*models.AuctionLog, error)) {
+func (dao *AuctionLogDAO) GetAuctionLogsByAuctionID(auctionID int64, limit int) ([]*models.AuctionLog, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.AuctionLog{}.TableName())
 		filter := bson.M{"auction_id": auctionID}
@@ -74,10 +58,7 @@ func (dao *AuctionLogDAO) GetAuctionLogsByAuctionID(auctionID int64, limit int, 
 
 		cursor, err := collection.Find(nil, filter, opts)
 		if err != nil {
-			if callback != nil {
-				callback(nil, err)
-			}
-			return
+			return nil, err
 		}
 		defer cursor.Close(nil)
 
@@ -85,52 +66,38 @@ func (dao *AuctionLogDAO) GetAuctionLogsByAuctionID(auctionID int64, limit int, 
 		for cursor.Next(nil) {
 			var log models.AuctionLog
 			if err := cursor.Decode(&log); err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
+				return nil, err
 			}
 			logs = append(logs, &log)
 		}
-		if callback != nil {
-			callback(logs, nil)
-		}
-	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE auction_id = ? ORDER BY created_at DESC", models.AuctionLog{}.TableName())
-		if limit > 0 {
-			query = fmt.Sprintf("%s LIMIT %d", query, limit)
-		}
-		dao.connector.Query(query, []interface{}{auctionID}, func(rows *sql.Rows, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
-			}
-			defer rows.Close()
-
-			var logs []*models.AuctionLog
-			for rows.Next() {
-				var log models.AuctionLog
-				if err := rows.Scan(
-					&log.LogID, &log.AuctionID, &log.PlayerID,
-					&log.OpType, &log.Detail, &log.CreatedAt,
-				); err != nil {
-					if callback != nil {
-						callback(nil, err)
-					}
-					return
-				}
-				logs = append(logs, &log)
-			}
-			if callback != nil {
-				callback(logs, nil)
-			}
-		})
+		return logs, nil
 	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE auction_id = ? ORDER BY created_at DESC", models.AuctionLog{}.TableName())
+	if limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
+	rows, err := dao.connector.QuerySync(query, auctionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*models.AuctionLog
+	for rows.Next() {
+		var log models.AuctionLog
+		if err := rows.Scan(
+			&log.LogID, &log.AuctionID, &log.PlayerID,
+			&log.OpType, &log.Detail, &log.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, &log)
+	}
+	return logs, nil
 }
 
-func (dao *AuctionLogDAO) GetAuctionLogsByPlayerID(playerID int64, limit int, callback func([]*models.AuctionLog, error)) {
+func (dao *AuctionLogDAO) GetAuctionLogsByPlayerID(playerID int64, limit int) ([]*models.AuctionLog, error) {
 	if dao.connector.GetDriver() == "mongo" {
 		collection := dao.connector.GetMongoDB().Collection(models.AuctionLog{}.TableName())
 		filter := bson.M{"player_id": playerID}
@@ -142,10 +109,7 @@ func (dao *AuctionLogDAO) GetAuctionLogsByPlayerID(playerID int64, limit int, ca
 
 		cursor, err := collection.Find(nil, filter, opts)
 		if err != nil {
-			if callback != nil {
-				callback(nil, err)
-			}
-			return
+			return nil, err
 		}
 		defer cursor.Close(nil)
 
@@ -153,48 +117,33 @@ func (dao *AuctionLogDAO) GetAuctionLogsByPlayerID(playerID int64, limit int, ca
 		for cursor.Next(nil) {
 			var log models.AuctionLog
 			if err := cursor.Decode(&log); err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
+				return nil, err
 			}
 			logs = append(logs, &log)
 		}
-		if callback != nil {
-			callback(logs, nil)
-		}
-	} else {
-		query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ? ORDER BY created_at DESC", models.AuctionLog{}.TableName())
-		if limit > 0 {
-			query = fmt.Sprintf("%s LIMIT %d", query, limit)
-		}
-		dao.connector.Query(query, []interface{}{playerID}, func(rows *sql.Rows, err error) {
-			if err != nil {
-				if callback != nil {
-					callback(nil, err)
-				}
-				return
-			}
-			defer rows.Close()
-
-			var logs []*models.AuctionLog
-			for rows.Next() {
-				var log models.AuctionLog
-				if err := rows.Scan(
-					&log.LogID, &log.AuctionID, &log.PlayerID,
-					&log.OpType, &log.Detail, &log.CreatedAt,
-				); err != nil {
-					if callback != nil {
-						callback(nil, err)
-					}
-					return
-				}
-				logs = append(logs, &log)
-			}
-			if callback != nil {
-				callback(logs, nil)
-			}
-		})
+		return logs, nil
 	}
-}
 
+	query := fmt.Sprintf("SELECT * FROM %s WHERE player_id = ? ORDER BY created_at DESC", models.AuctionLog{}.TableName())
+	if limit > 0 {
+		query = fmt.Sprintf("%s LIMIT %d", query, limit)
+	}
+	rows, err := dao.connector.QuerySync(query, playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []*models.AuctionLog
+	for rows.Next() {
+		var log models.AuctionLog
+		if err := rows.Scan(
+			&log.LogID, &log.AuctionID, &log.PlayerID,
+			&log.OpType, &log.Detail, &log.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, &log)
+	}
+	return logs, nil
+}

@@ -1,11 +1,16 @@
 package economy
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zCommon/common/id"
 	"go.uber.org/zap"
+)
+
+var (
+	ErrCurrencyNotEnough = errors.New("insufficient currency")
 )
 
 // CurrencyType 货币类型
@@ -78,15 +83,13 @@ func (cm *CurrencyManager) RemoveCurrency(playerID id.PlayerIdType, currencyType
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// 确保玩家货币数据存在
 	if _, exists := cm.currencies[playerID]; !exists {
-		return nil
+		return ErrCurrencyNotEnough
 	}
 
-	// 检查货币是否足够
 	currentAmount := cm.currencies[playerID][currencyType]
 	if currentAmount < amount {
-		return nil
+		return ErrCurrencyNotEnough
 	}
 
 	// 减少货币

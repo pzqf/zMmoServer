@@ -22,6 +22,9 @@ enum SystemMsgId {
   MSG_SYSTEM_PONG = 3;
   MSG_SYSTEM_KICK = 4;
   MSG_SYSTEM_MAINTENANCE = 5;
+  MSG_SYSTEM_TOKEN_VERIFY = 10;
+  MSG_SYSTEM_TOKEN_VERIFY_RESPONSE = 11;
+  MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY = 12;
 }
 
 // 玩家消息 200-299
@@ -45,6 +48,9 @@ enum MapMsgId {
   MSG_MAP_MOVE_RESPONSE = 1205;
   MSG_MAP_ATTACK = 1206;
   MSG_MAP_ATTACK_RESPONSE = 1207;
+  MSG_MAP_ENTER_VIEW = 1220;
+  MSG_MAP_LEAVE_VIEW = 1221;
+  MSG_MAP_ENTITY_MOVE = 1222;
 }
 
 // ============================================
@@ -59,6 +65,12 @@ message ClientMessage {
   bytes data = 4;
   int64 timestamp = 5;
   string token = 6;
+}
+
+message AccountLoginNotify {
+  uint64 session_id = 1;
+  int64 account_id = 2;
+  string account_name = 3;
 }
 
 // 服务器到客户端的消息头
@@ -137,4 +149,22 @@ message ClientMapAttackResponse {
   int64 target_id = 2;
   int64 damage = 3;
   int64 target_hp = 4;
+}
+
+// 实体进入视野通知
+message EntityEnterViewNotify {
+  int64 entity_id = 1;
+  Position pos = 2;
+}
+
+// 实体离开视野通知
+message EntityLeaveViewNotify {
+  int64 entity_id = 1;
+}
+
+// 实体移动通知
+message EntityMoveNotify {
+  int64 entity_id = 1;
+  Position old_pos = 2;
+  Position new_pos = 3;
 }

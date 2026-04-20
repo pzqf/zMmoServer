@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/db/models"
 	"github.com/pzqf/zCommon/discovery"
 	"github.com/pzqf/zEngine/zLog"
@@ -124,7 +125,7 @@ func (m *ServerListManager) UpdateServerStatus(status *ServerRuntimeStatus) erro
 
 func (m *ServerListManager) GetServerRuntimeStatus(serverID int32) (*ServerRuntimeStatus, error) {
 	var found *ServerRuntimeStatus
-	serverIDStr := strconv.FormatInt(int64(serverID), 10)
+	serverIDStr := id.ServerIDString(id.MustParseServerIDInt(serverID))
 	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
 		if service.ID == serverIDStr {
 			found = m.convertServiceInfoToServerRuntimeStatus(service)
@@ -222,6 +223,13 @@ func (m *ServerListManager) GetAllServerFullInfos() []*ServerFullInfo {
 	m.serviceCache.Range(func(key string, service *discovery.ServerInfo) bool {
 		if service.ServiceType == "gateway" && service.Status == zServer.StateHealthy {
 			serverID, err := strconv.ParseInt(service.ID, 10, 32)
+			if err != nil {
+				serverIDInt := id.ParseServerIDString(service.ID)
+				if serverIDInt > 0 {
+					serverID = int64(serverIDInt)
+					err = nil
+				}
+			}
 			if err == nil {
 				alreadyAdded := false
 				for _, info := range infos {
@@ -318,11 +326,17 @@ func (m *ServerListManager) mergeServerFullInfo(static *models.GameServer, statu
 		GroupID:        static.GroupID,
 		MaxOnlineCount: static.MaxOnlineCount,
 		Region:         static.Region,
+		Address:        static.Address,
+		Port:           static.Port,
 	}
 
 	if status != nil {
-		info.Address = status.Address
-		info.Port = status.Port
+		if status.Address != "" && status.Address != "0.0.0.0" {
+			info.Address = status.Address
+		}
+		if status.Port > 0 {
+			info.Port = status.Port
+		}
 		info.Status = status.Status
 		info.OnlineCount = status.OnlineCount
 		info.Version = status.Version
@@ -361,8 +375,12 @@ func (m *ServerListManager) convertServiceInfoToServerRuntimeStatus(service *dis
 }
 
 func (m *ServerListManager) startServiceDiscoveryWatch() {
+	if err := m.RefreshServiceCache(); err != nil {
+		zLog.Warn("Failed to refresh service cache on startup", zap.Error(err))
+	}
+
 	go func() {
-		eventChan, err := m.serviceDiscovery.Watch("gateway", "*")
+		eventChan, err := m.serviceDiscovery.Watch("gateway", "")
 		if err != nil {
 			zLog.Error("Failed to watch gateway services", zap.Error(err))
 			return
@@ -397,11 +415,14 @@ func (m *ServerListManager) handleServiceEvents(eventChan <-chan *discovery.Serv
 }
 
 func (m *ServerListManager) startCleanupRoutine() {
-	m.cleanupTicker = time.NewTicker(1 * time.Minute)
+	m.cleanupTicker = time.NewTicker(30 * time.Second)
 	go func() {
 		for {
 			select {
 			case <-m.cleanupTicker.C:
+				if err := m.RefreshServiceCache(); err != nil {
+					zLog.Warn("Failed to refresh service cache", zap.Error(err))
+				}
 				m.cleanupExpiredServers()
 			case <-m.stopCleanup:
 				return
@@ -433,7 +454,7 @@ func (m *ServerListManager) RefreshServiceCache() error {
 
 	serviceTypes := []string{"gateway"}
 	for _, serviceType := range serviceTypes {
-		services, err := m.serviceDiscovery.Discover(serviceType, "*")
+		services, err := m.serviceDiscovery.Discover(serviceType, "")
 		if err != nil {
 			zLog.Warn("Failed to discover services", zap.String("service_type", serviceType), zap.Error(err))
 			continue

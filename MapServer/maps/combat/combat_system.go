@@ -139,7 +139,7 @@ func (cs *CombatSystem) IsInRange(attacker common.IGameObject, target common.IGa
 }
 
 func (cs *CombatSystem) GetPlayerAttackPower(player *object.Player) int32 {
-	return player.GetStrength()*2 + player.GetLevel()*3
+	return player.GetAttack()
 }
 
 func (cs *CombatSystem) GetMonsterAttackPower(monster *object.Monster) int32 {
@@ -160,7 +160,7 @@ func (cs *CombatSystem) GetAttackPower(obj common.IGameObject) int32 {
 func (cs *CombatSystem) GetDefense(obj common.IGameObject) int32 {
 	switch t := obj.(type) {
 	case *object.Player:
-		return t.GetStamina() + t.GetLevel()*2
+		return t.GetDefense()
 	case *object.Monster:
 		return t.GetDefense()
 	default:
@@ -169,7 +169,7 @@ func (cs *CombatSystem) GetDefense(obj common.IGameObject) int32 {
 }
 
 func (cs *CombatSystem) IsCriticalHit(player *object.Player) bool {
-	critRate := float64(player.GetAgility()) / 1000.0
+	critRate := float64(player.CalculateCriticalRate()) / 100.0
 	if critRate > 0.5 {
 		critRate = 0.5
 	}

@@ -14,8 +14,8 @@ import (
 func main() {
 	// 命令行参数
 	mode := flag.String("mode", "full", "测试模式: full, gateway-only, global-only, concurrency, long-test")
-	globalServer := flag.String("global", "192.168.1.222:8080", "GlobalServer地址")
-	gatewayServer := flag.String("gateway", "192.168.1.222:21001", "GatewayServer地址")
+	globalServer := flag.String("global", "127.0.0.1:8888", "GlobalServer地址")
+	gatewayServer := flag.String("gateway", "127.0.0.1:10001", "GatewayServer地址")
 	account := flag.String("account", "tester1", "测试账号")
 	password := flag.String("password", "123456", "测试密码")
 	playerName := flag.String("name", "测试角色1", "角色名称")
@@ -54,6 +54,7 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 
 	// 1. 连接GlobalServer，获取token
 	c := client.NewClient(globalServer)
+	c.SetGatewayAddr(gatewayServer)
 
 	// 登录
 	fmt.Println("1. 登录账号...")
@@ -71,10 +72,10 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	// 2. 选择服务器
 	fmt.Println("2. 选择服务器...")
 	if c.SelectedServer() == nil {
-		fmt.Println("未找到可用服务器")
-		return
+		fmt.Println("未找到可用服务器，使用命令行指定的Gateway地址")
+	} else {
+		fmt.Printf("选择服务器: %s\n", c.SelectedServer().ServerName)
 	}
-	fmt.Printf("选择服务器: %s\n", c.SelectedServer().ServerName)
 
 	// 3. 连接GatewayServer
 	fmt.Println("3. 连接GatewayServer...")
@@ -93,10 +94,8 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	}
 	fmt.Println("token验证成功!")
 
-	// 5. 进入游戏（创建角色或登录已有角色）
-	fmt.Println("5. 进入游戏...")
-	// 这里简化处理，直接发送进入游戏请求
-	// 实际情况可能需要先检查是否有角色，没有则创建
+	// 5. 创建角色
+	fmt.Println("5. 创建角色...")
 	if err := c.SendPlayerCreate(playerName, 1, 18); err != nil {
 		fmt.Printf("创建角色失败: %v\n", err)
 		c.Disconnect()
@@ -104,37 +103,53 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	}
 
 	// 6. 等待角色创建完成
-	time.Sleep(2 * time.Second)
+	playerID := c.GetCreatedPlayerID()
+	if playerID == 0 {
+		fmt.Println("警告: 未获取到创建的角色ID，使用默认值1")
+		playerID = 1
+	}
+	fmt.Printf("使用角色ID: %d\n", playerID)
 
-	// 7. 进入地图
-	fmt.Println("6. 进入地图...")
-	if err := c.SendMapEnter(1, 1001); err != nil {
+	// 7. 进入游戏
+	fmt.Println("6. 进入游戏...")
+	if err := c.SendPlayerLogin(playerID); err != nil {
+		fmt.Printf("进入游戏失败: %v\n", err)
+		c.Disconnect()
+		return
+	}
+
+	// 8. 等待进入游戏完成
+	time.Sleep(1 * time.Second)
+
+	// 9. 进入地图
+	fmt.Println("7. 进入地图...")
+	if err := c.SendMapEnter(playerID, 1001); err != nil {
 		fmt.Printf("进入地图失败: %v\n", err)
 		c.Disconnect()
 		return
 	}
 
-	// 8. 移动
-	fmt.Println("7. 移动...")
-	if err := c.SendMapMove(1, 1001, 100.0, 100.0, 0.0); err != nil {
+	// 10. 移动
+	fmt.Println("8. 移动...")
+	if err := c.SendMapMove(playerID, 1001, 100.0, 100.0, 0.0); err != nil {
 		fmt.Printf("移动失败: %v\n", err)
 		c.Disconnect()
 		return
 	}
 
-	// 9. 攻击
-	fmt.Println("8. 攻击...")
-	if err := c.SendMapAttack(1, 1001, 2); err != nil {
+	// 11. 攻击
+	fmt.Println("9. 攻击...")
+	if err := c.SendMapAttack(playerID, 1001, 2); err != nil {
 		fmt.Printf("攻击失败: %v\n", err)
 		c.Disconnect()
 		return
 	}
 
-	// 10. 等待响应
+	// 12. 等待响应
 	time.Sleep(3 * time.Second)
 
-	// 11. 登出
-	fmt.Println("9. 登出...")
+	// 13. 登出
+	fmt.Println("10. 登出...")
 	if err := c.SendPlayerLogout(); err != nil {
 		fmt.Printf("登出失败: %v\n", err)
 		c.Disconnect()

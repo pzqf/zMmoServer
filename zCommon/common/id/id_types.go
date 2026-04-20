@@ -3,6 +3,7 @@ package id
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -79,6 +80,15 @@ func MustParseServerIDInt(serverID int32) ServerIdType {
 // ServerIDString 将服务器ID格式化为6位字符串（如 000101）
 func ServerIDString(serverID ServerIdType) string {
 	return fmt.Sprintf("%06d", int32(serverID))
+}
+
+// ParseServerIDString 将6位格式化的服务器ID字符串解析为整型
+func ParseServerIDString(serverIDStr string) int32 {
+	serverID, err := strconv.ParseInt(strings.TrimLeft(serverIDStr, "0"), 10, 32)
+	if err != nil {
+		return 0
+	}
+	return int32(serverID)
 }
 
 // GroupIDStringFromServerID 从服务器ID获取组ID字符串

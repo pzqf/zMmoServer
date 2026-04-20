@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/config/tables"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
@@ -11,43 +13,32 @@ import (
 	"go.uber.org/zap"
 )
 
-// SkillManager 技能管理器
 type SkillManager struct {
-	skills        *zMap.TypedMap[id.ObjectIdType, *Skill]
-	configManager *SkillConfigManager
-	comboManager  *SkillComboManager
+	skills       *zMap.TypedMap[id.ObjectIdType, *Skill]
+	tableManager *tables.TableManager
 }
 
-// NewSkillManager 创建技能管理器
 func NewSkillManager() *SkillManager {
 	return &SkillManager{
-		skills:        zMap.NewTypedMap[id.ObjectIdType, *Skill](),
-		configManager: NewSkillConfigManager(),
-		comboManager:  NewSkillComboManager(),
+		skills: zMap.NewTypedMap[id.ObjectIdType, *Skill](),
 	}
 }
 
-// LoadSkillConfig 加载技能配置
-func (sm *SkillManager) LoadSkillConfig(filePath string) error {
-	return sm.configManager.LoadConfig(filePath)
+func (sm *SkillManager) SetTableManager(tm *tables.TableManager) {
+	sm.tableManager = tm
 }
 
-// LoadSkillComboConfig 加载技能组合配置
-func (sm *SkillManager) LoadSkillComboConfig(filePath string) error {
-	return sm.comboManager.LoadComboConfig(filePath)
+func (sm *SkillManager) GetSkillConfig(skillID int32) *models.Skill {
+	if sm.tableManager == nil {
+		return nil
+	}
+	skill, ok := sm.tableManager.GetSkillLoader().GetSkill(skillID)
+	if !ok {
+		return nil
+	}
+	return skill
 }
 
-// GetSkillConfig 获取技能配置
-func (sm *SkillManager) GetSkillConfig(skillID int32) *SkillConfig {
-	return sm.configManager.GetConfig(skillID)
-}
-
-// GetSkillComboManager 获取技能组合管理器
-func (sm *SkillManager) GetSkillComboManager() *SkillComboManager {
-	return sm.comboManager
-}
-
-// AddSkill 添加技能
 func (sm *SkillManager) AddSkill(skill *Skill) {
 	sm.skills.Store(skill.GetID(), skill)
 }
@@ -90,11 +81,12 @@ type Skill struct {
 	lastUseTime   time.Time
 	level         int32
 	casterAttack  int32
-	effectID      int32 // 技能特效ID
+	effectID      int32
+	buffID        int32
 }
 
 // NewSkill 创建新技能
-func NewSkill(id id.ObjectIdType, skillConfigID int32, casterID, targetID id.ObjectIdType, pos common.Vector3, damage int32, skillRange float32, effectType int32, duration, cooldown time.Duration) *Skill {
+func NewSkill(id id.ObjectIdType, skillConfigID int32, casterID, targetID id.ObjectIdType, pos common.Vector3, damage int32, skillRange float32, effectType int32, buffID int32, duration, cooldown time.Duration) *Skill {
 	return &Skill{
 		id:            id,
 		skillConfigID: skillConfigID,
@@ -104,6 +96,7 @@ func NewSkill(id id.ObjectIdType, skillConfigID int32, casterID, targetID id.Obj
 		damage:        damage,
 		skillRange:    skillRange,
 		effectType:    effectType,
+		buffID:        buffID,
 		startTime:     time.Now(),
 		duration:      duration,
 		cooldown:      cooldown,
@@ -152,6 +145,11 @@ func (s *Skill) GetRange() float32 {
 // GetEffectType 获取技能效果类型
 func (s *Skill) GetEffectType() int32 {
 	return s.effectType
+}
+
+// GetBuffID 获取技能附加的Buff ID
+func (s *Skill) GetBuffID() int32 {
+	return s.buffID
 }
 
 // SetLevel 设置技能等级

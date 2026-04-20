@@ -17,6 +17,7 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/game/maps"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/gateway"
+	"github.com/pzqf/zMmoServer/GameServer/gateway/proxy"
 	"github.com/pzqf/zMmoServer/GameServer/handler"
 	"github.com/pzqf/zMmoServer/GameServer/health"
 	"github.com/pzqf/zMmoServer/GameServer/metrics"
@@ -128,27 +129,36 @@ func (s *BaseServer) initPlayerComponents() {
 	s.PlayerManager = player.NewPlayerManager()
 	s.PlayerHandler = handler.NewPlayerHandler(s.SessionManager, s.PlayerService)
 	s.Protocol = protolayer.NewProtobufProtocol()
+
+	loginService := player.NewLoginService(s.PlayerManager, s.PlayerService, s.SessionManager)
+	s.PlayerManager.SetLoginService(loginService)
 }
 
 func (s *BaseServer) initMapComponents() {
 	s.MapService = maps.NewMapService(s.Config, s.Protocol)
 	s.MapService.SetConnectionManager(s.ConnectionManager)
+	s.PlayerManager.SetMapOperator(s.MapService)
 	s.Metrics = metrics.NewMetrics(s.Config, s.ConnectionManager, s.SessionManager, s.MapService)
 }
 
 func (s *BaseServer) initNetworkComponents() {
+	loginService := s.PlayerManager.GetLoginService()
+
 	s.TCPService = tcpservice.NewTCPService(
 		s.Config, s.ConnectionManager, s.SessionManager,
 		s.PlayerManager, s.PlayerService, s.PlayerHandler,
-		s.MapService, s.Protocol,
+		s.MapService, loginService, s.Protocol,
 	)
 
-	gatewayService := gateway.NewConnectionService(s.Config)
+	gatewayService := gateway.NewConnectionService(s.Config, s.ConnectionManager)
 	if err := gatewayService.Init(); err != nil {
 		zLog.Error("Failed to initialize Gateway connection service", zap.Error(err))
 		return
 	}
 	s.GatewayService = gatewayService
+
+	clientSender := proxy.NewPlayerClientSender(gatewayService.GetGatewayProxy())
+	s.PlayerManager.SetClientSender(clientSender)
 }
 
 func (s *BaseServer) initServiceDiscovery() error {
@@ -297,10 +307,15 @@ func (s *BaseServer) discoverAndConnectMapServers() {
 
 			mapIDs := []int{1001, 1002, 2001, 2002, 3001, 3002, 4001, 4002, 5001}
 			for _, mapServer := range healthyMapServers {
-				if err := s.ConnectionManager.ConnectToMapServer(mapServer.Address, mapIDs); err != nil {
-					zLog.Warn("Failed to connect to MapServer", zap.Error(err), zap.String("address", mapServer.Address))
+				addr := mapServer.Address
+				if addr == "0.0.0.0" {
+					addr = "127.0.0.1"
+				}
+				mapServerAddr := fmt.Sprintf("%s:%d", addr, mapServer.Port)
+				if err := s.ConnectionManager.ConnectToMapServer(mapServerAddr, mapIDs); err != nil {
+					zLog.Warn("Failed to connect to MapServer", zap.Error(err), zap.String("address", mapServerAddr))
 				} else {
-					zLog.Info("Connected to MapServer", zap.String("address", mapServer.Address))
+					zLog.Info("Connected to MapServer", zap.String("address", mapServerAddr))
 				}
 			}
 		}
