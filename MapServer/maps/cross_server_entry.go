@@ -9,7 +9,6 @@ import (
 	"github.com/pzqf/zCommon/config/tables"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
 	"go.uber.org/zap"
 )
@@ -17,16 +16,14 @@ import (
 type CrossServerMapEntry struct {
 	mu           sync.RWMutex
 	mapManager   *MapManager
-	connManager  *connection.ConnectionManager
 	tableManager *tables.TableManager
 	migrationMgr *crossserver.MigrationManager
 	serverID     int32
 }
 
-func NewCrossServerMapEntry(mapManager *MapManager, connManager *connection.ConnectionManager, tableManager *tables.TableManager, serverID int32) *CrossServerMapEntry {
+func NewCrossServerMapEntry(mapManager *MapManager, tableManager *tables.TableManager, serverID int32) *CrossServerMapEntry {
 	return &CrossServerMapEntry{
 		mapManager:   mapManager,
-		connManager:  connManager,
 		tableManager: tableManager,
 		serverID:     serverID,
 	}
@@ -37,7 +34,7 @@ func (cse *CrossServerMapEntry) SetMigrationManager(mm *crossserver.MigrationMan
 }
 
 func (cse *CrossServerMapEntry) EnterDungeonMap(playerID id.PlayerIdType, dungeonID id.DungeonIdType) (*Map, *dungeon.DungeonInstance, error) {
-	dungeonMap, instance, err := cse.mapManager.CreateDungeonMap(dungeonID, []id.PlayerIdType{playerID}, cse.connManager)
+	dungeonMap, instance, err := cse.mapManager.CreateDungeonMap(dungeonID, []id.PlayerIdType{playerID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("create dungeon map: %w", err)
 	}
@@ -67,7 +64,6 @@ func (cse *CrossServerMapEntry) EnterCrossServerMap(playerID id.PlayerIdType, ma
 		float32(mapConfig.Height),
 		mode,
 		serverGroupID,
-		cse.connManager,
 	)
 
 	if cse.migrationMgr != nil {

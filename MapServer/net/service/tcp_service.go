@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -14,32 +13,41 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zMmoServer/MapServer/config"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
 
 type TCPService struct {
 	config                  *config.Config
-	connManager             *connection.ConnectionManager
 	mapService              *maps.MapManager
 	playerGameServerManager *maps.PlayerGameServerManager
 	tcpServer               *zNet.TcpServer
 	isRunning               bool
 	wg                      sync.WaitGroup
+	// gameServerSessions: GameServer 服务器 ID → 其连接会话，用于服务端主动推送
+	// （如 AOI 视野事件回程）。在 handleGameServerMessage 里按每条请求更新。
+	gameServerSessions *zMap.TypedMap[uint32, zNet.Session]
+	// metricsRecorder: 可选网络指标上报器（Phase 3.5），注入 zNet 上报连接/流量/错误。
+	metricsRecorder zNet.NetworkMetricsRecorder
 }
 
-func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, mapService *maps.MapManager) *TCPService {
+func NewTCPService(cfg *config.Config, mapService *maps.MapManager) *TCPService {
 	return &TCPService{
-		config:      cfg,
-		connManager: connManager,
-		mapService:  mapService,
-		isRunning:   false,
+		config:             cfg,
+		mapService:         mapService,
+		isRunning:          false,
+		gameServerSessions: zMap.NewTypedMap[uint32, zNet.Session](),
 	}
 }
 
 func (ts *TCPService) SetPlayerGameServerManager(manager *maps.PlayerGameServerManager) {
 	ts.playerGameServerManager = manager
+}
+
+// SetMetricsRecorder 注入网络指标上报器（Phase 3.5），须在 Start 前调用。
+func (ts *TCPService) SetMetricsRecorder(r zNet.NetworkMetricsRecorder) {
+	ts.metricsRecorder = r
 }
 
 func (ts *TCPService) Name() string {
@@ -73,8 +81,12 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		TimestampTolerance:  5000,
 	}
 
-	// 创建zNet.TcpServer
-	ts.tcpServer = zNet.NewTcpServer(tcpConfig)
+	// 创建zNet.TcpServer（可选注入网络指标上报器）
+	var opts []zNet.Options
+	if ts.metricsRecorder != nil {
+		opts = append(opts, zNet.WithServerMetrics(ts.metricsRecorder))
+	}
+	ts.tcpServer = zNet.NewTcpServer(tcpConfig, opts...)
 
 	// 注册消息处理器
 	ts.tcpServer.RegisterDispatcher(ts.handleConnectionMessage)
@@ -125,44 +137,47 @@ func (ts *TCPService) handleConnectionMessage(session zNet.Session, packet *zNet
 	return nil
 }
 
-// handleGameServerMessage 处理来自GameServer的消息
+// handleGameServerMessage 处理来自GameServer的消息。
+// 统一经 crossserver 共用 codec 解包（Envelope + protobuf CrossServerMessage），
+// 按外层 protoId（== InternalMsgId 请求值）分派。见 docs/协议契约.md。
 func (ts *TCPService) handleGameServerMessage(session zNet.Session, protoId int32, data []byte) {
-	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(data)
-	if unwrapErr != nil {
-		zLog.Error("Invalid cross-server envelope from GameServer", zap.Error(unwrapErr))
+	meta, _, baseMsg, err := crossserver.UnpackMessage(data)
+	if err != nil {
+		zLog.Error("Invalid cross-server message from GameServer",
+			zap.Int32("proto_id", protoId), zap.Error(err))
 		return
 	}
-	if wrapped {
-		zLog.Debug("Received cross-server envelope from GameServer",
-			zap.Uint64("trace_id", meta.TraceID),
-			zap.Uint64("request_id", meta.RequestID),
-			zap.Int32("proto_id", protoId))
-	}
-
-	var crossMsg crossserver.CrossServerMessage
-	if err := json.Unmarshal(payload, &crossMsg); err != nil {
-		zLog.Error("Failed to unmarshal cross server message", zap.Error(err))
+	if baseMsg == nil {
+		zLog.Error("Cross-server message missing inner base message", zap.Int32("proto_id", protoId))
 		return
 	}
 
-	baseMsg := crossMsg.Message
+	// 记录该 GameServer 的会话，供服务端主动推送（AOI 回程）按 serverID 找会话
+	if baseMsg.ServerId != 0 {
+		ts.gameServerSessions.Store(baseMsg.ServerId, session)
+	}
+
+	zLog.Debug("Received cross-server message from GameServer",
+		zap.Uint64("trace_id", meta.TraceID),
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Int32("proto_id", protoId))
 
 	switch protoId {
-	case 400:
-		ts.handleMapEnterRequest(session, &baseMsg, &meta)
-	case 402:
-		ts.handleMapLeaveRequest(session, &baseMsg, &meta)
-	case 404:
-		ts.handleMapMoveRequest(session, &baseMsg, &meta)
-	case 406:
-		ts.handleMapAttackRequest(session, &baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_REQUEST):
+		ts.handleMapEnterRequest(session, baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_LEAVE_REQUEST):
+		ts.handleMapLeaveRequest(session, baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_REQUEST):
+		ts.handleMapMoveRequest(session, baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_ATTACK_REQUEST):
+		ts.handleMapAttackRequest(session, baseMsg, &meta)
 	default:
 		zLog.Info("Received unknown message from GameServer", zap.Int32("proto_id", protoId))
 	}
 }
 
 // handleMapEnterRequest 处理玩家进入地图请求
-func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapEnterRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapEnterRequest", zap.Error(err))
@@ -172,7 +187,7 @@ func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *cross
 	zLog.Info("Map enter request",
 		zap.Int64("player_id", req.PlayerId),
 		zap.Int64("map_id", req.MapId),
-		zap.Uint32("game_server_id", baseMsg.ServerID),
+		zap.Uint32("game_server_id", baseMsg.ServerId),
 		zap.Float32("x", req.X),
 		zap.Float32("y", req.Y),
 		zap.Float32("z", req.Z))
@@ -180,7 +195,7 @@ func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *cross
 	if ts.playerGameServerManager != nil {
 		ts.playerGameServerManager.SetPlayerGameServer(
 			id.PlayerIdType(req.PlayerId),
-			baseMsg.ServerID,
+			baseMsg.ServerId,
 			"",
 			id.MapIdType(req.MapId),
 		)
@@ -210,7 +225,7 @@ func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *cross
 	ts.sendResponse(session, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE), resp, baseMsg, meta)
 }
 
-func (ts *TCPService) handleMapLeaveRequest(session zNet.Session, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+func (ts *TCPService) handleMapLeaveRequest(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapLeaveRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapLeaveRequest", zap.Error(err))
@@ -247,7 +262,7 @@ func (ts *TCPService) handleMapLeaveRequest(session zNet.Session, baseMsg *cross
 }
 
 // handleMapMoveRequest 处理玩家移动请求
-func (ts *TCPService) handleMapMoveRequest(session zNet.Session, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+func (ts *TCPService) handleMapMoveRequest(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapMoveRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapMoveRequest", zap.Error(err))
@@ -280,7 +295,7 @@ func (ts *TCPService) handleMapMoveRequest(session zNet.Session, baseMsg *crosss
 }
 
 // handleMapAttackRequest 处理玩家攻击请求
-func (ts *TCPService) handleMapAttackRequest(session zNet.Session, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+func (ts *TCPService) handleMapAttackRequest(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
 	var req protocol.MapAttackRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapAttackRequest", zap.Error(err))
@@ -328,42 +343,29 @@ func (ts *TCPService) handleMapAttackRequest(session zNet.Session, baseMsg *cros
 }
 
 // sendResponse 发送响应消息
-func (ts *TCPService) sendResponse(session zNet.Session, msgID int, msg proto.Message, baseMsg *crossserver.BaseMessage, meta *crossserver.Meta) {
+func (ts *TCPService) sendResponse(session zNet.Session, msgID int, msg proto.Message, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		zLog.Error("Failed to marshal response", zap.Error(err))
 		return
 	}
 
-	respBaseMsg := crossserver.BaseMessage{
-		MsgID:       uint32(msgID),
-		SessionID:   baseMsg.SessionID,
-		PlayerID:    baseMsg.PlayerID,
-		ServerID:    uint32(ts.config.Server.ServerID),
-		Timestamp:   uint64(time.Now().Unix()),
-		Data:        data,
-		MapID:       baseMsg.MapID,
-		MapServerID: uint32(ts.config.Server.ServerID),
-	}
+	// 统一经共用 codec 打包响应（Envelope + protobuf CrossServerMessage）。
+	// 响应 meta 由请求 meta 派生，保持 TraceID/RequestID 以便 GameServer 关联等待中的请求。
+	respBase := crossserver.BuildBaseMessage(uint32(msgID), baseMsg.PlayerId,
+		uint32(ts.config.Server.ServerID), baseMsg.MapId, data)
+	respBase.SessionId = baseMsg.SessionId
+	respBase.MapServerId = uint32(ts.config.Server.ServerID)
 
-	respCrossMsg := crossserver.CrossServerMessage{
-		TraceID:      meta.TraceID,
-		FromService:  crossserver.ServiceTypeMap,
-		ToService:    crossserver.ServiceTypeGame,
-		FromServerID: uint32(ts.config.Server.ServerID),
-		ToServerID:   baseMsg.ServerID,
-		Message:      respBaseMsg,
-	}
-
-	crossMsgData, err := json.Marshal(respCrossMsg)
+	respMeta := crossserver.NewResponseMetaFromRequest(*meta, crossserver.ServiceTypeMap, int32(ts.config.Server.ServerID))
+	enveloped, err := crossserver.PackMessage(respMeta, crossserver.ServiceTypeMap, crossserver.ServiceTypeGame,
+		uint32(ts.config.Server.ServerID), baseMsg.ServerId, respBase)
 	if err != nil {
-		zLog.Error("Failed to marshal cross server message", zap.Error(err))
+		zLog.Error("Failed to pack response message", zap.Error(err))
 		return
 	}
 
-	// 使用zNet发送消息
-	err = session.Send(zNet.ProtoIdType(msgID), crossMsgData)
-	if err != nil {
+	if err := session.Send(zNet.ProtoIdType(msgID), enveloped); err != nil {
 		zLog.Error("Failed to send response", zap.Error(err))
 	}
 }

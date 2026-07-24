@@ -18,7 +18,7 @@ func TestMirrorMapManager_GetOrCreateMirrorMap(t *testing.T) {
 		MaxInstances:          10,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	mapID, err := mgr.GetOrCreateMirrorMap(100, 1)
 	assert.NoError(t, err)
@@ -44,7 +44,7 @@ func TestMirrorMapManager_DifferentServerGroups(t *testing.T) {
 		MaxInstances:          10,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	mapID1, err := mgr.GetOrCreateMirrorMap(100, 1)
 	assert.NoError(t, err)
@@ -66,7 +66,7 @@ func TestMirrorMapManager_MaxInstances(t *testing.T) {
 		MaxInstances:          2,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	_, err := mgr.GetOrCreateMirrorMap(100, 1)
 	assert.NoError(t, err)
@@ -89,7 +89,7 @@ func TestMirrorMapManager_PlayerLeave(t *testing.T) {
 		MaxInstances:          10,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	mapID, _ := mgr.GetOrCreateMirrorMap(100, 1)
 	assert.Equal(t, int32(1), mgr.GetTotalPlayerCount())
@@ -111,7 +111,7 @@ func TestMirrorMapManager_Update_IdleTimeout(t *testing.T) {
 		MaxInstances:          10,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	mapID, _ := mgr.GetOrCreateMirrorMap(100, 1)
 
@@ -139,7 +139,7 @@ func TestMirrorMapManager_GetTotalPlayerCount(t *testing.T) {
 		MaxInstances:          10,
 	}
 
-	mgr := NewMirrorMapManager(mm, nil, config)
+	mgr := NewMirrorMapManager(mm, config)
 
 	mgr.GetOrCreateMirrorMap(100, 1)
 	mgr.GetOrCreateMirrorMap(100, 1)
@@ -148,7 +148,7 @@ func TestMirrorMapManager_GetTotalPlayerCount(t *testing.T) {
 }
 
 func TestMapMode_IsCrossServer(t *testing.T) {
-	m := NewMap(1, 100, "Test", 500, 500, nil)
+	m := NewMap(1, 100, "Test", 500, 500)
 
 	m.SetMapMode(MapModeSingleServer)
 	assert.False(t, m.IsCrossServer())
@@ -161,7 +161,7 @@ func TestMapMode_IsCrossServer(t *testing.T) {
 }
 
 func TestMap_DungeonFields(t *testing.T) {
-	m := NewMap(1, 100, "Test", 500, 500, nil)
+	m := NewMap(1, 100, "Test", 500, 500)
 
 	assert.False(t, m.IsDungeon())
 
@@ -173,7 +173,7 @@ func TestMap_DungeonFields(t *testing.T) {
 }
 
 func TestMap_ServerGroupID(t *testing.T) {
-	m := NewMap(1, 100, "Test", 500, 500, nil)
+	m := NewMap(1, 100, "Test", 500, 500)
 
 	m.SetServerGroupID(5)
 	assert.Equal(t, int32(5), m.GetServerGroupID())

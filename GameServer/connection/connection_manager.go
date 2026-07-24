@@ -1,13 +1,15 @@
 package connection
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
@@ -29,6 +31,16 @@ type Connection struct {
 	closeOnce   sync.Once
 }
 
+// MapResponseHandler 由 MapService 实现，用于把 MapServer 的响应回填到等待中的请求。
+// 在此定义接口（而非 import maps 包）以避免 maps -> connection -> maps 循环依赖。
+type MapResponseHandler interface {
+	HandleMapAttackResponse(requestID uint64, playerID id.PlayerIdType, targetID id.ObjectIdType,
+		damage int64, targetHP int64, success bool, errorMsg string)
+	// HandleAOINotify 处理 MapServer 回程的 AOI 视野事件（Phase 2.3）：eventType 为
+	// crossserver.MsgInternalAOIEnter/Leave/Move，路由到 watcher 玩家 Actor 后推送客户端。
+	HandleAOINotify(watcherID int64, targetID int64, mapID int32, eventType uint32, x, y, z float32)
+}
+
 type ConnectionManager struct {
 	config               *config.Config
 	connections          *zMap.TypedMap[string, *Connection]
@@ -37,11 +49,21 @@ type ConnectionManager struct {
 	isConnected          atomic.Bool
 	gatewayConnectedChan chan struct{}
 	mapConnections       *zMap.TypedMap[int, *MapConnection]
-	mapSessionHandler    *MapSessionHandler
+	// mapServerConns 按 MapServer 地址去重连接：每台 MapServer 只保持一条连接。
+	// 服务发现每 30s 轮询一次，若不去重会每轮对同一 MapServer 重开 TCP 并泄漏旧连接。
+	mapServerConns     *zMap.TypedMap[string, *MapConnection]
+	mapSessionHandler  *MapSessionHandler
+	mapResponseHandler MapResponseHandler
+}
+
+// SetMapResponseHandler 注入 MapServer 响应回填器（通常是 *maps.MapService）。
+func (cm *ConnectionManager) SetMapResponseHandler(h MapResponseHandler) {
+	cm.mapResponseHandler = h
 }
 
 type MapConnection struct {
 	session     zNet.Session
+	addr        string
 	mapIDs      []int
 	isConnected bool
 	closeChan   chan struct{}
@@ -68,12 +90,20 @@ func NewConnectionManager(cfg *config.Config) *ConnectionManager {
 		isConnected:          atomic.Bool{},
 		gatewayConnectedChan: make(chan struct{}),
 		mapConnections:       zMap.NewTypedMap[int, *MapConnection](),
+		mapServerConns:       zMap.NewTypedMap[string, *MapConnection](),
 	}
 	cm.mapSessionHandler = NewMapSessionHandler(cm)
 	return cm
 }
 
 func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []int) error {
+	// 去重：同一台 MapServer 已有连接则跳过（zNet 客户端 AutoReconnect 会自愈瞬断，
+	// 无需服务发现轮询每 30s 重开）。避免连接泄漏与抖动。
+	if existing, ok := cm.mapServerConns.Load(mapServerAddr); ok && existing.isConnected {
+		zLog.Debug("MapServer already connected, skip", zap.String("addr", mapServerAddr))
+		return nil
+	}
+
 	zLog.Info("Connecting to MapServer...", zap.String("addr", mapServerAddr), zap.Ints("map_ids", mapIDs))
 
 	host, portStr, err := net.SplitHostPort(mapServerAddr)
@@ -114,11 +144,13 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 
 	mapConn := &MapConnection{
 		session:     session,
+		addr:        mapServerAddr,
 		mapIDs:      mapIDs,
 		isConnected: true,
 		closeChan:   make(chan struct{}),
 	}
 
+	cm.mapServerConns.Store(mapServerAddr, mapConn)
 	for _, mapID := range mapIDs {
 		cm.mapConnections.Store(mapID, mapConn)
 	}
@@ -137,6 +169,7 @@ func (cm *ConnectionManager) DisconnectFromMapServer(mapIDs []int) {
 					mapConn.session.Close()
 				}
 				mapConn.isConnected = false
+				cm.mapServerConns.Delete(mapConn.addr)
 			})
 			zLog.Info("Disconnected from MapServer for map", zap.Int("map_id", mapID))
 		}
@@ -152,69 +185,144 @@ func (cm *ConnectionManager) SendToMap(mapID int, protoId int, data []byte) erro
 	return mapConn.session.Send(zNet.ProtoIdType(protoId), data)
 }
 
+// handleMapServerPacket 处理 MapServer 回程消息。统一经共用 codec 解包
+// （Envelope + protobuf CrossServerMessage），按内层 BaseMessage.MsgId（响应 InternalMsgId）
+// 分派，并把结果回填到等待中的请求。见 docs/协议契约.md。
 func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet *zNet.NetPacket) {
 	protoId := int32(packet.ProtoId)
-	data := packet.Data
 
-	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(data)
-	if unwrapErr != nil {
-		zLog.Error("Invalid cross-server envelope from MapServer", zap.Error(unwrapErr))
+	meta, _, baseMsg, err := crossserver.UnpackMessage(packet.Data)
+	if err != nil {
+		zLog.Error("Invalid cross-server message from MapServer",
+			zap.Int32("proto_id", protoId), zap.Error(err))
 		return
 	}
-	if wrapped {
-		zLog.Debug("Received cross-server envelope from MapServer",
-			zap.Uint64("trace_id", meta.TraceID),
-			zap.Uint64("request_id", meta.RequestID),
-			zap.Int32("proto_id", protoId))
-	}
-
-	var crossMsg crossserver.CrossServerMessage
-	if err := json.Unmarshal(payload, &crossMsg); err != nil {
-		zLog.Error("Failed to unmarshal cross server message from MapServer", zap.Error(err))
+	if baseMsg == nil {
+		zLog.Error("MapServer message missing inner base message", zap.Int32("proto_id", protoId))
 		return
 	}
 
-	baseMsg := crossMsg.Message
-
-	zLog.Info("Received response from MapServer",
+	zLog.Debug("Received response from MapServer",
 		zap.Int32("proto_id", protoId),
-		zap.Uint32("msg_id", baseMsg.MsgID),
-		zap.Uint64("player_id", baseMsg.PlayerID),
-		zap.Uint32("from_server_id", crossMsg.FromServerID))
+		zap.Uint32("msg_id", baseMsg.MsgId),
+		zap.Uint64("player_id", baseMsg.PlayerId),
+		zap.Uint64("request_id", meta.RequestID))
 
-	switch baseMsg.MsgID {
+	switch baseMsg.MsgId {
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_RESPONSE):
-		cm.handleMapEnterResponse(&baseMsg)
+		cm.handleMapEnterResponse(meta, baseMsg)
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_MAP_LEAVE_RESPONSE):
-		cm.handleMapLeaveResponse(&baseMsg)
+		cm.handleMapLeaveResponse(meta, baseMsg)
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_SYNC):
-		cm.handleMapMoveResponse(&baseMsg)
+		cm.handleMapMoveResponse(meta, baseMsg)
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION):
-		cm.handleMapAttackResponse(&baseMsg)
+		cm.handleMapAttackResponse(meta, baseMsg)
+	case crossserver.MsgInternalAOIEnter, crossserver.MsgInternalAOILeave, crossserver.MsgInternalAOIMove:
+		cm.handleAOINotify(baseMsg)
 	default:
-		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgID))
+		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
 	}
 }
 
-func (cm *ConnectionManager) handleMapEnterResponse(baseMsg *crossserver.BaseMessage) {
+// handleAOINotify 解 MapServer 回程的 AOI 视野事件，回填到 MapService（Phase 2.3）。
+func (cm *ConnectionManager) handleAOINotify(baseMsg *protocol.BaseMessage) {
+	zLog.Debug("AOI notify received from MapServer",
+		zap.Uint64("watcher", baseMsg.PlayerId), zap.Uint32("evt", baseMsg.MsgId))
+	if cm.mapResponseHandler == nil {
+		return
+	}
+	watcherID := int64(baseMsg.PlayerId)
+	mapID := int32(baseMsg.MapId)
+	var targetID int64
+	var x, y, z float32
+	switch baseMsg.MsgId {
+	case crossserver.MsgInternalAOIEnter:
+		var n protocol.EntityEnterViewNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityEnterViewNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+		if n.Pos != nil {
+			x, y, z = n.Pos.X, n.Pos.Y, n.Pos.Z
+		}
+	case crossserver.MsgInternalAOILeave:
+		var n protocol.EntityLeaveViewNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityLeaveViewNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+	case crossserver.MsgInternalAOIMove:
+		var n protocol.EntityMoveNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityMoveNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+		if n.NewPos != nil {
+			x, y, z = n.NewPos.X, n.NewPos.Y, n.NewPos.Z
+		}
+	default:
+		return
+	}
+	cm.mapResponseHandler.HandleAOINotify(watcherID, targetID, mapID, baseMsg.MsgId, x, y, z)
+}
+
+func (cm *ConnectionManager) handleMapEnterResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+	var resp protocol.MapEnterResponse
+	if err := proto.Unmarshal(baseMsg.Data, &resp); err != nil {
+		zLog.Error("Failed to unmarshal MapEnterResponse", zap.Error(err))
+		return
+	}
 	zLog.Info("Map enter response from MapServer",
-		zap.Uint64("player_id", baseMsg.PlayerID),
-		zap.Int("data_size", len(baseMsg.Data)))
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Uint64("player_id", baseMsg.PlayerId),
+		zap.Bool("success", resp.Success),
+		zap.String("error", resp.ErrorMsg))
 }
 
-func (cm *ConnectionManager) handleMapLeaveResponse(baseMsg *crossserver.BaseMessage) {
+func (cm *ConnectionManager) handleMapLeaveResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+	var resp protocol.MapLeaveResponse
+	if err := proto.Unmarshal(baseMsg.Data, &resp); err != nil {
+		zLog.Error("Failed to unmarshal MapLeaveResponse", zap.Error(err))
+		return
+	}
 	zLog.Info("Map leave response from MapServer",
-		zap.Uint64("player_id", baseMsg.PlayerID))
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Uint64("player_id", baseMsg.PlayerId),
+		zap.Bool("success", resp.Success))
 }
 
-func (cm *ConnectionManager) handleMapMoveResponse(baseMsg *crossserver.BaseMessage) {
+func (cm *ConnectionManager) handleMapMoveResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+	var resp protocol.MapMoveResponse
+	if err := proto.Unmarshal(baseMsg.Data, &resp); err != nil {
+		zLog.Error("Failed to unmarshal MapMoveResponse", zap.Error(err))
+		return
+	}
 	zLog.Debug("Map move response from MapServer",
-		zap.Uint64("player_id", baseMsg.PlayerID))
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Uint64("player_id", baseMsg.PlayerId))
 }
 
-func (cm *ConnectionManager) handleMapAttackResponse(baseMsg *crossserver.BaseMessage) {
+func (cm *ConnectionManager) handleMapAttackResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+	var resp protocol.MapAttackResponse
+	if err := proto.Unmarshal(baseMsg.Data, &resp); err != nil {
+		zLog.Error("Failed to unmarshal MapAttackResponse", zap.Error(err))
+		return
+	}
 	zLog.Info("Map attack response from MapServer",
-		zap.Uint64("player_id", baseMsg.PlayerID))
+		zap.Uint64("request_id", meta.RequestID),
+		zap.Uint64("player_id", baseMsg.PlayerId),
+		zap.Int64("damage", resp.Damage),
+		zap.Int64("target_hp", resp.TargetHp))
+
+	// 回填等待中的攻击请求（sendMapAttackRequest 的 pending channel）
+	if cm.mapResponseHandler != nil {
+		cm.mapResponseHandler.HandleMapAttackResponse(meta.RequestID,
+			id.PlayerIdType(resp.PlayerId), id.ObjectIdType(resp.TargetId),
+			resp.Damage, resp.TargetHp, resp.Success, resp.ErrorMsg)
+	}
 }
 
 func (cm *ConnectionManager) AddConnection(connID string, conn net.Conn) *Connection {

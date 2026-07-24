@@ -1,10 +1,13 @@
 package game
 
 import (
+	"database/sql"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/consistency"
 	zcont "github.com/pzqf/zCommon/container"
 	"github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/db/connector"
@@ -17,7 +20,6 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/game/maps"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/gateway"
-	"github.com/pzqf/zMmoServer/GameServer/gateway/proxy"
 	"github.com/pzqf/zMmoServer/GameServer/handler"
 	"github.com/pzqf/zMmoServer/GameServer/health"
 	"github.com/pzqf/zMmoServer/GameServer/metrics"
@@ -137,8 +139,43 @@ func (s *BaseServer) initPlayerComponents() {
 func (s *BaseServer) initMapComponents() {
 	s.MapService = maps.NewMapService(s.Config, s.Protocol)
 	s.MapService.SetConnectionManager(s.ConnectionManager)
+	s.maybeUsePersistentConsistency()
+	// 注入 MapServer 响应回填器：MapServer 回程消息经 ConnectionManager 解包后，
+	// 通过此接口回填到 MapService 等待中的请求（如攻击结果）。
+	s.ConnectionManager.SetMapResponseHandler(s.MapService)
+	// 注入 PlayerManager：MapService 据此把 AOI 视野事件（本地与跨服回程）投递到玩家 Actor
+	// 再推送客户端。此前 SetPlayerManager 从未调用 → playerManager 为 nil → AOI 投递静默失败。
+	s.MapService.SetPlayerManager(s.PlayerManager)
 	s.PlayerManager.SetMapOperator(s.MapService)
 	s.Metrics = metrics.NewMetrics(s.Config, s.ConnectionManager, s.SessionManager, s.MapService)
+}
+
+// maybeUsePersistentConsistency 在启用（env ZMMO_PERSIST_CONSISTENCY=1）且底层为 MySQL 时，
+// 把 MapService 的内存 Outbox/Inbox 替换为 SQL 持久化实现（Phase 3.4）——进程重启不丢在途
+// 跨服消息、幂等去重跨重启存活。未启用或非 MySQL 时保持内存实现，行为不变。
+func (s *BaseServer) maybeUsePersistentConsistency() {
+	if os.Getenv("ZMMO_PERSIST_CONSISTENCY") != "1" {
+		return
+	}
+	provider, ok := s.DBConnector.(interface{ GetSQLDB() *sql.DB })
+	if !ok || provider.GetSQLDB() == nil {
+		zLog.Warn("Persistent consistency requested but no *sql.DB available; keeping in-memory stores")
+		return
+	}
+	dbConn := provider.GetSQLDB()
+
+	outbox := consistency.NewSQLOutbox(dbConn)
+	inbox := consistency.NewSQLInbox(dbConn, "")
+	if err := outbox.EnsureOutboxSchema(); err != nil {
+		zLog.Error("Failed to ensure outbox schema; keeping in-memory stores", zap.Error(err))
+		return
+	}
+	if err := inbox.EnsureInboxSchema(); err != nil {
+		zLog.Error("Failed to ensure inbox schema; keeping in-memory stores", zap.Error(err))
+		return
+	}
+	s.MapService.SetConsistencyStores(outbox, inbox)
+	zLog.Info("Cross-server consistency using persistent SQL Outbox/Inbox (Phase 3.4)")
 }
 
 func (s *BaseServer) initNetworkComponents() {
@@ -157,8 +194,10 @@ func (s *BaseServer) initNetworkComponents() {
 	}
 	s.GatewayService = gatewayService
 
-	clientSender := proxy.NewPlayerClientSender(gatewayService.GetGatewayProxy())
-	s.PlayerManager.SetClientSender(clientSender)
+	// 客户端主动推送（AOI 视野等）经 TCPService 走已接受的 Gateway 会话（Phase 2.3）。
+	// 旧 PlayerClientSender→gatewayProxy→cm.gatewayConn 路径因连接拓扑相反、gatewayConn 从未设置
+	// 而恒失败 "gateway not connected"，已弃用。
+	s.PlayerManager.SetClientSender(s.TCPService)
 }
 
 func (s *BaseServer) initServiceDiscovery() error {
@@ -305,17 +344,28 @@ func (s *BaseServer) discoverAndConnectMapServers() {
 				continue
 			}
 
-			mapIDs := []int{1001, 1002, 2001, 2002, 3001, 3002, 4001, 4002, 5001}
 			for _, mapServer := range healthyMapServers {
 				addr := mapServer.Address
 				if addr == "0.0.0.0" {
 					addr = "127.0.0.1"
 				}
 				mapServerAddr := fmt.Sprintf("%s:%d", addr, mapServer.Port)
+
+				// 去硬编码：使用 MapServer 在 etcd 注册的 MapIDs（它实际服务的地图），
+				// 而非固定列表 [1001,1002,...]。MapServer 启动时 UpdateMapIDs 注册。
+				mapIDs := make([]int, 0, len(mapServer.MapIDs))
+				for _, mid := range mapServer.MapIDs {
+					mapIDs = append(mapIDs, int(mid))
+				}
+				if len(mapIDs) == 0 {
+					zLog.Warn("MapServer reports no map IDs, skipping", zap.String("address", mapServerAddr))
+					continue
+				}
+
 				if err := s.ConnectionManager.ConnectToMapServer(mapServerAddr, mapIDs); err != nil {
 					zLog.Warn("Failed to connect to MapServer", zap.Error(err), zap.String("address", mapServerAddr))
 				} else {
-					zLog.Info("Connected to MapServer", zap.String("address", mapServerAddr))
+					zLog.Info("Connected to MapServer", zap.Ints("map_ids", mapIDs), zap.String("address", mapServerAddr))
 				}
 			}
 		}

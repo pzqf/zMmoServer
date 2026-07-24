@@ -362,6 +362,11 @@ func (c *MySQLConnector) GetDriver() string {
 	return c.driver
 }
 
+// GetSQLDB 返回底层 *sql.DB，供需要直接用 database/sql 的组件（如持久化 Outbox/Inbox）复用同一连接池。
+func (c *MySQLConnector) GetSQLDB() *sql.DB {
+	return c.db
+}
+
 // GetMongoClient 获取MongoDB客户端（MySQL实现中不支持）
 func (c *MySQLConnector) GetMongoClient() *mongo.Client {
 	zLog.Warn("GetMongoClient called on MySQLConnector")

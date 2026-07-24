@@ -2,7 +2,6 @@ package tables
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sync"
 
@@ -91,12 +90,8 @@ func GetTableManager() *TableManager {
 // ��resources/excel_tablesĿ¼��������Excel�����ļ�
 // ����: ���ع����еĴ���
 func (tm *TableManager) LoadAllTables() error {
-	rootDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("failed to get current directory: %w", err)
-	}
-
-	tablesDir := filepath.Join(rootDir, "resources", "excel_tables")
+	// 统一经健壮解析器定位资源根目录（去 cwd 硬编码，见 resource_dir.go）
+	tablesDir := filepath.Join(ResolveResourceDir(), "excel_tables")
 
 	for _, loader := range tm.loaders {
 		if err := loader.Load(tablesDir); err != nil {

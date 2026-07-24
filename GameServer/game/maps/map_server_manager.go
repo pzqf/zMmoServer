@@ -103,7 +103,17 @@ func (msm *MapServerManager) doDiscovery() {
 
 		activeServerIDs[serverIDInt] = true
 
-		mapIDs := msm.getDefaultMapIDs()
+		// 去硬编码：优先用 MapServer 在 etcd 注册的 MapIDs（它实际服务的地图），
+		// 仅当注册为空时回退到默认列表，避免路由表落空。
+		mapIDs := make([]id.MapIdType, 0, len(server.MapIDs))
+		for _, mid := range server.MapIDs {
+			mapIDs = append(mapIDs, id.MapIdType(mid))
+		}
+		if len(mapIDs) == 0 {
+			mapIDs = msm.getDefaultMapIDs()
+			zLog.Warn("MapServer registered no map IDs, falling back to defaults",
+				zap.Uint32("server_id", serverIDInt))
+		}
 
 		info := &MapServerInfo{
 			ServerID:   serverIDInt,

@@ -8,7 +8,6 @@ import (
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -31,23 +30,21 @@ type MirrorMapInstance struct {
 }
 
 type MirrorMapManager struct {
-	mu          sync.RWMutex
-	mapManager  *MapManager
-	connManager *connection.ConnectionManager
-	config      MirrorMapConfig
-	instances   *zMap.TypedMap[id.MapIdType, *MirrorMapInstance]
-	bySource    *zMap.TypedMap[int32, []*MirrorMapInstance]
-	nextMapID   int64
+	mu         sync.RWMutex
+	mapManager *MapManager
+	config     MirrorMapConfig
+	instances  *zMap.TypedMap[id.MapIdType, *MirrorMapInstance]
+	bySource   *zMap.TypedMap[int32, []*MirrorMapInstance]
+	nextMapID  int64
 }
 
-func NewMirrorMapManager(mapManager *MapManager, connManager *connection.ConnectionManager, config MirrorMapConfig) *MirrorMapManager {
+func NewMirrorMapManager(mapManager *MapManager, config MirrorMapConfig) *MirrorMapManager {
 	return &MirrorMapManager{
-		mapManager:  mapManager,
-		connManager: connManager,
-		config:      config,
-		instances:   zMap.NewTypedMap[id.MapIdType, *MirrorMapInstance](),
-		bySource:    zMap.NewTypedMap[int32, []*MirrorMapInstance](),
-		nextMapID:   200000,
+		mapManager: mapManager,
+		config:     config,
+		instances:  zMap.NewTypedMap[id.MapIdType, *MirrorMapInstance](),
+		bySource:   zMap.NewTypedMap[int32, []*MirrorMapInstance](),
+		nextMapID:  200000,
 	}
 }
 
@@ -84,7 +81,6 @@ func (mmm *MirrorMapManager) GetOrCreateMirrorMap(sourceMapConfigID int32, serve
 		500, 500,
 		MapModeMirror,
 		serverGroupID,
-		mmm.connManager,
 	)
 
 	inst := &MirrorMapInstance{

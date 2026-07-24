@@ -13,7 +13,6 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/MapServer/config"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/health"
 	"github.com/pzqf/zMmoServer/MapServer/maps"
 	"github.com/pzqf/zMmoServer/MapServer/metrics"
@@ -33,7 +32,6 @@ type BaseServer struct {
 	dedupManager     *zreq.DedupStore
 	timeoutManager   *zreq.TimeoutManager
 	config           *config.Config
-	connManager      *connection.ConnectionManager
 	mapManager       *maps.MapManager
 	tcpService       *service.TCPService
 	serviceDiscovery *zdisc.ServerServiceDiscovery
@@ -73,15 +71,23 @@ func (bs *BaseServer) initComponents() {
 		zLog.Error("Failed to start metrics service", zap.Error(err))
 	}
 
-	bs.connManager = connection.NewConnectionManager(bs.config)
-	bs.container.Register("connManager", bs.connManager)
-
 	bs.mapManager = maps.NewMapManager()
 	bs.container.Register("mapManager", bs.mapManager)
-	bs.connManager.SetMapHandler(bs.mapManager)
 
-	bs.tcpService = service.NewTCPService(bs.config, bs.connManager, bs.mapManager)
+	bs.tcpService = service.NewTCPService(bs.config, bs.mapManager)
 	bs.container.Register("tcpService", bs.tcpService)
+
+	// Phase 3.5：把 zMetrics 的网络指标接入 zNet——连接/流量/解码错误随之进入
+	// Prometheus（经既有 metricsService 暴露），trace_id 已在跨服 Envelope 全链路贯穿。
+	if bs.metricsService != nil {
+		bs.tcpService.SetMetricsRecorder(bs.metricsService.GetMetricsManager().GetNetworkMetrics())
+	}
+
+	// AOI 回程接线（Phase 2.3）：① 创建并注入 playerID→GameServer 映射（PlayerGameServerManager
+	// 此前定义了却从未接线，导致映射从未填充）；② 把网络层作为 AOI 通知器注入地图管理器，
+	// 使 Map.handleAOIEvent 能把视野事件回传给拥有 watcher 的 GameServer。
+	bs.tcpService.SetPlayerGameServerManager(maps.NewPlayerGameServerManager())
+	bs.mapManager.SetAOINotifier(bs.tcpService)
 
 	sd, err := zdisc.NewServerServiceDiscovery(&zdisc.ServerServiceDiscoveryConfig{
 		ServiceType: "map",
@@ -313,7 +319,6 @@ func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
 			mapCfg.Name,
 			float32(mapCfg.Width),
 			float32(mapCfg.Height),
-			bs.connManager,
 		)
 
 		if newMap != nil {

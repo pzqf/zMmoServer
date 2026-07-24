@@ -76,10 +76,21 @@ func TestGridManagerAOIEnterEvent(t *testing.T) {
 	gm.AddEntity(1, Coord{X: 10, Y: 10})
 	gm.AddEntity(2, Coord{X: 15, Y: 15})
 
-	assert.Len(t, events, 1)
-	assert.Equal(t, AOIEventEnter, events[0].Type)
-	assert.Equal(t, int64(1), events[0].Watcher)
-	assert.Equal(t, int64(2), events[0].Target)
+	// AddEntity 双向触发（Phase 2.3 修复：此前只触发"既有实体看见新实体"，导致进入者
+	// 收不到已在场对象）：实体 2 进入实体 1 视野，实体 1 也进入实体 2 视野 → 2 个事件。
+	assert.Len(t, events, 2)
+	foundW1, foundW2 := false, false
+	for _, evt := range events {
+		assert.Equal(t, AOIEventEnter, evt.Type)
+		if evt.Watcher == 1 && evt.Target == 2 {
+			foundW1 = true
+		}
+		if evt.Watcher == 2 && evt.Target == 1 {
+			foundW2 = true
+		}
+	}
+	assert.True(t, foundW1, "entity 1 should see entity 2 enter")
+	assert.True(t, foundW2, "entity 2 should see entity 1 enter")
 }
 
 func TestGridManagerAOILeaveEvent(t *testing.T) {

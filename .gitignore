@@ -27,3 +27,9 @@ go.work.sum
 
 #
 /bin
+
+# 编译产物与运行日志（成熟化改造收尾补充）
+bin/
+**/bin/
+logs/
+*.log

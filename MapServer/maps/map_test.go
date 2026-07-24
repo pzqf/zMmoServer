@@ -9,7 +9,7 @@ import (
 )
 
 func newTestMap() *Map {
-	return NewMap(id.MapIdType(1), 1, "TestMap", 1000, 1000, nil)
+	return NewMap(id.MapIdType(1), 1, "TestMap", 1000, 1000)
 }
 
 func TestNewMap(t *testing.T) {

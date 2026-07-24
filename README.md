@@ -195,9 +195,22 @@ Handler → Service → DAO → DBConnector → MySQL
 - 支持 `{ServerID}` 占位符
 - 所有服务器包含统一的 Server/Log/Metrics/Pprof/Etcd 配置段
 
-## 开发进度
+## 成熟度与验证（真相优先）
 
-### 已完成
+> **状态以证据为准，不以主观打分为准。** 本项目正经历一轮**成熟化改造**（Phase 0–4），
+> 目标 = 上线级 + 可复用开源框架。权威状态见：
+> - [`docs/项目评估报告.md`](docs/项目评估报告.md) — **能力 → 证据**清单（每条完成挂一个通过的测试或跨进程真 E2E）。
+> - [`docs/成熟化改造-执行计划.md`](docs/成熟化改造-执行计划.md) — 进度台账（勾选框 = 进度真相）。
+>
+> 改造已达成（均有测试/E2E 背书）：Game↔Map 跨服断链修复 + 全 protobuf 契约、attack 真实伤害闭环、
+> **AOI 视野回程**（曾潜伏 5 个真实缺陷）、Actor 监督（panic 恢复）、断线自动重连、连接去重、
+> zMetrics 接入 zNet、**Outbox/Inbox 持久化**（进程重启不丢在途消息，真 MySQL 验证）、
+> dispatcher 崩溃隔离等。8 模块 `build+vet` 全绿。
+>
+> ⚠️ 下方「能力清单」是**功能盘点**，不等同于"已充分验证"——许多能力在改造前是"实现了但从没真跑过"
+> 的潜伏状态，其真实可用性以上述评估报告的证据为准。
+
+### 能力清单（功能盘点）
 
 - [x] 四服务器框架搭建（Global/Gateway/Game/Map）
 - [x] 统一生命周期管理（BaseServer 重构，独立 init\* 方法）
@@ -276,6 +289,23 @@ go build -o bin/map_server.exe     ./MapServer/main.go
 2. 启动 MySQL
 3. 按顺序启动：GlobalServer → GatewayServer → GameServer → MapServer
 
+### 验证（门禁 + 测试）
+
+```bash
+# 全模块 build+vet 门禁（多 module，无 go.work）
+powershell -ExecutionPolicy Bypass -File scripts/ci-check.ps1
+
+# 引擎 + 契约 + 领域 + 持久化 测试
+go -C ../zEngine test ./zActor/ ./zNet/ -count=1
+go -C zCommon test ./crossserver/ ./game/ -count=1
+# 持久化需 MySQL，未设 DSN 则自动 skip
+ZMMO_TEST_MYSQL_DSN="root:pwd@tcp(host:3306)/db?parseTime=true" go -C zCommon test ./consistency/
+```
+
+**最小可运行示例 / 端到端**：`GameClient`（Go 版测试客户端，无需 Unity）跑通
+登录→创角→进图→移动→攻击→AOI 全流程；E2E 编排步骤见
+[`docs/开发约定与工作流.md`](docs/开发约定与工作流.md)。持久化可用 `ZMMO_PERSIST_CONSISTENCY=1` 开启。
+
 ### 配置文件
 
 | 服务器           | 配置文件               | 说明                                               |
@@ -288,10 +318,29 @@ go build -o bin/map_server.exe     ./MapServer/main.go
 | MapServer     | config\_cross.ini  | 世界地图模式                                           |
 | MapServer     | config\_test.ini   | 测试配置                                             |
 
+## 文档
+
+| 文档 | 用途 |
+|------|------|
+| [`AGENTS.md`](AGENTS.md) | 跨工具（AI/编辑器/人）仓库入口，指向下列权威文档 |
+| [`docs/开发约定与工作流.md`](docs/开发约定与工作流.md) | 开发方法、验证纪律、环境约定（AI 无关、可移植的单一真相源）|
+| [`docs/成熟化改造-执行计划.md`](docs/成熟化改造-执行计划.md) | 进度台账（勾选框 = 进度真相）|
+| [`docs/项目评估报告.md`](docs/项目评估报告.md) | 能力 → 证据清单（可验证事实）|
+| [`docs/协议契约.md`](docs/协议契约.md) | 跨服 Game↔Map 线格式与 ID 契约 |
+| [`docs/框架成熟化改造方案.md`](docs/框架成熟化改造方案.md) | 战略、关键决策、领域逻辑分层 |
+| [`docs/架构设计方案.md`](docs/架构设计方案.md) | 架构设计 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献指南 |
+
+## 贡献
+
+欢迎贡献。开始前请读 [`CONTRIBUTING.md`](CONTRIBUTING.md) 与
+[`docs/开发约定与工作流.md`](docs/开发约定与工作流.md)——核心原则：**每个"完成"必须挂一个通过的测试或跨进程真 E2E**，
+不凭主观判断。提交前跑 `scripts/ci-check.ps1` 确保 8 模块全绿。
+
 ## 许可证
 
-MIT License
+[MIT License](LICENSE) © 2026
 
 ***
 
-*最后更新: 2026-04-16*
+*最后更新: 2026-07-24*

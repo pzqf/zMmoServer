@@ -2,16 +2,17 @@ package maps
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
 	"github.com/pzqf/zCommon/aoi"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/config/models"
+	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/config/tables"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps/ai"
 	"github.com/pzqf/zMmoServer/MapServer/maps/buff"
 	"github.com/pzqf/zMmoServer/MapServer/maps/combat"
@@ -68,13 +69,13 @@ type Map struct {
 	shopManager       *economy.ShopManager
 	combatSystem      *combat.CombatSystem
 	lootSystem        *loot.LootSystem
-	connManager       *connection.ConnectionManager
+	aoiNotifier       AOINotifier
 	createdAt         time.Time
 }
 
 const defaultGridSize = 50.0
 
-func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height float32, connManager *connection.ConnectionManager) *Map {
+func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height float32) *Map {
 	m := &Map{
 		mapID:          mapID,
 		mapConfigID:    mapConfigID,
@@ -89,13 +90,15 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 		buildings:      make([]*models.MapBuilding, 0),
 		events:         make([]*models.MapEvent, 0),
 		resources:      make([]*models.MapResource, 0),
-		connManager:    connManager,
 		createdAt:      time.Now(),
 	}
 
 	m.aoiManager.SetListener(m.handleAOIEvent)
 
 	m.spawnManager = NewSpawnManager(mapID, m)
+	// 启动刷怪系统（此前 Init 从未被调用 → 地图内无任何怪，导致跨服战斗无目标可打）。
+	// 从 spawn_point.xlsx（按 mapConfigID）加载刷怪点并起 spawnLoop。
+	m.spawnManager.Init(mapConfigID)
 	m.eventManager = event.NewEventManager()
 	m.aiManager = ai.NewAIManager()
 	m.aiManager.SetTableManager(tables.GetTableManager())
@@ -120,23 +123,45 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 
 	m.CreateDefaultEvents()
 
+	// 测试夹具（env ZMMO_TEST_SPAWN 门控，纯为架构验证跨服战斗/AOI，生产默认不启用）：
+	// 在地图内放一个 ID=2 的静态哑怪，位置贴近玩家出生/移动区域，供 attack/AOI 端到端命中。
+	if os.Getenv("ZMMO_TEST_SPAWN") == "1" {
+		dummy := object.NewMonster(id.ObjectIdType(2), 1, "TestDummy", common.Vector3{X: 100, Y: 100, Z: 0}, 1)
+		m.AddObject(dummy)
+		zLog.Info("Test dummy monster spawned (ZMMO_TEST_SPAWN)", zap.Int64("object_id", 2), zap.Int32("map_id", int32(mapID)))
+	}
+
 	return m
 }
 
+// handleAOIEvent 处理 AOI 视野事件：把"watcher 看见 target 进入/离开/移动"回传给
+// 拥有该 watcher 的 GameServer（经 aoiNotifier），再由 GameServer 推送到客户端。
+// 见 docs/成熟化改造-执行计划.md 2.3。watcher 非玩家（如怪）时，GameServer 侧
+// GetGameServerID 查不到→自然不推送。
 func (m *Map) handleAOIEvent(evt aoi.AOIEvent) {
+	var eventType uint32
 	switch evt.Type {
 	case aoi.AOIEventEnter:
-		zLog.Debug("AOI: entity entered view",
-			zap.Int64("watcher", evt.Watcher),
-			zap.Int64("target", evt.Target))
+		eventType = crossserver.MsgInternalAOIEnter
 	case aoi.AOIEventLeave:
-		zLog.Debug("AOI: entity left view",
-			zap.Int64("watcher", evt.Watcher),
-			zap.Int64("target", evt.Target))
+		eventType = crossserver.MsgInternalAOILeave
 	case aoi.AOIEventMove:
-		zLog.Debug("AOI: entity moved",
-			zap.Int64("target", evt.Target))
+		eventType = crossserver.MsgInternalAOIMove
+	default:
+		return
 	}
+
+	if m.aoiNotifier == nil {
+		return
+	}
+
+	// target 的当前位置（离开事件时对象可能已移除，pos 为零值即可）
+	var pos common.Vector3
+	if target, ok := m.objects.Load(id.ObjectIdType(evt.Target)); ok {
+		pos = target.GetPosition()
+	}
+
+	m.aoiNotifier.NotifyAOI(evt.Watcher, int32(m.mapID), eventType, evt.Target, pos)
 }
 
 func (m *Map) posToCoord(pos common.Vector3) aoi.Coord {

@@ -8,12 +8,11 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zMmoServer/MapServer/common"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
 	"go.uber.org/zap"
 )
 
-type MapFactoryFunc func(mapID id.MapIdType, mapConfigID int32, name string, width, height float32, connManager *connection.ConnectionManager) *MapInterface
+type MapFactoryFunc func(mapID id.MapIdType, mapConfigID int32, name string, width, height float32) *MapInterface
 
 type MapInterface interface {
 	GetID() id.MapIdType
@@ -27,10 +26,9 @@ type MapInterface interface {
 }
 
 type DungeonLifecycleManager struct {
-	mu          sync.RWMutex
-	dm          *DungeonManager
-	instances   map[id.InstanceIdType]*DungeonLifecycle
-	connManager *connection.ConnectionManager
+	mu        sync.RWMutex
+	dm        *DungeonManager
+	instances map[id.InstanceIdType]*DungeonLifecycle
 }
 
 type DungeonLifecycle struct {
@@ -40,11 +38,10 @@ type DungeonLifecycle struct {
 	DestroyedAt time.Time
 }
 
-func NewDungeonLifecycleManager(dm *DungeonManager, connManager *connection.ConnectionManager) *DungeonLifecycleManager {
+func NewDungeonLifecycleManager(dm *DungeonManager) *DungeonLifecycleManager {
 	return &DungeonLifecycleManager{
-		dm:          dm,
-		instances:   make(map[id.InstanceIdType]*DungeonLifecycle),
-		connManager: connManager,
+		dm:        dm,
+		instances: make(map[id.InstanceIdType]*DungeonLifecycle),
 	}
 }
 

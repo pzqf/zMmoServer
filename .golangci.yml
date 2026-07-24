@@ -1,0 +1,30 @@
+# golangci-lint 配置 — 成熟化改造 Phase 0 基线（先宽后严）
+# 安装: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# 运行(逐模块): golangci-lint run ./...
+# 注: 本仓库多模块，需在各模块目录分别运行；此配置文件放在仓库根，各模块可继承或各自放置。
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  disable-all: true
+  enable:
+    - govet          # 官方静态检查
+    - staticcheck    # 高价值 bug 检测
+    - ineffassign    # 无效赋值
+    - errcheck       # 未处理的 error（呼应 project_rules "禁止忽略 err"）
+    - unused         # 未使用的代码（辅助识别死代码）
+    - misspell       # 拼写
+    - gosimple       # 可简化的代码
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # 生成的 protobuf 代码不检查
+    - path: '\.pb\.go$'
+      linters:
+        - govet
+        - staticcheck
+        - unused

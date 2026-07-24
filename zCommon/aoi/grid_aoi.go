@@ -140,22 +140,26 @@ func (gm *GridManager) getOrCreateGrid(gridID int64) *Grid {
 func (gm *GridManager) AddEntity(entityID int64, coord Coord) {
 	gridID := gm.getGridID(coord)
 	grid := gm.getOrCreateGrid(gridID)
-	grid.Add(entityID, coord)
 
-	surroundingGrids := gm.getSurroundingGridIDs(gridID)
-	for _, sid := range surroundingGrids {
-		sgrid := gm.getOrCreateGrid(sid)
-		for watcherID := range sgrid.GetAll() {
-			if watcherID != entityID && gm.listener != nil {
-				gm.listener(AOIEvent{
-					Type:     AOIEventEnter,
-					Watcher:  watcherID,
-					Target:   entityID,
-					NewCoord: coord,
-				})
+	// 先对既有实体（不含自身，此时尚未加入自身格）触发双向进入视野事件，再加入自身：
+	//  ① 既有实体看见新实体进入（Watcher=既有, Target=新）
+	//  ② 新实体也看见既有实体（Watcher=新, Target=既有）——此前缺失，导致新玩家进区
+	//     收不到"已在场对象"，AOI 对新进入者无用。修复后进入者能获知周围已有实体。
+	if gm.listener != nil {
+		surroundingGrids := gm.getSurroundingGridIDs(gridID)
+		for _, sid := range surroundingGrids {
+			sgrid := gm.getOrCreateGrid(sid)
+			for otherID, otherCoord := range sgrid.GetAll() {
+				if otherID == entityID {
+					continue
+				}
+				gm.listener(AOIEvent{Type: AOIEventEnter, Watcher: otherID, Target: entityID, NewCoord: coord})
+				gm.listener(AOIEvent{Type: AOIEventEnter, Watcher: entityID, Target: otherID, NewCoord: otherCoord})
 			}
 		}
 	}
+
+	grid.Add(entityID, coord)
 
 	zLog.Debug("Entity added to AOI",
 		zap.Int64("entity_id", entityID),

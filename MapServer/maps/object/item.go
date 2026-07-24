@@ -1,8 +1,9 @@
 package object
 
 import (
-	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/game"
+	"github.com/pzqf/zMmoServer/MapServer/common"
 )
 
 // Item 物品对象
@@ -18,27 +19,29 @@ type Item struct {
 	isPicked bool
 }
 
-// ItemType 物品类型
-type ItemType int
+// 物品类型/稀有度以 zCommon/game 为唯一权威（Phase 4.1 去重）。此前 object 包与
+// zCommon/game 各自独立定义了同名同值的 ItemType/ItemRarity 枚举，有静默分歧风险。
+// 改用类型别名 + 常量再导出：真实定义只存于 game 包，object 包仅转发——消除重复定义，
+// 同时保持 object.ItemTypeXxx / object.ItemRarityXxx 等既有引用不变。
+type ItemType = game.ItemType
 
 const (
-	ItemTypeWeapon ItemType = iota
-	ItemTypeArmor
-	ItemTypeConsumable
-	ItemTypeQuest
-	ItemTypeMaterial
-	ItemTypeCurrency
+	ItemTypeWeapon     = game.ItemTypeWeapon
+	ItemTypeArmor      = game.ItemTypeArmor
+	ItemTypeConsumable = game.ItemTypeConsumable
+	ItemTypeQuest      = game.ItemTypeQuest
+	ItemTypeMaterial   = game.ItemTypeMaterial
+	ItemTypeCurrency   = game.ItemTypeCurrency
 )
 
-// ItemRarity 物品稀有度
-type ItemRarity int
+type ItemRarity = game.ItemRarity
 
 const (
-	ItemRarityCommon ItemRarity = iota
-	ItemRarityUncommon
-	ItemRarityRare
-	ItemRarityEpic
-	ItemRarityLegendary
+	ItemRarityCommon    = game.ItemRarityCommon
+	ItemRarityUncommon  = game.ItemRarityUncommon
+	ItemRarityRare      = game.ItemRarityRare
+	ItemRarityEpic      = game.ItemRarityEpic
+	ItemRarityLegendary = game.ItemRarityLegendary
 )
 
 // ItemEffect 物品效果

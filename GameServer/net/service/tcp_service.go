@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -44,10 +42,12 @@ type TCPService struct {
 	loginService      *player.LoginService
 	protocol          protolayer.Protocol
 	tcpServer         *zNet.TcpServer
-	mapServerListener net.Listener
 	messageRouter     *msgHandler.Router
 	isRunning         bool
-	wg                sync.WaitGroup
+	// gatewaySession: 已接受的 Gateway 连接会话（1:1），供服务端主动推送（如 AOI 视野）
+	// 经此会话 Send，与请求-响应同一 zNet 通道/分帧。收到 Gateway 消息时更新。
+	gatewaySession atomic.Value
+	wg             sync.WaitGroup
 	gatewayInbox      consistency.InboxStore
 	dedupeHits        atomic.Uint64
 	onDedupeHit       func(total uint64)
@@ -145,20 +145,6 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start TCP service: %v", err)
 	}
 
-	// 启动MapServer连接监听（使用单独的端口）
-	mapServerPort := 20002 // MapServer连接端口
-	mapServerAddr := fmt.Sprintf("0.0.0.0:%d", mapServerPort)
-	zLog.Info("Starting MapServer connection listener...", zap.String("addr", mapServerAddr))
-
-	listener, err := net.Listen("tcp", mapServerAddr)
-	if err != nil {
-		zLog.Error("Failed to start MapServer listener", zap.Error(err))
-		// 继续启动，MapServer监听失败不影响主要功能
-	} else {
-		ts.mapServerListener = listener
-		go ts.acceptMapServerConnections()
-	}
-
 	ts.isRunning = true
 
 	zLog.Info("TCP service started successfully", zap.String("addr", ts.config.Server.ListenAddr))
@@ -177,11 +163,6 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 		ts.tcpServer.Close()
 	}
 
-	// 停止MapServer监听
-	if ts.mapServerListener != nil {
-		ts.mapServerListener.Close()
-	}
-
 	// 停止地图服务
 	if ts.mapService != nil {
 		if err := ts.mapService.Stop(ctx); err != nil {
@@ -196,281 +177,14 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// acceptMapServerConnections 接受MapServer的连接
-func (ts *TCPService) acceptMapServerConnections() {
-	if ts.mapServerListener == nil {
-		return
-	}
-
-	zLog.Info("Accepting MapServer connections...")
-
-	for {
-		conn, err := ts.mapServerListener.Accept()
-		if err != nil {
-			zLog.Error("Failed to accept MapServer connection", zap.Error(err))
-			break
-		}
-
-		zLog.Info("MapServer connected", zap.String("addr", conn.RemoteAddr().String()))
-
-		// 处理MapServer连接
-		go ts.handleMapServerConnection(conn)
-	}
-}
-
-// handleMapServerConnection 处理MapServer连接
-func (ts *TCPService) handleMapServerConnection(conn net.Conn) {
-	defer conn.Close()
-
-	buffer := make([]byte, 4096)
-	var pendingData []byte
-
-	for {
-		n, err := conn.Read(buffer)
-		if err != nil {
-			zLog.Error("Failed to read from MapServer", zap.Error(err))
-			break
-		}
-
-		if n > 0 {
-			// 将新读取的数据添加到待处理数据中
-			pendingData = append(pendingData, buffer[:n]...)
-			// 处理待处理数据
-			ts.processMapServerData(conn, &pendingData)
-		}
-	}
-
-	zLog.Info("MapServer connection closed", zap.String("addr", conn.RemoteAddr().String()))
-}
-
-// processMapServerData 处理MapServer数据
-func (ts *TCPService) processMapServerData(conn net.Conn, pendingData *[]byte) {
-	for {
-		// 检查是否有足够的数据来解析zNet消息头（16字节）
-		if len(*pendingData) < 16 {
-			// 数据不足，等待更多数据
-			break
-		}
-
-		// 解析zNet格式的消息头
-		// zNet消息格式：4字节ProtoId + 4字节Version + 4字节DataSize + 4字节IsCompressed
-		_ = int(binary.BigEndian.Uint32((*pendingData)[:4]))  // protoId
-		_ = int(binary.BigEndian.Uint32((*pendingData)[4:8])) // version
-		dataLen := int(binary.BigEndian.Uint32((*pendingData)[8:12]))
-		_ = int(binary.BigEndian.Uint32((*pendingData)[12:16])) // isCompressed
-
-		if dataLen > 1024*1024 {
-			zLog.Error("Message too long from MapServer", zap.Int("length", dataLen))
-			// 丢弃此消息，继续处理下一个消息
-			*pendingData = (*pendingData)[16:]
-			continue
-		}
-
-		// 计算总消息长度：16字节头部 + 数据长度
-		totalLen := 16 + dataLen
-		if len(*pendingData) < totalLen {
-			// 数据不足，等待更多数据
-			break
-		}
-
-		// 提取完整的消息
-		message := (*pendingData)[:totalLen]
-		// 从待处理数据中移除已处理的消息
-		*pendingData = (*pendingData)[totalLen:]
-
-		// 处理消息
-		ts.handleMapServerMessage(conn, message)
-	}
-}
-
-// handleMapServerMessage 处理来自MapServer的消息
-func (ts *TCPService) handleMapServerMessage(conn net.Conn, data []byte) {
-	// 解析zNet格式的消息
-	if len(data) < 16 {
-		zLog.Error("Invalid zNet message format from MapServer", zap.Int("size", len(data)))
-		return
-	}
-
-	// 解析zNet消息头
-	protoId := int(binary.BigEndian.Uint32(data[:4]))
-	_ = int(binary.BigEndian.Uint32(data[4:8])) // version
-	dataLen := int(binary.BigEndian.Uint32(data[8:12]))
-	_ = int(binary.BigEndian.Uint32(data[12:16])) // isCompressed
-
-	// 检查数据长度
-	if dataLen > 1024*1024 {
-		zLog.Error("Message too long from MapServer", zap.Int("length", dataLen))
-		return
-	}
-
-	// 检查总消息长度
-	totalLen := 16 + dataLen
-	if len(data) < totalLen {
-		zLog.Error("Insufficient data from MapServer", zap.Int("actual", len(data)), zap.Int("expected", totalLen))
-		return
-	}
-
-	// 提取数据部分并解析跨服信封（兼容未包裹旧格式）
-	rawPayload := data[16:totalLen]
-	meta, payload, wrapped, unwrapErr := crossserver.Unwrap(rawPayload)
-	if unwrapErr != nil {
-		zLog.Error("Invalid cross-server envelope from MapServer", zap.Error(unwrapErr))
-		return
-	}
-	if wrapped {
-		zLog.Debug("Received cross-server envelope from MapServer",
-			zap.Uint64("trace_id", meta.TraceID),
-			zap.Uint64("request_id", meta.RequestID),
-			zap.Int("proto_id", protoId),
-			zap.Int("server_id", ts.config.Server.ServerID))
-	}
-
-	// 解析跨服务器消息
-	crossMsg := &protocol.CrossServerMessage{}
-	if err := proto.Unmarshal(payload, crossMsg); err != nil {
-		zLog.Error("Failed to unmarshal cross server message from MapServer", zap.Error(err))
-		return
-	}
-
-	// 提取基础消息
-	baseMsg := crossMsg.Message
-
-	// 提取数据部分
-	actualPayload := baseMsg.GetData()
-
-	// 获取消息ID
-	forwardProtoId := int32(baseMsg.GetMsgId())
-
-	playerID := id.PlayerIdType(baseMsg.GetPlayerId())
-
-	switch forwardProtoId {
-	case int32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):
-		// 处理地图进入响应
-		var resp protocol.ClientMapEnterResponse
-		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
-			zLog.Error("Failed to unmarshal map enter response", zap.Error(err))
-			return
-		}
-		zLog.Info("Received map enter response from MapServer",
-			zap.Uint64("player_id", baseMsg.GetPlayerId()),
-			zap.Int32("map_id", resp.MapId),
-			zap.Int32("result", resp.Result))
-
-		// 转发到Gateway
-		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-			zLog.Error("Failed to forward map enter response to Gateway", zap.Error(err))
-		}
-
-	case int32(protocol.MapMsgId_MSG_MAP_LEAVE_RESPONSE):
-		// 处理地图离开响应
-		var resp protocol.ClientMapLeaveResponse
-		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
-			zLog.Error("Failed to unmarshal map leave response", zap.Error(err))
-			return
-		}
-		zLog.Info("Received map leave response from MapServer",
-			zap.Uint64("player_id", baseMsg.GetPlayerId()),
-			zap.Int32("result", resp.Result))
-
-		// 转发到Gateway
-		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-			zLog.Error("Failed to forward map leave response to Gateway", zap.Error(err))
-		}
-
-	case int32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE):
-		// 处理地图移动响应
-		var resp protocol.ClientMapMoveResponse
-		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
-			zLog.Error("Failed to unmarshal map move response", zap.Error(err))
-			return
-		}
-		zLog.Info("Received map move response from MapServer",
-			zap.Uint64("player_id", baseMsg.GetPlayerId()),
-			zap.Int32("result", resp.Result))
-
-		// 转发到Gateway
-		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-			zLog.Error("Failed to forward map move response to Gateway", zap.Error(err))
-		}
-
-	case int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE):
-		// 处理地图攻击响应
-		var resp protocol.ClientMapAttackResponse
-		if err := proto.Unmarshal(actualPayload, &resp); err != nil {
-			zLog.Error("Failed to unmarshal map attack response", zap.Error(err))
-			return
-		}
-		zLog.Info("Received map attack response from MapServer",
-			zap.Uint64("player_id", baseMsg.GetPlayerId()),
-			zap.Int64("target_id", resp.TargetId),
-			zap.Int32("result", resp.Result),
-			zap.Int64("damage", resp.Damage),
-			zap.Int64("target_hp", resp.TargetHp))
-
-		// 转发到Gateway
-		if err := ts.forwardToGateway(playerID, forwardProtoId, actualPayload); err != nil {
-			zLog.Error("Failed to forward map attack response to Gateway", zap.Error(err))
-		}
-
-	default:
-		zLog.Info("Received unknown message from MapServer", zap.Int32("proto_id", forwardProtoId))
-	}
-}
-
-// forwardToGateway 转发消息到Gateway
-func (ts *TCPService) forwardToGateway(playerID id.PlayerIdType, protoId int32, data []byte) error {
-	if ts.sessionManager == nil {
-		return fmt.Errorf("session manager not set")
-	}
-
-	sess, exists := ts.sessionManager.GetSessionByPlayer(playerID)
-	if !exists {
-		return fmt.Errorf("session not found for player %d", playerID)
-	}
-
-	sessionID := sess.SessionID
-	sessionIDUint, err := strconv.ParseUint(sessionID, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid session ID format: %s", sessionID)
-	}
-
-	baseMsg := &protocol.BaseMessage{
-		MsgId:     uint32(protoId),
-		SessionId: sessionIDUint,
-		PlayerId:  uint64(playerID),
-		ServerId:  uint32(ts.config.Server.ServerID),
-		Timestamp: uint64(time.Now().Unix()),
-		Data:      data,
-	}
-
-	crossMsg := &protocol.CrossServerMessage{
-		TraceId:      uint64(time.Now().UnixNano()),
-		FromServerId: uint32(ts.config.Server.ServerID),
-		FromService:  uint32(crossserver.ServiceTypeGame),
-		ToService:    uint32(crossserver.ServiceTypeGateway),
-		Message:      baseMsg,
-	}
-
-	crossMsgData, err := proto.Marshal(crossMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal cross server message: %w", err)
-	}
-
-	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ts.config.Server.ServerID))
-	wrappedData := crossserver.Wrap(meta, crossMsgData)
-
-	if ts.connManager == nil {
-		return fmt.Errorf("connection manager not set")
-	}
-
-	return ts.connManager.SendToGateway(wrappedData)
-}
-
 // handleConnectionMessage 处理来自客户端的消息
 func (ts *TCPService) handleConnectionMessage(session zNet.Session, packet *zNet.NetPacket) error {
 	// 处理消息
 	sessionID := session.GetSid()
 	zLog.Info("Received message", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", int32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
+
+	// 记录 Gateway 会话，供服务端主动推送（AOI 视野等）复用同一 zNet 通道
+	ts.gatewaySession.Store(session)
 
 	// 暂时统一处理，后续需要区分Gateway和MapServer连接
 	// 注意：MapServer连接应该使用单独的处理逻辑，而不是通过zNet

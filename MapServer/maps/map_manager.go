@@ -7,7 +7,6 @@ import (
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoServer/MapServer/connection"
 	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
@@ -19,6 +18,17 @@ type MapManager struct {
 	maps                *zMap.TypedMap[id.MapIdType, *Map]
 	dungeonLifecycleMgr *dungeon.DungeonLifecycleManager
 	nextDungeonMapID    int64
+	aoiNotifier         AOINotifier
+}
+
+// SetAOINotifier 注入 AOI 回程通知器，后续所创建的地图都会套用。
+func (mm *MapManager) SetAOINotifier(n AOINotifier) {
+	mm.aoiNotifier = n
+	// 已创建的地图也补上
+	mm.maps.Range(func(_ id.MapIdType, m *Map) bool {
+		m.SetAOINotifier(n)
+		return true
+	})
 }
 
 // NewMapManager 创建新的地图管理器
@@ -66,7 +76,7 @@ func (mm *MapManager) Stop() {
 }
 
 // CreateMap 创建新地图
-func (mm *MapManager) CreateMap(mapID id.MapIdType, mapConfigID int32, name string, width, height float32, connManager *connection.ConnectionManager) *Map {
+func (mm *MapManager) CreateMap(mapID id.MapIdType, mapConfigID int32, name string, width, height float32) *Map {
 	// 检查地图是否已存在
 	if existingMap, exists := mm.maps.Load(mapID); exists {
 		zLog.Warn("Map already exists", zap.Int32("map_id", int32(mapID)))
@@ -74,7 +84,8 @@ func (mm *MapManager) CreateMap(mapID id.MapIdType, mapConfigID int32, name stri
 	}
 
 	// 创建新地图
-	newMap := NewMap(mapID, mapConfigID, name, width, height, connManager)
+	newMap := NewMap(mapID, mapConfigID, name, width, height)
+	newMap.SetAOINotifier(mm.aoiNotifier)
 	mm.maps.Store(mapID, newMap)
 
 	zLog.Info("Map created", zap.Int32("map_id", int32(mapID)), zap.String("name", name))
@@ -86,7 +97,7 @@ func (mm *MapManager) CreateMap(mapID id.MapIdType, mapConfigID int32, name stri
 }
 
 // CreateMapFromResource 从资源创建地图
-func (mm *MapManager) CreateMapFromResource(resource *MapResource, connManager *connection.ConnectionManager) *Map {
+func (mm *MapManager) CreateMapFromResource(resource *MapResource) *Map {
 	mapID := id.MapIdType(resource.MapID)
 
 	// 检查地图是否已存在
@@ -96,7 +107,7 @@ func (mm *MapManager) CreateMapFromResource(resource *MapResource, connManager *
 	}
 
 	// 创建新地图
-	newMap := NewMap(mapID, resource.MapID, resource.Name, float32(resource.Width), float32(resource.Height), connManager)
+	newMap := NewMap(mapID, resource.MapID, resource.Name, float32(resource.Width), float32(resource.Height))
 	mm.maps.Store(mapID, newMap)
 
 	// 设置地图属性
@@ -312,10 +323,10 @@ func (mm *MapManager) GetAllMapIDs() []int32 {
 	return mapIDs
 }
 
-func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.PlayerIdType, connManager *connection.ConnectionManager) (*Map, *dungeon.DungeonInstance, error) {
+func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.PlayerIdType) (*Map, *dungeon.DungeonInstance, error) {
 	dungeonMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
 
-	dungeonMap := NewMap(dungeonMapID, int32(dungeonID), fmt.Sprintf("Dungeon_%d", dungeonID), 500, 500, connManager)
+	dungeonMap := NewMap(dungeonMapID, int32(dungeonID), fmt.Sprintf("Dungeon_%d", dungeonID), 500, 500)
 	dungeonMap.SetIsDungeon(true)
 	dungeonMap.SetMapMode(MapModeSingleServer)
 
@@ -323,7 +334,7 @@ func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.
 
 	if mm.dungeonLifecycleMgr == nil {
 		dm := dungeon.NewDungeonManager()
-		mm.dungeonLifecycleMgr = dungeon.NewDungeonLifecycleManager(dm, connManager)
+		mm.dungeonLifecycleMgr = dungeon.NewDungeonLifecycleManager(dm)
 	}
 
 	instance, err := mm.dungeonLifecycleMgr.CreateAndStartDungeon(dungeonID, players, dungeonMapID)
@@ -372,10 +383,10 @@ func (mm *MapManager) DestroyDungeonMap(instanceID id.InstanceIdType) error {
 	return nil
 }
 
-func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width, height float32, mode MapMode, serverGroupID int32, connManager *connection.ConnectionManager) *Map {
+func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width, height float32, mode MapMode, serverGroupID int32) *Map {
 	crossMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
 
-	crossMap := NewMap(crossMapID, mapConfigID, name, width, height, connManager)
+	crossMap := NewMap(crossMapID, mapConfigID, name, width, height)
 	crossMap.SetMapMode(mode)
 	crossMap.SetServerGroupID(serverGroupID)
 

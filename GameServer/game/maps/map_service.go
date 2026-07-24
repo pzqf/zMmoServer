@@ -78,6 +78,17 @@ func (ms *MapService) SetConnectionManager(connManager *connection.ConnectionMan
 	ms.connectionManager = connManager
 }
 
+// SetConsistencyStores 用持久化（或其他）Outbox/Inbox 替换默认的内存实现（Phase 3.4）。
+// 须在 Start 前调用。传 nil 的参数保留原有实现。
+func (ms *MapService) SetConsistencyStores(outbox consistency.OutboxStore, inbox consistency.InboxStore) {
+	if outbox != nil {
+		ms.outbox = outbox
+	}
+	if inbox != nil {
+		ms.inbox = inbox
+	}
+}
+
 // SetMapServerManager 设置地图服务器管理器
 func (ms *MapService) SetMapServerManager(mapServerManager *MapServerManager) {
 	ms.mapServerManager = mapServerManager
@@ -157,7 +168,9 @@ func (ms *MapService) Stop(ctx context.Context) error {
 func (ms *MapService) loadMaps() error {
 	// 从Excel配置表加载地图数据
 	mapTableLoader := tables.NewMapTableLoader()
-	excelDir := "../resources/excel_tables"
+	// 去硬编码：经健壮解析器定位配置表目录（此前硬编码 "../resources/excel_tables"，
+	// 从 repo 根跑时指向仓库外→退默认地图）。见 zCommon/config/tables/resource_dir.go。
+	excelDir := tables.ExcelTablesDir()
 
 	err := mapTableLoader.Load(excelDir)
 	if err != nil {
@@ -269,34 +282,24 @@ func (ms *MapService) HandlePlayerEnterMap(playerID id.PlayerIdType, mapID id.Ma
 	return nil
 }
 
-// sendMapMessage 发送消息到MapServer
-func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, data []byte, playerID id.PlayerIdType, meta crossserver.Meta) error {
+// sendMapMessage 发送消息到 MapServer。
+// protoId 为 InternalMsgId（400/402/404/406），innerData 为具体业务消息（MapEnterRequest 等）
+// 的 protobuf 字节。统一经 crossserver 共用 codec 打包（Envelope + protobuf CrossServerMessage），
+// 详见 docs/协议契约.md，禁止在此手写编码。
+func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, innerData []byte, playerID id.PlayerIdType, meta crossserver.Meta) error {
 	if ms.connectionManager == nil {
 		return fmt.Errorf("connection manager not set")
 	}
 
-	baseMsg := &protocol.BaseMessage{
-		MsgId:     uint32(protoId),
-		PlayerId:  uint64(playerID),
-		ServerId:  uint32(ms.config.Server.ServerID),
-		Timestamp: uint64(time.Now().Unix()),
-		Data:      data,
-	}
+	base := crossserver.BuildBaseMessage(uint32(protoId), uint64(playerID),
+		uint32(ms.config.Server.ServerID), uint32(mapID), innerData)
 
-	crossMsg := &protocol.CrossServerMessage{
-		TraceId:      meta.TraceID,
-		FromServerId: uint32(ms.config.Server.ServerID),
-		FromService:  uint32(crossserver.ServiceTypeGame),
-		ToService:    uint32(crossserver.ServiceTypeMap),
-		Message:      baseMsg,
-	}
-
-	crossMsgData, err := proto.Marshal(crossMsg)
+	enveloped, err := crossserver.PackMessage(meta, crossserver.ServiceTypeGame, crossserver.ServiceTypeMap,
+		uint32(ms.config.Server.ServerID), 0, base)
 	if err != nil {
-		return fmt.Errorf("failed to marshal cross server message: %w", err)
+		return fmt.Errorf("failed to pack cross server message: %w", err)
 	}
 
-	enveloped := crossserver.Wrap(meta, crossMsgData)
 	msg := consistency.OutboxMessage{
 		RequestID:   meta.RequestID,
 		Topic:       fmt.Sprintf("map:%d:proto:%d", mapID, protoId),
@@ -398,37 +401,21 @@ func (ms *MapService) publishOutboxStats() {
 
 // sendMapEnterRequest 发送进入地图请求到MapServer
 func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	// 创建地图进入请求
-	mapEnterReq := &protocol.ClientMapEnterRequest{
+	// 内层业务消息：带坐标的 MapEnterRequest（旧代码误用无坐标的 ClientMapEnterRequest，丢 X/Y/Z）
+	req := &protocol.MapEnterRequest{
 		PlayerId: int64(playerID),
-		MapId:    int32(mapID),
+		MapId:    int64(mapID),
+		X:        pos.X,
+		Y:        pos.Y,
+		Z:        pos.Z,
 	}
-
-	// 序列化具体消息
-	reqData, err := proto.Marshal(mapEnterReq)
+	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map enter request: %w", err)
 	}
 
-	// 创建基础消息
-	baseMsg := &protocol.BaseMessage{
-		PlayerId:  uint64(playerID),
-		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_ENTER),
-		ServerId:  uint32(ms.config.Server.ServerID),
-		MapId:     uint32(mapID),
-		Data:      reqData,
-		Timestamp: uint64(time.Now().UnixNano()),
-	}
-
-	// 序列化基础消息
-	data, err := proto.Marshal(baseMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal base message: %w", err)
-	}
-
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
-	if err != nil {
+	if err := ms.sendMapMessage(mapID, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ENTER_REQUEST), reqData, playerID, meta); err != nil {
 		return err
 	}
 
@@ -468,33 +455,17 @@ func (ms *MapService) HandlePlayerLeaveMap(playerID id.PlayerIdType, mapID id.Ma
 
 // sendMapLeaveRequest 发送离开地图请求到MapServer
 func (ms *MapService) sendMapLeaveRequest(playerID id.PlayerIdType, mapID id.MapIdType) error {
-	mapLeaveReq := &protocol.ClientMapLeaveRequest{
+	req := &protocol.MapLeaveRequest{
 		PlayerId: int64(playerID),
-		MapId:    int32(mapID),
+		MapId:    int64(mapID),
 	}
-
-	reqData, err := proto.Marshal(mapLeaveReq)
+	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map leave request: %w", err)
 	}
 
-	baseMsg := &protocol.BaseMessage{
-		PlayerId:  uint64(playerID),
-		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_LEAVE),
-		ServerId:  uint32(ms.config.Server.ServerID),
-		MapId:     uint32(mapID),
-		Data:      reqData,
-		Timestamp: uint64(time.Now().UnixNano()),
-	}
-
-	data, err := proto.Marshal(baseMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal base message: %w", err)
-	}
-
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
-	if err != nil {
+	if err := ms.sendMapMessage(mapID, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_LEAVE_REQUEST), reqData, playerID, meta); err != nil {
 		return err
 	}
 
@@ -545,42 +516,22 @@ func (ms *MapService) HandlePlayerMove(playerID id.PlayerIdType, mapID id.MapIdT
 
 // sendMapMoveRequest 发送移动请求到MapServer
 func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, pos common.Vector3) error {
-	// 创建地图移动请求
-	mapMoveReq := &protocol.ClientMapMoveRequest{
+	// 内层业务消息：带坐标的 MapMoveRequest
+	req := &protocol.MapMoveRequest{
 		PlayerId: int64(playerID),
-		MapId:    int32(mapID),
-		Pos: &protocol.Position{
-			X: pos.X,
-			Y: pos.Y,
-			Z: pos.Z,
-		},
+		ObjectId: int64(objectID),
+		MapId:    int64(mapID),
+		X:        pos.X,
+		Y:        pos.Y,
+		Z:        pos.Z,
 	}
-
-	// 序列化具体消息
-	reqData, err := proto.Marshal(mapMoveReq)
+	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map move request: %w", err)
 	}
 
-	// 创建基础消息
-	baseMsg := &protocol.BaseMessage{
-		PlayerId:  uint64(playerID),
-		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_MOVE),
-		ServerId:  uint32(ms.config.Server.ServerID),
-		MapId:     uint32(mapID),
-		Data:      reqData,
-		Timestamp: uint64(time.Now().UnixNano()),
-	}
-
-	// 序列化基础消息
-	data, err := proto.Marshal(baseMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal base message: %w", err)
-	}
-
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
-	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
-	if err != nil {
+	if err := ms.sendMapMessage(mapID, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_MOVE_REQUEST), reqData, playerID, meta); err != nil {
 		return err
 	}
 
@@ -593,31 +544,18 @@ func (ms *MapService) sendMapMoveRequest(playerID id.PlayerIdType, objectID id.O
 
 // HandlePlayerAttack 处理玩家攻击
 func (ms *MapService) HandlePlayerAttack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
-	// 先在本地处理
-	// 获取地图
+	// 路由校验：玩家须在本 GameServer 的该地图
 	m, err := ms.GetMap(mapID)
 	if err != nil {
 		return 0, 0, err
 	}
-
-	// 获取玩家对象
 	playerObj := m.GetObject(id.ObjectIdType(playerID))
 	if playerObj == nil {
 		return 0, 0, fmt.Errorf("player not found in map: %d", playerID)
 	}
 
-	// 获取目标对象
-	targetObj := m.GetObject(targetID)
-	if targetObj == nil {
-		return 0, 0, fmt.Errorf("target not found in map: %d", targetID)
-	}
-
-	// 检查目标类型是否为怪物
-	if targetObj.GetType() != common.GameObjectTypeMonster {
-		return 0, 0, fmt.Errorf("target is not a monster: %d", targetID)
-	}
-
-	// 向MapServer发送攻击请求
+	// 目标（怪物）的存在性与合法性由 MapServer 权威校验——GameServer 不镜像怪物，
+	// 不在此越权校验目标（架构：MapServer 是地图对象/战斗权威）。直接转发。
 	damage, targetHP, err := ms.sendMapAttackRequest(playerID, id.ObjectIdType(playerID), mapID, targetID)
 	if err != nil {
 		zLog.Warn("Failed to send map attack request to MapServer", zap.Error(err))
@@ -688,41 +626,23 @@ func (ms *MapService) HandleMapAttackResponse(requestID uint64, playerID id.Play
 
 // sendMapAttackRequest 发送攻击请求到MapServer
 func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id.ObjectIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
-	// 创建地图攻击请求
-	mapAttackReq := &protocol.ClientMapAttackRequest{
+	// 内层业务消息：MapAttackRequest（带 object_id/target_id）
+	req := &protocol.MapAttackRequest{
 		PlayerId: int64(playerID),
-		MapId:    int32(mapID),
+		ObjectId: int64(objectID),
+		MapId:    int64(mapID),
 		TargetId: int64(targetID),
 	}
-
-	// 序列化具体消息
-	reqData, err := proto.Marshal(mapAttackReq)
+	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to marshal map attack request: %w", err)
-	}
-
-	// 创建基础消息
-	baseMsg := &protocol.BaseMessage{
-		PlayerId:  uint64(playerID),
-		MsgId:     uint32(protocol.MapMsgId_MSG_MAP_ATTACK),
-		ServerId:  uint32(ms.config.Server.ServerID),
-		MapId:     uint32(mapID),
-		Data:      reqData,
-		Timestamp: uint64(time.Now().UnixNano()),
-	}
-
-	// 序列化基础消息
-	data, err := proto.Marshal(baseMsg)
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to marshal base message: %w", err)
 	}
 
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
 	respCh := ms.registerPendingAttack(playerID, targetID, meta.RequestID)
 	defer ms.removePendingAttack(playerID, targetID, meta.RequestID)
 
-	err = ms.sendMapMessage(mapID, 300, data, playerID, meta)
-	if err != nil {
+	if err := ms.sendMapMessage(mapID, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_ATTACK_REQUEST), reqData, playerID, meta); err != nil {
 		return 0, 0, err
 	}
 
@@ -842,6 +762,34 @@ func (ms *MapService) HandleMonsterDeath(playerID id.PlayerIdType, mapID id.MapI
 	}
 
 	return ms.HandleBattleReward(reward)
+}
+
+// HandleAOINotify 处理 MapServer 回程的 AOI 视野事件（Phase 2.3）：把事件路由到 watcher
+// 玩家 Actor，复用既有推送链（player_aoi_handler → EntityXxxViewNotify → pushToClient）。
+// 与 subscribeAOIEvents 的本地路径等价，区别是事件源为跨服 MapServer（权威）。
+func (ms *MapService) HandleAOINotify(watcherID, targetID int64, mapID int32, eventType uint32, x, y, z float32) {
+	if ms.playerManager == nil {
+		return
+	}
+	zLog.Debug("HandleAOINotify routing to player",
+		zap.Int64("watcher", watcherID), zap.Int64("target", targetID), zap.Uint32("evt", eventType))
+	req := &player.AOIViewRequest{
+		WatcherID: id.PlayerIdType(watcherID),
+		TargetID:  targetID,
+		MapID:     id.MapIdType(mapID),
+		PosX:      x,
+		PosY:      y,
+		PosZ:      z,
+	}
+	watcher := id.PlayerIdType(watcherID)
+	switch eventType {
+	case crossserver.MsgInternalAOIEnter:
+		_ = ms.playerManager.RouteMessage(watcher, player.NewPlayerMessage(watcher, player.SourceMapServer, player.MsgAOIEnterView, req))
+	case crossserver.MsgInternalAOILeave:
+		_ = ms.playerManager.RouteMessage(watcher, player.NewPlayerMessage(watcher, player.SourceMapServer, player.MsgAOILeaveView, req))
+	case crossserver.MsgInternalAOIMove:
+		_ = ms.playerManager.RouteMessage(watcher, player.NewPlayerMessage(watcher, player.SourceMapServer, player.MsgAOIMove, req))
+	}
 }
 
 // subscribeAOIEvents 订阅 AOI 视野事件，将事件转发给 PlayerManager 投递到玩家 Actor

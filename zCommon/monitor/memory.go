@@ -213,10 +213,12 @@ func (mm *MemoryMonitor) ForceGC() {
 
 type ServiceMonitor struct {
 	monitor   *MemoryMonitor
-	services  map[string]ServiceStats
+	services  map[string]*ServiceStats
 	serviceMu sync.RWMutex
 }
 
+// ServiceStats 服务运行时统计。含 atomic 字段，禁止按值拷贝，
+// 故 map 中以指针存储，快照通过 ServiceStatsSnapshot 返回。
 type ServiceStats struct {
 	Name       string
 	StartTime  time.Time
@@ -225,17 +227,27 @@ type ServiceStats struct {
 	ErrorCount atomic.Uint64
 }
 
+// ServiceStatsSnapshot 是 ServiceStats 的只读值快照，用于对外返回，
+// 避免拷贝 atomic 值（拷贝会破坏原子性）。
+type ServiceStatsSnapshot struct {
+	Name       string
+	StartTime  time.Time
+	MessageIn  uint64
+	MessageOut uint64
+	ErrorCount uint64
+}
+
 func NewServiceMonitor(alertConfig AlertConfig) *ServiceMonitor {
 	return &ServiceMonitor{
 		monitor:  NewMemoryMonitor(alertConfig),
-		services: make(map[string]ServiceStats),
+		services: make(map[string]*ServiceStats),
 	}
 }
 
 func (sm *ServiceMonitor) RegisterService(name string) {
 	sm.serviceMu.Lock()
 	defer sm.serviceMu.Unlock()
-	sm.services[name] = ServiceStats{
+	sm.services[name] = &ServiceStats{
 		Name:      name,
 		StartTime: time.Now(),
 	}
@@ -284,9 +296,18 @@ func (sm *ServiceMonitor) GetMemoryStats() MemoryStats {
 	return sm.monitor.Collect()
 }
 
-func (sm *ServiceMonitor) GetServiceStats(name string) (ServiceStats, bool) {
+func (sm *ServiceMonitor) GetServiceStats(name string) (ServiceStatsSnapshot, bool) {
 	sm.serviceMu.RLock()
 	defer sm.serviceMu.RUnlock()
 	s, ok := sm.services[name]
-	return s, ok
+	if !ok {
+		return ServiceStatsSnapshot{}, false
+	}
+	return ServiceStatsSnapshot{
+		Name:       s.Name,
+		StartTime:  s.StartTime,
+		MessageIn:  s.MessageIn.Load(),
+		MessageOut: s.MessageOut.Load(),
+		ErrorCount: s.ErrorCount.Load(),
+	}, true
 }

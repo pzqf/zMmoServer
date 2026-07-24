@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+# zMmoServer 是多模块仓库，各子模块（zCommon/GameServer/MapServer/...）的 go.mod 用相对
+# replace 指向兄弟仓库（../../zEngine、../../zUtil）与内部模块（../zCommon）。CI 因此把
+# zUtil / zEngine / zMmoServer 检出为**兄弟目录**，relative replace 才能解析。
+# 对应本地的 scripts/ci-check.ps1（逐模块 build+vet），此处在 Linux 复现并叠加 -race。
+jobs:
+  build-vet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout zUtil (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: pzqf/zUtil
+          path: zUtil
+      - name: Checkout zEngine (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: pzqf/zEngine
+          path: zEngine
+      - name: Checkout zMmoServer
+        uses: actions/checkout@v4
+        with:
+          path: zMmoServer
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.5'
+
+      - name: Build + Vet all modules
+        working-directory: zMmoServer
+        run: |
+          set -e
+          for m in zCommon GlobalServer GatewayServer GameServer MapServer GameClient; do
+            echo "==== $m ===="
+            go -C "$m" build ./...
+            go -C "$m" vet ./...
+          done
+
+      # 一致性/持久化包 -race（需 MySQL 的集成测试未设 DSN 时自动 t.Skip，不阻塞 CI）。
+      - name: Test zCommon with -race
+        working-directory: zMmoServer
+        run: go -C zCommon test -race -count=1 -timeout 300s ./consistency/... ./crossserver/... ./game/... ./aoi/...
