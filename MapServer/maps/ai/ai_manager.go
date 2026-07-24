@@ -58,11 +58,12 @@ type MonsterAI struct {
 	monster         *object.Monster
 	mapRef          PlayerQuerier
 	aiConfig        *models.AI
-	state           AIState
-	lastStateChange time.Time
-	patrolIndex     int
-	currentSkill    int
-	skillCooldowns  map[int32]time.Time
+	state            AIState
+	lastStateChange  time.Time
+	patrolIndex      int
+	patrolPauseUntil time.Time // MAP-3: 到达巡逻点后的非阻塞停留到期时间(替代 time.Sleep)
+	currentSkill     int
+	skillCooldowns   map[int32]time.Time
 }
 
 type AIState int
@@ -266,10 +267,20 @@ func (ai *MonsterAI) updatePatrolBehavior() {
 			return
 		}
 
+		// MAP-3: 巡逻点停留改为非阻塞的到期时间。绝不能在此 time.Sleep——本函数由 100ms
+		// 游戏主循环在 AIManager.Update 的 RLock 下调用，Sleep 会冻结整张地图的 AI/Buff/玩家
+		// 更新并阻塞 AI 增删(RemoveMonsterAI 拿写锁)。
+		if !ai.patrolPauseUntil.IsZero() {
+			if time.Now().Before(ai.patrolPauseUntil) {
+				return // 仍在停留窗口内，原地等待
+			}
+			ai.patrolPauseUntil = time.Time{} // 停留结束，继续巡逻
+		}
+
 		nextPoint := monster.GetNextPatrolPoint()
 		distance := monster.GetPosition().DistanceTo(nextPoint)
 		if distance <= 1.0 {
-			time.Sleep(2 * time.Second)
+			ai.patrolPauseUntil = time.Now().Add(2 * time.Second) // 到点后非阻塞停留
 		} else {
 			monster.Move(nextPoint)
 		}

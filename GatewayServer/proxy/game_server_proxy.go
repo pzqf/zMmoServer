@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -35,7 +36,7 @@ type pendingMessage struct {
 type gameServerProxy struct {
 	config        *config.Config
 	clientService common.ClientServiceInterface
-	tcpClient     *zNet.TcpClient
+	tcpClient     atomic.Pointer[zNet.TcpClient] // GW-2: 跨 goroutine(轮询/watch/Send)并发读写，原子化避免竞争
 	discovery     *discovery.ServiceDiscovery
 	gameServers   []*discovery.ServerInfo
 	pendingQueue  []pendingMessage
@@ -66,15 +67,16 @@ func (gsp *gameServerProxy) Start(ctx context.Context) error {
 func (gsp *gameServerProxy) Stop(ctx context.Context) error {
 	zLog.Info("Stopping GameServer proxy...")
 
-	if gsp.tcpClient != nil {
-		gsp.tcpClient.Close()
+	if c := gsp.tcpClient.Load(); c != nil {
+		c.Close()
 	}
 
 	return nil
 }
 
 func (gsp *gameServerProxy) IsConnected() bool {
-	return gsp.tcpClient != nil && gsp.tcpClient.IsConnected()
+	c := gsp.tcpClient.Load()
+	return c != nil && c.IsConnected()
 }
 
 func (gsp *gameServerProxy) discoverAndConnectGameServers(ctx context.Context) {
@@ -96,7 +98,7 @@ func (gsp *gameServerProxy) discoverAndConnectGameServers(ctx context.Context) {
 }
 
 func (gsp *gameServerProxy) tryDiscoverAndConnect() {
-	if gsp.tcpClient != nil && gsp.tcpClient.IsConnected() {
+	if c := gsp.tcpClient.Load(); c != nil && c.IsConnected() {
 		return
 	}
 
@@ -167,19 +169,20 @@ func (gsp *gameServerProxy) handleGameServerStatusChange(event *discovery.Server
 		return
 	}
 
+	c := gsp.tcpClient.Load()
 	if event.EventType == "add" || event.Status == "healthy" || event.Status == "ready" {
-		if gsp.tcpClient == nil || !gsp.tcpClient.IsConnected() {
+		if c == nil || !c.IsConnected() {
 			zLog.Info("GameServer became available, triggering immediate discovery")
 			go gsp.tryDiscoverAndConnect()
 		}
 	}
 
-	if gsp.tcpClient != nil && gsp.tcpClient.IsConnected() {
+	if c != nil && c.IsConnected() {
 		if event.Status == "maintenance" || event.Status == "stopped" {
 			zLog.Warn("Current GameServer status changed to unhealthy, closing connection",
 				zap.String("server_id", event.ServerID),
 				zap.String("status", string(event.Status)))
-			gsp.tcpClient.Close()
+			c.Close()
 		}
 	}
 }
@@ -232,7 +235,7 @@ func (gsp *gameServerProxy) connectToGameServer(instance *discovery.ServerInfo) 
 		DisableEncryption: true,
 	}
 
-	gsp.tcpClient = zNet.NewTcpClient(clientConfig,
+	newClient := zNet.NewTcpClient(clientConfig,
 		zNet.WithClientLogger(zLog.GetStandardLogger()),
 		zNet.WithClientStateCallback(func(state zNet.ClientState) {
 			switch state {
@@ -247,9 +250,15 @@ func (gsp *gameServerProxy) connectToGameServer(instance *discovery.ServerInfo) 
 		}),
 	)
 
-	gsp.tcpClient.RegisterDispatcher(gsp.handleGameServerMessage)
+	newClient.RegisterDispatcher(gsp.handleGameServerMessage)
 
-	err = gsp.tcpClient.Connect()
+	// GW-2: 先原子换入(flush 依赖已就位的 client)，并关闭旧 client——
+	// 旧 client 的 AutoReconnect 监控 goroutine 若不关会持续重连、泄漏并产生重复连接。
+	if old := gsp.tcpClient.Swap(newClient); old != nil {
+		old.Close()
+	}
+
+	err = newClient.Connect()
 	if err != nil {
 		zLog.Error("Failed to connect to GameServer", zap.Error(err), zap.String("addr", instance.Address))
 		return
@@ -333,7 +342,7 @@ func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
 }
 
 func (gsp *gameServerProxy) SendToGameServer(sessionID zNet.SessionIdType, protoId int32, data []byte) error {
-	if gsp.tcpClient == nil || !gsp.tcpClient.IsConnected() {
+	if c := gsp.tcpClient.Load(); c == nil || !c.IsConnected() {
 		gsp.pendingMu.Lock()
 		if len(gsp.pendingQueue) < 100 {
 			gsp.pendingQueue = append(gsp.pendingQueue, pendingMessage{
@@ -383,7 +392,11 @@ func (gsp *gameServerProxy) sendToGameServerInternal(sessionID zNet.SessionIdTyp
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGateway, int32(gsp.config.Server.ServerID))
 	wrappedData := crossserver.Wrap(meta, crossMsgData)
 
-	err = gsp.tcpClient.Send(zNet.ProtoIdType(protoId), wrappedData)
+	c := gsp.tcpClient.Load()
+	if c == nil {
+		return fmt.Errorf("not connected to GameServer")
+	}
+	err = c.Send(zNet.ProtoIdType(protoId), wrappedData)
 	if err != nil {
 		zLog.Error("Failed to send message to GameServer", zap.Error(err))
 		return err
