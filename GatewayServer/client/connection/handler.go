@@ -54,14 +54,21 @@ func (ch *ClientHandler) OnConnect(session zNet.Session) {
 
 // OnClose 客户端断开连接回调
 func (ch *ClientHandler) OnClose(session zNet.Session) {
-	clientIP := session.GetClientIP()
 	clientID := session.GetSid()
+
+	// GW-1：会话已从 TcpServer 移除，此回调收到的 wrapper 的 GetClientIP() 返回 ""，
+	// 直接用会导致 RemoveConnection("") → 真实 IP 的连接计数只增不减、达上限后误封整个
+	// IP（自我 DoS）。从 connMgr 查回连接时存下的真实 IP（在 RemoveSession 删除之前）。
+	clientIP := ""
+	if info, ok := ch.connMgr.GetSessionInfo(clientID); ok {
+		clientIP = info.ClientAddr
+	}
 
 	zLog.Info("Client disconnected",
 		zap.Uint64("client_id", uint64(clientID)),
 		zap.String("client_ip", clientIP))
 
-	// 移除连接计数
+	// 移除连接计数（用真实 IP）
 	ch.securityManager.RemoveConnection(clientIP)
 
 	// 从连接管理器中移除会话

@@ -273,15 +273,15 @@ func (m *MemoryInbox) TryAccept(requestID uint64) bool {
 		return true
 	}
 
-	_, exists := m.entries.Load(requestID)
-	if exists {
-		return false
-	}
-
-	m.entries.Store(requestID, inboxEntry{
+	// INF-5：用原子 LoadOrStore 做幂等接受。此前 Load-then-Store 非原子——两个并发同
+	// requestID 的调用可同时判"不存在"、同时 Store、同时返回 true → 去重失效、消息被处理两次。
+	_, loaded := m.entries.LoadOrStore(requestID, inboxEntry{
 		processedAt: time.Now(),
 		acked:       false,
 	})
+	if loaded {
+		return false // 已存在 = 重复
+	}
 	m.count.Add(1)
 	return true
 }

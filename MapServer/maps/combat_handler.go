@@ -102,8 +102,8 @@ func (m *Map) handleMonsterDeath(monster *object.Monster, killer common.IGameObj
 
 	if m.lootSystem != nil {
 		lootResults := m.lootSystem.GenerateLoot(monster.GetMonsterID(), monster.GetLevel(), monster.GetDifficulty())
-		for i, lootItem := range lootResults {
-			itemObjectID := id.ObjectIdType(time.Now().UnixNano()%1000000000 + int64(i)*10000 + int64(lootItem.ItemID))
+		for _, lootItem := range lootResults {
+			itemObjectID := nextMapObjectID()
 			newItem := object.NewItem(itemObjectID, lootItem.ItemID, "Loot", monster.GetPosition(), lootItem.Count,
 				object.ItemTypeConsumable, object.ItemRarityCommon)
 			m.AddObject(newItem)
@@ -131,7 +131,7 @@ func (m *Map) scheduleMonsterRespawn(monster *object.Monster) {
 
 	go func() {
 		time.Sleep(time.Duration(respawnTime) * time.Second)
-		objectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
+		objectID := nextMapObjectID()
 		newMonster := object.NewMonster(objectID, monsterConfigID, "Monster", monsterPos, 1)
 
 		if m.lootSystem != nil {
@@ -152,7 +152,7 @@ func (m *Map) scheduleMonsterRespawn(monster *object.Monster) {
 func (m *Map) dropItems(position common.Vector3, monsterLevel int32) {
 	if rand.Float32() < 0.5 {
 		itemID := int32(1)
-		itemObjectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
+		itemObjectID := nextMapObjectID()
 		newItem := object.NewItem(itemObjectID, itemID, "Test Item", position, 1, object.ItemTypeConsumable, object.ItemRarityCommon)
 		m.AddObject(newItem)
 

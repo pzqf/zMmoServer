@@ -141,7 +141,7 @@ func (sm *SpawnManager) spawnObject(spawnPoint *SpawnPoint) {
 }
 
 func (sm *SpawnManager) spawnMonster(spawnPoint *SpawnPoint) {
-	objectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
+	objectID := nextMapObjectID()
 
 	monster := object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, 1)
 
@@ -157,7 +157,7 @@ func (sm *SpawnManager) spawnMonster(spawnPoint *SpawnPoint) {
 }
 
 func (sm *SpawnManager) spawnNPC(spawnPoint *SpawnPoint) {
-	objectID := id.ObjectIdType(time.Now().UnixNano() % 1000000000)
+	objectID := nextMapObjectID()
 
 	npc := object.NewNPC(objectID, spawnPoint.objectID, "NPC_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, "Hello, adventurer!")
 
