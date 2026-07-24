@@ -141,8 +141,8 @@ func (c *Config) Validate() error {
 	if c.Server.ServerID <= 0 {
 		return fmt.Errorf("ServerID must be greater than 0")
 	}
-	if c.Server.JWTSecret == "" {
-		return fmt.Errorf("Server.JWTSecret is required, please set in config.ini or JWT_SECRET env")
+	if len(c.Server.JWTSecret) < 32 {
+		return fmt.Errorf("Server.JWTSecret is required and must be at least 32 chars (set in config.ini or JWT_SECRET env); must match all GatewayServers")
 	}
 	if c.Server.TokenExpiryHours <= 0 {
 		return fmt.Errorf("Server.TokenExpiryHours must be greater than 0")

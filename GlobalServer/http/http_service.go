@@ -227,9 +227,19 @@ func (s *HttpService) handleHealthCheck(c echo.Context) error {
 
 // handleShutdown handles shutdown requests for testing graceful shutdown
 func (s *HttpService) handleShutdown(c echo.Context) error {
-	zLog.Info("Shutdown requested via HTTP API")
+	// SEC-3：/shutdown 仅允许**本机**触发，拒绝远程——否则任何能访问 8888 端口的人可单包关停
+	// 全局服（账号/登录/服务器列表的唯一入口）。用真实 TCP peer RemoteAddr 判断 loopback，
+	// 不用 c.RealIP()（后者受 X-Forwarded-For 欺骗）。
+	host, _, err := net.SplitHostPort(c.Request().RemoteAddr)
+	if err != nil {
+		host = c.Request().RemoteAddr
+	}
+	if ip := net.ParseIP(host); ip == nil || !ip.IsLoopback() {
+		zLog.Warn("Rejected non-local shutdown request", zap.String("remote", c.Request().RemoteAddr))
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "shutdown allowed from localhost only"})
+	}
 
-	// 触发关闭回调
+	zLog.Info("Shutdown requested via HTTP API (localhost)")
 	if s.shutdownFunc != nil {
 		go s.shutdownFunc() // 在 goroutine 中执行，避免阻塞 HTTP 响应
 	}

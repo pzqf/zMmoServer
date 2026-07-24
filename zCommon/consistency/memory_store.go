@@ -98,22 +98,16 @@ func (m *MemoryOutbox) Add(msg OutboxMessage) {
 	m.messages.Store(msg.RequestID, msg)
 }
 
+// MarkSent 标记已发送。GS-1：直接删除条目而非仅置标志——本系统跨服发送为 fire-and-forget
+// 无 ack 回执（MarkAcked 无任何调用方），"已发送"即终态，保留会导致 outbox map 随每次
+// move/attack 无界增长最终 OOM。发送失败走 MarkAttempt（保留待重试），不受影响。
 func (m *MemoryOutbox) MarkSent(requestID uint64) {
-	if msg, ok := m.messages.Load(requestID); ok {
-		msg.Sent = true
-		msg.LastAttemptAt = time.Now()
-		m.messages.Store(requestID, msg)
-	}
+	m.messages.Delete(requestID)
 }
 
+// MarkAcked 收到确认（当前无调用方；语义上确认送达即可删除）。
 func (m *MemoryOutbox) MarkAcked(requestID uint64) {
-	if msg, ok := m.messages.Load(requestID); ok {
-		msg.Acked = true
-		msg.Sent = true
-		m.messages.Store(requestID, msg)
-		zLog.Debug("Outbox message acknowledged",
-			zap.Uint64("request_id", requestID))
-	}
+	m.messages.Delete(requestID)
 }
 
 func (m *MemoryOutbox) MarkAttempt(requestID uint64, err error) {

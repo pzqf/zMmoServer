@@ -204,6 +204,13 @@ func (ls *LoginService) Reconnect(newSessionID string, playerID id.PlayerIdType,
 		return fmt.Errorf("get player failed: %w", err)
 	}
 
+	// GS-2：把 Player Actor 的 sessionID 更新为新会话——否则重连后所有 AOI 视野/服务端推送
+	// 仍用旧的（已死）sessionID 发送（player_aoi_handler 用 p.sessionID），全部丢失。
+	// 与原始登录路径一致（见 Login 里的 SetSessionInfo）。
+	if ls.playerManager.clientSender != nil {
+		p.SetSessionInfo(newSessionID, ls.playerManager.clientSender)
+	}
+
 	if err := ls.playerManager.ResumePlayer(playerID); err != nil {
 		zLog.Warn("Failed to resume player lifecycle", zap.Error(err))
 	}

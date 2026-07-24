@@ -228,8 +228,9 @@ func (s *Skill) CalculateDamageToMonster(target *object.Monster) int32 {
 
 // CheckHit 检查是否命中目标
 func (s *Skill) CheckHit(targetPosition common.Vector3) bool {
-	// 计算距离平方
-	distSq := s.position.DistanceTo(targetPosition)
+	// MAP-1：DistanceTo 返回真实距离(sqrt)，此前拿它比 rangeSq → 技能射程被平方放大。
+	// 改用 DistanceSquared 与 range² 同量纲比较。
+	distSq := s.position.DistanceSquared(targetPosition)
 	rangeSq := s.skillRange * s.skillRange
 	return distSq <= rangeSq
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -88,7 +89,9 @@ type MySQLConnector struct {
 	BaseConnector
 	db           *sql.DB                  // MySQL数据库连接
 	wg           sync.WaitGroup           // 等待组，用于优雅关闭
-	isRunning    bool                     // 运行状态
+	isRunning    atomic.Bool              // 运行状态（原子：多 goroutine 读写，此前裸 bool 竞争）
+	done         chan struct{}            // 关闭信号：替代 close(queryCh)，杜绝 send-on-closed panic
+	closeOnce    sync.Once                // 保证 Close 只执行一次
 	queryCh      chan *DBQuery            // 查询通道
 	capacity     int                      // 通道容量
 	workerCount  int                      // 工作协程数量
@@ -107,6 +110,7 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 			driver: "mysql",
 		},
 		queryCh:      make(chan *DBQuery, capacity),
+		done:         make(chan struct{}),
 		capacity:     capacity,
 		workerCount:  10, // 默认10个工作协程
 		metrics:      metrics.GetBusinessMetrics("mysql_" + name),
@@ -144,8 +148,12 @@ func (c *MySQLConnector) Init(dbConfig DBConfig) error {
 		timeout,
 	)
 
-	// 打印DSN字符串（包含密码，用于调试）
-	zLog.Info("Connecting to MySQL database", zap.String("dsn", dsn))
+	// 连接信息脱敏：不打印含密码的 DSN（OPT-3）。
+	zLog.Info("Connecting to MySQL database",
+		zap.String("host", dbConfig.Host),
+		zap.Int("port", dbConfig.Port),
+		zap.String("dbname", dbConfig.DBName),
+		zap.String("user", dbConfig.User))
 
 	// 打开数据库连接
 	var err error
@@ -177,12 +185,12 @@ func (c *MySQLConnector) Init(dbConfig DBConfig) error {
 
 // Start 启动MySQL数据库连接和查询处理协程
 func (c *MySQLConnector) Start() error {
-	if c.isRunning {
+	if c.isRunning.Load() {
 		return nil
 	}
 
 	zLog.Info("Starting MySQL connector...", zap.String("name", c.name))
-	c.isRunning = true
+	c.isRunning.Store(true)
 
 	// 启动多个查询处理协程
 	zLog.Info("Starting query worker goroutines...", zap.Int("count", c.workerCount))
@@ -215,13 +223,13 @@ func (c *MySQLConnector) cacheCleaner() {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	for c.isRunning {
+	// select on done：既修 isRunning 裸 bool 竞争，也去掉此前每 100ms 的忙轮询。
+	for {
 		select {
 		case <-ticker.C:
 			c.cacheManager.Clear()
-		default:
-			// 非阻塞检查，避免被阻塞
-			time.Sleep(100 * time.Millisecond)
+		case <-c.done:
+			return
 		}
 	}
 }
@@ -233,7 +241,7 @@ func (c *MySQLConnector) metricsPrinter() {
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
-	for c.isRunning {
+	for {
 		select {
 		case <-ticker.C:
 			counters := c.metrics.GetAllCounters()
@@ -249,9 +257,8 @@ func (c *MySQLConnector) metricsPrinter() {
 				zap.String("database", c.name),
 				zap.Any("stats", stats),
 			)
-		default:
-			// 非阻塞检查，避免被阻塞
-			time.Sleep(100 * time.Millisecond)
+		case <-c.done:
+			return
 		}
 	}
 }
@@ -260,28 +267,34 @@ func (c *MySQLConnector) metricsPrinter() {
 func (c *MySQLConnector) queryWorker() {
 	defer c.wg.Done()
 
-	for query := range c.queryCh {
-		startTime := time.Now()
-		c.metrics.IncCounter("total_queries")
+	for {
+		select {
+		case query := <-c.queryCh:
+			startTime := time.Now()
+			c.metrics.IncCounter("total_queries")
 
-		rows, err := c.db.Query(query.Query, query.Args...)
-		latency := time.Since(startTime)
-		c.metrics.RecordTimer("query_latency", latency)
+			rows, err := c.db.Query(query.Query, query.Args...)
+			c.metrics.RecordTimer("query_latency", time.Since(startTime))
 
-		if err != nil {
-			c.metrics.IncCounter("total_errors")
-			zLog.Error("Failed to execute MySQL query", zap.Error(err), zap.String("sql", query.Query))
-		}
+			if err != nil {
+				c.metrics.IncCounter("total_errors")
+				zLog.Error("Failed to execute MySQL query", zap.Error(err), zap.String("sql", query.Query))
+			}
 
-		if query.Callback != nil {
-			query.Callback(rows, err)
+			if query.Callback != nil {
+				query.Callback(rows, err)
+			} else if rows != nil {
+				_ = rows.Close() // 无回调时也须关闭 rows，否则连接泄漏（INF-8）
+			}
+		case <-c.done:
+			return
 		}
 	}
 }
 
 // Query 异步执行MySQL数据库查询
 func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sql.Rows, error)) {
-	if !c.isRunning {
+	if !c.isRunning.Load() {
 		zLog.Error("MySQLConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql connector is not running"))
@@ -289,13 +302,14 @@ func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sq
 		return
 	}
 
-	// 发送查询请求到通道
+	// 发送查询请求到通道。select 含 done：Close 后不再向 queryCh 发送——配合 Close 不
+	// close(queryCh) 一起杜绝 send-on-closed panic（此前 Close 关 channel 与本处发送有竞态）。
 	select {
-	case c.queryCh <- &DBQuery{
-		Query:    sql,
-		Args:     args,
-		Callback: callback,
-	}:
+	case c.queryCh <- &DBQuery{Query: sql, Args: args, Callback: callback}:
+	case <-c.done:
+		if callback != nil {
+			callback(nil, fmt.Errorf("mysql connector is closing"))
+		}
 	default:
 		zLog.Error("MySQL query channel is full")
 		if callback != nil {
@@ -306,7 +320,7 @@ func (c *MySQLConnector) Query(sql string, args []interface{}, callback func(*sq
 
 // Execute 异步执行MySQL数据库执行操作（插入、更新、删除等）
 func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(sql.Result, error)) {
-	if !c.isRunning {
+	if !c.isRunning.Load() {
 		zLog.Error("MySQLConnector is not running")
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql connector is not running"))
@@ -336,25 +350,25 @@ func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(s
 
 // Close 关闭MySQL数据库连接
 func (c *MySQLConnector) Close() error {
-	if !c.isRunning {
-		return nil
-	}
-
-	c.isRunning = false
-
-	// 停止查询协程
-	close(c.queryCh)
-	c.wg.Wait()
-
-	// 关闭数据库连接
-	if c.db != nil {
-		if err := c.db.Close(); err != nil {
-			return fmt.Errorf("failed to close MySQL connection: %v", err)
+	var closeErr error
+	// closeOnce：防止重复 Close 二次 close(done) panic；用 done 信号停 worker，
+	// 不 close(queryCh)——配合 Query 侧 select done，杜绝 send-on-closed。
+	c.closeOnce.Do(func() {
+		if !c.isRunning.Load() {
+			return
 		}
-	}
-
-	zLog.Info("MySQL connection closed")
-	return nil
+		c.isRunning.Store(false)
+		close(c.done)
+		c.wg.Wait()
+		if c.db != nil {
+			if err := c.db.Close(); err != nil {
+				closeErr = fmt.Errorf("failed to close MySQL connection: %v", err)
+				return
+			}
+		}
+		zLog.Info("MySQL connection closed")
+	})
+	return closeErr
 }
 
 // GetDriver 获取当前数据库驱动类型
@@ -380,7 +394,7 @@ func (c *MySQLConnector) GetMongoDB() *mongo.Database {
 }
 
 func (c *MySQLConnector) QuerySync(query string, args ...interface{}) (*sql.Rows, error) {
-	if !c.isRunning {
+	if !c.isRunning.Load() {
 		return nil, fmt.Errorf("mysql connector is not running")
 	}
 	startTime := time.Now()
@@ -394,7 +408,7 @@ func (c *MySQLConnector) QuerySync(query string, args ...interface{}) (*sql.Rows
 }
 
 func (c *MySQLConnector) ExecSync(query string, args ...interface{}) (sql.Result, error) {
-	if !c.isRunning {
+	if !c.isRunning.Load() {
 		return nil, fmt.Errorf("mysql connector is not running")
 	}
 	startTime := time.Now()

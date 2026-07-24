@@ -3,6 +3,7 @@ package combat
 import (
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -45,7 +46,9 @@ func (cs *CombatSystem) CalculatePhysicalDamage(attacker *object.Player, target 
 
 	baseDamage := float64(attackPower) * (100.0 / (100.0 + float64(defense)))
 	variance := 0.1 * baseDamage
-	damage := int64(baseDamage + variance*(0.5-float64(time.Now().UnixNano()%1000)/1000.0))
+	// MAP-9：伤害浮动用真随机（math/rand/v2，goroutine 安全）。此前用 time.Now().UnixNano()%1000
+	// 当随机 → 可预测、且同毫秒内连续攻击取到相同值。
+	damage := int64(baseDamage + variance*(0.5-rand.Float64()))
 
 	if damage < 1 {
 		damage = 1
@@ -134,7 +137,9 @@ func (cs *CombatSystem) ApplyDamage(target common.IGameObject, result DamageResu
 func (cs *CombatSystem) IsInRange(attacker common.IGameObject, target common.IGameObject, range_ float32) bool {
 	attackerPos := attacker.GetPosition()
 	targetPos := target.GetPosition()
-	distSq := attackerPos.DistanceTo(targetPos)
+	// MAP-1：DistanceTo 返回真实距离(sqrt)，此前拿它比 range² → 射程被平方放大(range 3 实际允许 9)。
+	// 改用 DistanceSquared 与 range² 比较（同量纲、且省一次 sqrt）。
+	distSq := attackerPos.DistanceSquared(targetPos)
 	return distSq <= range_*range_
 }
 
@@ -173,7 +178,8 @@ func (cs *CombatSystem) IsCriticalHit(player *object.Player) bool {
 	if critRate > 0.5 {
 		critRate = 0.5
 	}
-	return float64(time.Now().UnixNano()%1000)/1000.0 < critRate
+	// MAP-9：暴击判定用真随机（此前 time.Now()%1000 可被卡时序稳定触发暴击）。
+	return rand.Float64() < critRate
 }
 
 func (cs *CombatSystem) CanAttack(attacker common.IGameObject, lastAttackTime time.Time) bool {

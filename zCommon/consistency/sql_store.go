@@ -132,12 +132,14 @@ func (o *SQLOutbox) Add(msg OutboxMessage) {
 		msg.CreatedAt, nullTime(msg.LastAttemptAt), nullTime(msg.NextRetryAt))
 }
 
+// MarkSent 标记已发送。GS-1：直接删除行（与内存版一致）——fire-and-forget 无 ack，"已发送"即终态，
+// 保留会让 outbox 表随每次跨服发送无界增长。发送失败走 MarkAttempt（保留待重试）。
 func (o *SQLOutbox) MarkSent(requestID uint64) {
-	o.exec("UPDATE "+o.table+" SET sent=1, last_attempt_at=? WHERE request_id=?", time.Now(), requestID)
+	o.exec("DELETE FROM "+o.table+" WHERE request_id=?", requestID)
 }
 
 func (o *SQLOutbox) MarkAcked(requestID uint64) {
-	o.exec("UPDATE "+o.table+" SET acked=1, sent=1 WHERE request_id=?", requestID)
+	o.exec("DELETE FROM "+o.table+" WHERE request_id=?", requestID)
 }
 
 func (o *SQLOutbox) MarkAttempt(requestID uint64, cause error) {

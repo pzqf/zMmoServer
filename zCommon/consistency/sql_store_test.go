@@ -56,13 +56,7 @@ func TestSQLOutbox_PersistAcrossRestart(t *testing.T) {
 		t.Fatalf("pending must survive restart: got %d want 1", got)
 	}
 
-	// 标记已发送 → 不再 pending。
-	ob.MarkSent(id)
-	if got := ob.CountPending(); got != 0 {
-		t.Fatalf("pending after MarkSent: got %d want 0", got)
-	}
-
-	// 记一次失败尝试 → 重新变为待投递（sent=0），但退避未到则暂不可 retry。
+	// 记一次失败尝试 → 仍待投递(sent=0)，但退避未到则暂不可 retry。
 	ob.MarkAttempt(id, errBoom{})
 	if got := ob.CountPending(); got != 1 {
 		t.Fatalf("pending after failed attempt: got %d want 1", got)
@@ -82,6 +76,17 @@ func TestSQLOutbox_PersistAcrossRestart(t *testing.T) {
 	}
 	if got := ob.CountPending(); got != 0 {
 		t.Fatalf("dead letter should not count as pending, got %d", got)
+	}
+
+	// MarkSent 直接删除条目（GS-1：fire-and-forget 无 ack，已发送即终态，避免 outbox 无界增长）。
+	const id2 = uint64(100002)
+	ob.Add(OutboxMessage{RequestID: id2, Topic: "t", ProtoID: 1, Payload: []byte("x")})
+	if got := ob.CountPending(); got != 1 {
+		t.Fatalf("pending after add id2: got %d want 1", got)
+	}
+	ob.MarkSent(id2)
+	if got := ob.CountPending(); got != 0 {
+		t.Fatalf("MarkSent must remove the row (pending): got %d want 0", got)
 	}
 }
 

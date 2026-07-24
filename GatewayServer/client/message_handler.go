@@ -67,6 +67,15 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 		return nil
 	}
 
+	// 鉴权门禁（SEC-1）：TOKEN_VERIFY 与心跳/PING 已在上面处理并 return；到这里的都是
+	// 业务消息，必须已通过 token 校验（会话已绑定 AccountID），否则网关沦为未认证开放中继。
+	if mh.authHandler == nil || !mh.authHandler.IsAuthenticated(sessionID) {
+		zLog.Warn("Unauthenticated message rejected, closing connection",
+			zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", protoId))
+		session.Close()
+		return fmt.Errorf("unauthenticated session")
+	}
+
 	if mh.gameServerProxy != nil {
 		err := mh.gameServerProxy.SendToGameServer(sessionID, protoId, packet.Data)
 		if err != nil {

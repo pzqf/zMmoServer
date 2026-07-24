@@ -101,7 +101,7 @@ func LoadConfig(configPath string) (*Config, error) {
 		MaxConnections:      zConfig.GetIntWithDefault(zcfg, "Server.MaxConnections", 10000),
 		ConnectionTimeout:   zConfig.GetIntWithDefault(zcfg, "Server.ConnectionTimeout", 300),
 		HeartbeatInterval:   zConfig.GetIntWithDefault(zcfg, "Server.HeartbeatInterval", 30),
-		JWTSecret:           zConfig.GetStringWithDefault(zcfg, "Server.JWTSecret", zConfig.GetEnv("JWT_SECRET", "zMmoServerSecretKey")),
+		JWTSecret:           zConfig.GetStringWithDefault(zcfg, "Server.JWTSecret", zConfig.GetEnv("JWT_SECRET", "")),
 		UseWorkerPool:       zConfig.GetBoolWithDefault(zcfg, "Server.UseWorkerPool", true),
 		WorkerPoolSize:      zConfig.GetIntWithDefault(zcfg, "Server.WorkerPoolSize", 100),
 		WorkerQueueSize:     zConfig.GetIntWithDefault(zcfg, "Server.WorkerQueueSize", 10000),
@@ -202,6 +202,11 @@ func LoadConfig(configPath string) (*Config, error) {
 func (c *Config) Validate() error {
 	if c.Server.ListenAddr == "" {
 		return fmt.Errorf("server listen address is required")
+	}
+	// JWTSecret 强制校验（SEC-2）：网关用它校验客户端 token，必须与 GlobalServer 签发所用同一强随机密钥。
+	// 此前默认硬编码 "zMmoServerSecretKey" 且不校验 → 任何人可用已知密钥伪造任意账号 token。
+	if len(c.Server.JWTSecret) < 32 {
+		return fmt.Errorf("JWTSecret is required and must be at least 32 chars (set via config or JWT_SECRET env); must match GlobalServer's")
 	}
 	if c.Server.MaxConnections <= 0 {
 		c.Server.MaxConnections = 10000
