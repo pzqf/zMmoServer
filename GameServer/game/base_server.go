@@ -121,7 +121,7 @@ func (s *BaseServer) initDatabase() error {
 	}
 
 	s.PlayerDAO = dao.NewPlayerDAO(dbConnector)
-	s.PlayerService = playerservice.NewPlayerService(s.PlayerDAO)
+	s.PlayerService = playerservice.NewPlayerService(s.PlayerDAO, dbConnector)
 	return nil
 }
 

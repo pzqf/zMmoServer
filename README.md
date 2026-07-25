@@ -296,9 +296,9 @@ Handler → Service → DAO → DBConnector → MySQL
 
 | 状态 | 载入 | 落库 | 说明 |
 |------|------|------|------|
-| 玩家属性 level/exp/gold/diamond | ✅ | ✅ savePlayer(周期+登出) | 已正确（本次修复载入缺口） |
-| 背包 / 技能 | ❌ | ❌ | DAO 表存在（player\_item/player\_skill）但**未接线**；当前内存态 + 测试种子 |
-| 仓库 | ❌ | ❌ | 无 DAO；内存态 |
+| 玩家属性 level/exp/gold/diamond | ✅ | ✅ savePlayer(周期+登出) | 已正确（修复载入缺口） |
+| 背包 / 技能 | ✅ | ✅ 登出存盘 | **已落库**：登录从 player\_items/player\_skills 载入、登出「先清后插」写回（原生 SQL 对齐真实表；重登直查 DB 校验一致） |
+| 仓库 | ❌ | ❌ | 无 DB 表；内存态 |
 | buff | ❌ | ❌ | 本就瞬时，合理 |
 | 队伍 / 交易会话 | — | — | 会话态，本就不持久（正确） |
 

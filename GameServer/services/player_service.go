@@ -7,6 +7,7 @@ import (
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/db/connector"
 	"github.com/pzqf/zCommon/db/dao"
 	"github.com/pzqf/zCommon/db/models"
 	"go.uber.org/zap"
@@ -38,6 +39,7 @@ type OnlinePlayer struct {
 
 type PlayerService struct {
 	playerDAO     *dao.PlayerDAO
+	connector     connector.DBConnector // 背包/技能持久化直接走原生 SQL（对齐真实表结构，可为 nil→降级不持久）
 	snowflake     *id.Snowflake
 	onlinePlayers map[id.PlayerIdType]*OnlinePlayer
 	onlineMu      sync.RWMutex
@@ -47,7 +49,7 @@ type PlayerService struct {
 	stopChan      chan struct{}
 }
 
-func NewPlayerService(playerDAO *dao.PlayerDAO) *PlayerService {
+func NewPlayerService(playerDAO *dao.PlayerDAO, dbConnector connector.DBConnector) *PlayerService {
 	snowflake, err := id.NewSnowflake(1, 1)
 	if err != nil {
 		zLog.Error("Failed to create snowflake", zap.Error(err))
@@ -56,6 +58,7 @@ func NewPlayerService(playerDAO *dao.PlayerDAO) *PlayerService {
 
 	ps := &PlayerService{
 		playerDAO:     playerDAO,
+		connector:     dbConnector,
 		snowflake:     snowflake,
 		onlinePlayers: make(map[id.PlayerIdType]*OnlinePlayer),
 		saveInterval:  30 * time.Second,
@@ -66,6 +69,103 @@ func NewPlayerService(playerDAO *dao.PlayerDAO) *PlayerService {
 	go ps.saveLoop()
 
 	return ps
+}
+
+// —— 背包 / 技能持久化（业务层建设 2026-07-25）——
+// 直接对齐**真实表结构**走原生 SQL（现有 dao.PlayerItemDAO/PlayerSkillDAO 的列名与线上表不符、
+// 且模型被别处复用不便改，故不用之）。真实列：
+//   player_items (id auto, player_id, item_id, count, position, is_equipped, created_at, updated_at)
+//   player_skills(id auto, player_id, skill_id, level, exp, is_active, created_at, updated_at)
+// 存盘用「先清后插」使 DB 与内存一致；id 自增，item_id/skill_id 为逻辑ID无唯一约束，跨玩家不冲突。
+
+// PersistItem 一条背包持久化记录（item_id=物品配置ID, slot=背包槽）。
+type PersistItem struct {
+	ConfigID int32
+	Count    int32
+	Slot     int32
+}
+
+// PersistSkill 一条技能持久化记录。
+type PersistSkill struct {
+	SkillID int32
+	Level   int32
+	Exp     int64
+}
+
+func (ps *PlayerService) LoadPlayerItems(playerID int64) ([]PersistItem, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync("SELECT item_id, count, position FROM player_items WHERE player_id = ?", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersistItem
+	for rows.Next() {
+		var it PersistItem
+		if err := rows.Scan(&it.ConfigID, &it.Count, &it.Slot); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+func (ps *PlayerService) SavePlayerItems(playerID int64, items []PersistItem) error {
+	if ps.connector == nil {
+		return nil
+	}
+	if _, err := ps.connector.ExecSync("DELETE FROM player_items WHERE player_id = ?", playerID); err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, it := range items {
+		if _, err := ps.connector.ExecSync(
+			"INSERT INTO player_items (player_id, item_id, count, position, is_equipped, created_at, updated_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+			playerID, it.ConfigID, it.Count, it.Slot, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ps *PlayerService) LoadPlayerSkills(playerID int64) ([]PersistSkill, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync("SELECT skill_id, level, exp FROM player_skills WHERE player_id = ?", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersistSkill
+	for rows.Next() {
+		var sk PersistSkill
+		if err := rows.Scan(&sk.SkillID, &sk.Level, &sk.Exp); err != nil {
+			return nil, err
+		}
+		out = append(out, sk)
+	}
+	return out, rows.Err()
+}
+
+func (ps *PlayerService) SavePlayerSkills(playerID int64, skills []PersistSkill) error {
+	if ps.connector == nil {
+		return nil
+	}
+	if _, err := ps.connector.ExecSync("DELETE FROM player_skills WHERE player_id = ?", playerID); err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, sk := range skills {
+		if _, err := ps.connector.ExecSync(
+			"INSERT INTO player_skills (player_id, skill_id, level, exp, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+			playerID, sk.SkillID, sk.Level, sk.Exp, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ps *PlayerService) Stop() {

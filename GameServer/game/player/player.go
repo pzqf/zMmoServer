@@ -1,7 +1,6 @@
 package player
 
 import (
-	"os"
 	"sync"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -55,13 +54,8 @@ func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string
 	}
 	baseActor.SetSelf(p)
 
-	// 业务层建设：测试种子物品（env ZMMO_TEST_ITEMS=1 门控，生产默认关）。放在 NewPlayer——所有
-	// 玩家构造的必经点，供物品/仓库 E2E 有货可操作。两件不同 configID → 落入背包 slot 0 / slot 1。
-	if os.Getenv("ZMMO_TEST_ITEMS") == "1" {
-		_, _ = p.inventory.AddItem(game.NewItem(1001, 1001, "TestPotion", game.ItemTypeConsumable, 3))
-		_, _ = p.inventory.AddItem(game.NewItem(1002, 1002, "TestMaterial", game.ItemTypeConsumable, 10))
-	}
-
+	// 背包/技能不再在此种子——已移至 player_persist.loadPlayerAssets（登录时先从 DB 载入，仅当 DB
+	// 无持久化背包时才按 ZMMO_TEST_ITEMS 种子），避免种子与持久化叠加累积。
 	return p
 }
 

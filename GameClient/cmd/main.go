@@ -30,6 +30,7 @@ func main() {
 	teamJoin := flag.Int("teamJoin", 0, "进图后加入指定队伍ID(>0 生效)")
 	tradeTarget := flag.Int64("tradeTarget", 0, "向该玩家发起交易(>0 生效,本方为发起者)")
 	tradeGold := flag.Int64("tradeGold", 0, "交易愿出金币(>0 则开启自动应价,双方均需设置)")
+	loginPlayerID := flag.Int64("loginPlayerID", 0, "复用已有角色ID登录(>0 跳过创建,用于持久化重登验证)")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -41,7 +42,7 @@ func main() {
 
 	switch *mode {
 	case "full":
-		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin, *tradeTarget, *tradeGold)
+		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin, *tradeTarget, *tradeGold, *loginPlayerID)
 	case "gateway-only":
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
@@ -57,7 +58,7 @@ func main() {
 }
 
 // runFullTest 运行完整测试（全局服+网关服）
-func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int, teamCreate bool, teamJoin int, tradeTarget, tradeGold int64) {
+func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int, teamCreate bool, teamJoin int, tradeTarget, tradeGold, loginPlayerID int64) {
 	fmt.Println("=== 完整测试模式 ===")
 
 	// 1. 连接GlobalServer，获取token
@@ -102,21 +103,25 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	}
 	fmt.Println("token验证成功!")
 
-	// 5. 创建角色
-	fmt.Println("5. 创建角色...")
-	if err := c.SendPlayerCreate(playerName, 1, 18); err != nil {
-		fmt.Printf("创建角色失败: %v\n", err)
-		c.Disconnect()
-		return
+	// 5. 创建 或 复用已有角色（-loginPlayerID>0 时跳过创建，直接登录该角色——用于持久化重登验证）
+	var playerID int64
+	if loginPlayerID > 0 {
+		playerID = loginPlayerID
+		fmt.Printf("5. 复用已有角色ID: %d（跳过创建）\n", playerID)
+	} else {
+		fmt.Println("5. 创建角色...")
+		if err := c.SendPlayerCreate(playerName, 1, 18); err != nil {
+			fmt.Printf("创建角色失败: %v\n", err)
+			c.Disconnect()
+			return
+		}
+		playerID = c.GetCreatedPlayerID()
+		if playerID == 0 {
+			fmt.Println("警告: 未获取到创建的角色ID，使用默认值1")
+			playerID = 1
+		}
+		fmt.Printf("使用角色ID: %d\n", playerID)
 	}
-
-	// 6. 等待角色创建完成
-	playerID := c.GetCreatedPlayerID()
-	if playerID == 0 {
-		fmt.Println("警告: 未获取到创建的角色ID，使用默认值1")
-		playerID = 1
-	}
-	fmt.Printf("使用角色ID: %d\n", playerID)
 
 	// 交易自动应价：若本方愿出金币，则一收到交易 OPEN 通知就设价+确认（事件驱动，双方各自开启即可成交）
 	if tradeGold > 0 {

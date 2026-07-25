@@ -68,6 +68,9 @@ func (ls *LoginService) EnterGame(sessionID string, playerID id.PlayerIdType) er
 		a.SetGold(info.Gold)
 		a.SetDiamond(info.Diamond)
 	}
+	// 从 DB 载入背包/技能到 actor（在 AddPlayer 前，actor 尚未处理消息 → 无并发）。
+	loadPlayerAssets(ls.playerService, p, playerID)
+
 	if ls.playerManager.mapOp != nil {
 		p.SetMapOperator(ls.playerManager.mapOp)
 	}
@@ -117,6 +120,8 @@ func (ls *LoginService) LeaveGame(playerID id.PlayerIdType) error {
 	}
 
 	ls.syncPlayerDataToService(p)
+	// 把 actor 的背包/技能写回 DB（登出存盘）。
+	savePlayerAssets(ls.playerService, p, playerID)
 
 	sess, exists := ls.sessionManager.GetSessionByPlayer(playerID)
 	if exists {
