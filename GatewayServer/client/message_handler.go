@@ -38,17 +38,18 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 		return fmt.Errorf("IP banned")
 	}
 
-	clientID := fmt.Sprintf("client_%d", sessionID)
-	allowed, reason := mh.antiCheatManager.CheckClientStatus(clientID)
+	// SEC-4: 反作弊按 clientIP 追踪，不再按 sessionID（`client_<sid>`）——否则客户端一重连即换
+	// sessionID、统计清零，作弊/爆包检测被轻易绕过。IP 在连接期稳定，重连仍归并同一 IP。
+	allowed, reason := mh.antiCheatManager.CheckClientStatus(clientIP)
 	if !allowed {
 		zLog.Warn("Client rejected due to cheat detection",
-			zap.String("client_id", clientID),
+			zap.String("client_ip", clientIP),
 			zap.String("reason", reason))
 		session.Close()
 		return fmt.Errorf("cheat detected: %s", reason)
 	}
 
-	mh.antiCheatManager.RecordClientAction(clientID, int(packet.DataSize))
+	mh.antiCheatManager.RecordClientAction(clientIP, int(packet.DataSize))
 
 	protoId := int32(packet.ProtoId)
 
@@ -72,6 +73,8 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 	if mh.authHandler == nil || !mh.authHandler.IsAuthenticated(sessionID) {
 		zLog.Warn("Unauthenticated message rejected, closing connection",
 			zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", protoId))
+		// SEC-4: 记一次错误——未认证却发业务消息属可疑，计入该 IP 的错误率触发反作弊。
+		mh.antiCheatManager.RecordError(clientIP, "unauthenticated")
 		session.Close()
 		return fmt.Errorf("unauthenticated session")
 	}
@@ -83,6 +86,7 @@ func (mh *MessageHandler) HandleMessage(session zNet.Session, packet *zNet.NetPa
 				zap.Error(err),
 				zap.Uint64("session_id", uint64(sessionID)),
 				zap.Int32("proto_id", protoId))
+			mh.antiCheatManager.RecordError(clientIP, "forward_failed") // SEC-4
 			return err
 		}
 	}

@@ -24,6 +24,7 @@ type ClientStats struct {
 	IP              string
 	LoginTime       time.Time
 	LastActionTime  time.Time
+	WindowStart     time.Time // SEC-4: 当前速率统计窗口起点，每分钟滚动重置 ActionCount/ErrorCount
 	ActionCount     int
 	PacketCount     int
 	ErrorCount      int
@@ -49,17 +50,28 @@ func NewAntiCheatManager(cfg *config.Config) *AntiCheatManager {
 
 // RecordClientAction 记录客户端行为
 func (acm *AntiCheatManager) RecordClientAction(ip string, packetSize int) {
+	now := time.Now()
 	stats, exists := acm.clientStats.Load(ip)
 	if !exists {
 		stats = &ClientStats{
 			IP:             ip,
-			LoginTime:      time.Now(),
-			LastActionTime: time.Now(),
+			LoginTime:      now,
+			LastActionTime: now,
+			WindowStart:    now,
 		}
 		acm.clientStats.Store(ip, stats)
 	}
 
-	stats.LastActionTime = time.Now()
+	// SEC-4: 每分钟滚动重置速率窗口。此前用 `time.Since(LoginTime) < 1min` 判定→登录一分钟后
+	// 速率检测永久失效、ActionCount 无界累积。改为真实滚动窗口，使"每分钟动作数上限"持续生效。
+	// AbnormalActions（累积违规数）不随窗口清零，由 CheckClientStatus 据其封禁。
+	if now.Sub(stats.WindowStart) >= time.Minute {
+		stats.WindowStart = now
+		stats.ActionCount = 0
+		stats.ErrorCount = 0
+	}
+
+	stats.LastActionTime = now
 	stats.ActionCount++
 	stats.PacketCount++
 
@@ -91,7 +103,8 @@ func (acm *AntiCheatManager) RecordError(ip string, errorType string) {
 func (acm *AntiCheatManager) checkAbnormalBehavior(stats *ClientStats) {
 	ac := acm.config.AntiCheat
 
-	if ac.MaxActionsPerMinute > 0 && stats.ActionCount > ac.MaxActionsPerMinute && time.Since(stats.LoginTime) < time.Minute {
+	// SEC-4: 窗口内动作数超上限即判违规（窗口每分钟由 RecordClientAction 滚动重置）。
+	if ac.MaxActionsPerMinute > 0 && stats.ActionCount > ac.MaxActionsPerMinute {
 		acm.reportCheat(stats.IP, "HighActionRate", "Too many actions in short time", 3)
 		stats.AbnormalActions++
 	}

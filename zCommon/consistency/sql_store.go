@@ -146,7 +146,9 @@ func (o *SQLOutbox) MarkAttempt(requestID uint64, cause error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sqlOpTimeout)
 	defer cancel()
 
-	// 读取当前 attempts 以计算退避时间（指数退避、封顶）。
+	// INF-10: 计数递增用 SQL 原子表达式 `attempts=attempts+1`，避免"SELECT→Go 自增→UPDATE 写回"
+	// 的读改写在并发下丢更新（两个并发 MarkAttempt 读到同值、都写 old+1→只加了一次）。
+	// 仅为计算指数退避时长读一次旧 attempts（近似即可，退避早一档无害）。
 	var attempts int
 	if err := o.db.QueryRowContext(ctx, "SELECT attempts FROM "+o.table+" WHERE request_id=?", requestID).Scan(&attempts); err != nil {
 		if err != sql.ErrNoRows {
@@ -154,20 +156,19 @@ func (o *SQLOutbox) MarkAttempt(requestID uint64, cause error) {
 		}
 		return
 	}
-	attempts++
 
 	if cause == nil {
-		o.exec("UPDATE "+o.table+" SET attempts=?, last_attempt_at=? WHERE request_id=?",
-			attempts, time.Now(), requestID)
+		o.exec("UPDATE "+o.table+" SET attempts=attempts+1, last_attempt_at=? WHERE request_id=?",
+			time.Now(), requestID)
 		return
 	}
 
-	delay := o.retryBackoff * time.Duration(1<<uint(attempts-1))
+	delay := o.retryBackoff * time.Duration(1<<uint(attempts))
 	if delay > o.maxRetryDelay {
 		delay = o.maxRetryDelay
 	}
-	o.exec("UPDATE "+o.table+" SET attempts=?, last_attempt_at=?, last_error=?, sent=0, next_retry_at=? WHERE request_id=?",
-		attempts, time.Now(), cause.Error(), time.Now().Add(delay), requestID)
+	o.exec("UPDATE "+o.table+" SET attempts=attempts+1, last_attempt_at=?, last_error=?, sent=0, next_retry_at=? WHERE request_id=?",
+		time.Now(), cause.Error(), time.Now().Add(delay), requestID)
 }
 
 func (o *SQLOutbox) MarkDeadLetter(requestID uint64, reason string) {
@@ -176,14 +177,16 @@ func (o *SQLOutbox) MarkDeadLetter(requestID uint64, reason string) {
 	zLog.Error("Outbox message moved to dead-letter (SQL)", zap.Uint64("request_id", requestID), zap.String("reason", reason))
 }
 
-func (o *SQLOutbox) query(where string, limit int, args ...interface{}) []OutboxMessage {
+func (o *SQLOutbox) query(where, orderBy string, limit int, args ...interface{}) []OutboxMessage {
 	if limit <= 0 {
 		limit = 100
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), sqlOpTimeout)
 	defer cancel()
+	// INF-10: 必须带 ORDER BY，否则在 LIMIT 下返回顺序不定→部分到期消息可能长期被截断在窗口外
+	// 而饿死（永不重投）。按到期时间/创建时间升序取，保证最该处理的先出。
 	q := "SELECT request_id, topic, target_server_id, target_map_id, proto_id, payload, sent, acked, attempts, " +
-		"last_error, dead_letter, created_at, last_attempt_at, next_retry_at FROM " + o.table + " WHERE " + where + " LIMIT ?"
+		"last_error, dead_letter, created_at, last_attempt_at, next_retry_at FROM " + o.table + " WHERE " + where + " " + orderBy + " LIMIT ?"
 	args = append(args, limit)
 	rows, err := o.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -219,16 +222,16 @@ func (o *SQLOutbox) query(where string, limit int, args ...interface{}) []Outbox
 }
 
 func (o *SQLOutbox) ListPending(limit int) []OutboxMessage {
-	return o.query("sent=0 AND dead_letter=0", limit)
+	return o.query("sent=0 AND dead_letter=0", "ORDER BY created_at ASC", limit)
 }
 
 func (o *SQLOutbox) ListRetryable(now time.Time, limit int) []OutboxMessage {
 	return o.query("sent=0 AND dead_letter=0 AND acked=0 AND attempts<? AND (next_retry_at IS NULL OR next_retry_at<=?)",
-		limit, o.maxRetries, now)
+		"ORDER BY next_retry_at IS NULL DESC, next_retry_at ASC, created_at ASC", limit, o.maxRetries, now)
 }
 
 func (o *SQLOutbox) ListDeadLetters(limit int) []OutboxMessage {
-	return o.query("dead_letter=1", limit)
+	return o.query("dead_letter=1", "ORDER BY last_attempt_at ASC", limit)
 }
 
 func (o *SQLOutbox) count(where string, args ...interface{}) int {
