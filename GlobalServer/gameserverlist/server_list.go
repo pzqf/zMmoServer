@@ -58,6 +58,7 @@ type ServerListManager struct {
 	serverListCache     []*ServerFullInfo
 	serverListCacheTime time.Time
 	serverListCacheTTL  time.Duration
+	cacheMu             sync.Mutex // GW-4: 守护 serverListCache/Time，HTTP 处理器并发读写会竞争
 }
 
 var (
@@ -205,6 +206,11 @@ func (m *ServerListManager) GetServerFullInfo(serverID int32) *ServerFullInfo {
 }
 
 func (m *ServerListManager) GetAllServerFullInfos() []*ServerFullInfo {
+	// GW-4: 缓存读检查与重建都在锁内串行，避免并发 HTTP 请求竞争 slice 头/时间戳。
+	// 重建替换整条 slice（不就地改），返回的 slice 头指向稳定底层数组。
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+
 	now := time.Now()
 	if len(m.serverListCache) > 0 && now.Sub(m.serverListCacheTime) < m.serverListCacheTTL {
 		zLog.Debug("Using cached server list", zap.Int("count", len(m.serverListCache)))
