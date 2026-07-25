@@ -30,6 +30,10 @@ type TCPService struct {
 	gameServerSessions *zMap.TypedMap[uint32, zNet.Session]
 	// metricsRecorder: 可选网络指标上报器（Phase 3.5），注入 zNet 上报连接/流量/错误。
 	metricsRecorder zNet.NetworkMetricsRecorder
+	// aoiSendCh/aoiStop: AOI 回程发送队列 + 停止信号（MAP-7）。把网络发送从地图 actor
+	// goroutine 上剥离，避免慢连接阻塞整张地图。见 aoi_push.go。
+	aoiSendCh chan aoiSendJob
+	aoiStop   chan struct{}
 }
 
 func NewTCPService(cfg *config.Config, mapService *maps.MapManager) *TCPService {
@@ -97,6 +101,12 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start TCP service: %v", err)
 	}
 
+	// 启动 AOI 回程发送 goroutine（MAP-7）：把网络发送从地图 actor 上剥离。
+	ts.aoiSendCh = make(chan aoiSendJob, 4096)
+	ts.aoiStop = make(chan struct{})
+	ts.wg.Add(1)
+	go ts.aoiSendLoop()
+
 	ts.isRunning = true
 
 	zLog.Info("TCP service started successfully", zap.String("addr", ts.config.Server.ListenAddr))
@@ -113,6 +123,12 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 
 	if ts.tcpServer != nil {
 		ts.tcpServer.Close()
+	}
+
+	// 停止 AOI 发送 goroutine（MAP-7）。aoiSendCh 不关闭：NotifyAOI 用非阻塞 select 投递，
+	// 循环退出后残留投递会填满缓冲后被丢弃，不会 send-on-closed panic。
+	if ts.aoiStop != nil {
+		close(ts.aoiStop)
 	}
 
 	ts.isRunning = false

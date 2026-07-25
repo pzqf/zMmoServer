@@ -18,6 +18,9 @@ import (
 
 type PlayerQuerier interface {
 	GetPlayersInRange(position common.Vector3, radius float32) []common.IGameObject
+	// MoveEntityAOI 在对象移动后同步 AOI 网格（MAP-6）。AI 驱动的怪移动只改对象 position，
+	// 此前从不更新 AOI → 客户端看不到怪移动；由地图 goroutine 在移动后调用本方法补发 AOI 事件。
+	MoveEntityAOI(objectID id.ObjectIdType, oldPos, newPos common.Vector3)
 }
 
 type AIManager struct {
@@ -134,7 +137,15 @@ func (am *AIManager) Update(deltaTime time.Duration) {
 			ai.state = AIStateDead
 			continue
 		}
+		// MAP-6: 在此单点拦截怪的移动——快照更新前后位置，若变化则同步 AOI，
+		// 一处覆盖 Move/Chase/wander 所有移动路径。本函数只在地图 goroutine 上运行（tick），
+		// 故直接触碰 AOI 安全。
+		oldPos := ai.monster.GetPosition()
 		ai.update(deltaTime)
+		newPos := ai.monster.GetPosition()
+		if ai.mapRef != nil && oldPos != newPos {
+			ai.mapRef.MoveEntityAOI(ai.monster.GetID(), oldPos, newPos)
+		}
 	}
 }
 

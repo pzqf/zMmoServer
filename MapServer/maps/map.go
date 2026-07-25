@@ -291,6 +291,13 @@ func (m *Map) MoveObject(objectID id.ObjectIdType, newPos common.Vector3) error 
 	return nil
 }
 
+// MoveEntityAOI 在对象移动后同步 AOI 网格（MAP-6，供 AI 在地图 goroutine 上调用）。
+// 只触碰 AOI 网格（AddObject/RemoveObject/MoveObject 与本方法均在地图 goroutine 上串行执行，
+// 故无需 m.mu）。MoveEntity 会向观察者补发 AOI Move 事件 → 客户端得以看到怪移动。
+func (m *Map) MoveEntityAOI(objectID id.ObjectIdType, oldPos, newPos common.Vector3) {
+	m.aoiManager.MoveEntity(int64(objectID), m.posToCoord(oldPos), m.posToCoord(newPos))
+}
+
 func (m *Map) GetObjectsInRange(position common.Vector3, radius float32) []common.IGameObject {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
