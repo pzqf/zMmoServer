@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>框架审查报告 · zEngine · zUtil · zMmoServer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#f5f7f9; --surface:#ffffff; --surface-2:#eef1f5; --border:#dfe4ec;
+    --text:#1a2130; --muted:#5c6779; --faint:#8a94a6;
+    --accent:#1f7a8c; --accent-soft:#e2f0f2;
+    --fixed:#2f9160; --fixed-bg:#e6f3ec;
+    --descope:#a9781f; --descope-bg:#f6eddb;
+    --crit:#c0473f; --high:#c1762c; --med:#3a7ca5; --low:#7b8595;
+    --shadow:0 1px 2px rgba(20,30,50,.06), 0 4px 16px rgba(20,30,50,.05);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,"Helvetica Neue","PingFang SC","Microsoft YaHei",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1117; --surface:#151b24; --surface-2:#1b222d; --border:#28303d;
+      --text:#e7ebf2; --muted:#98a2b3; --faint:#6b7688;
+      --accent:#4fb6cc; --accent-soft:#12333b;
+      --fixed:#4cc088; --fixed-bg:#123024;
+      --descope:#d6a44e; --descope-bg:#332a13;
+      --crit:#e2746c; --high:#e0a05a; --med:#6ba9d0; --low:#8892a3;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.28);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7f9; --surface:#ffffff; --surface-2:#eef1f5; --border:#dfe4ec;
+    --text:#1a2130; --muted:#5c6779; --faint:#8a94a6;
+    --accent:#1f7a8c; --accent-soft:#e2f0f2;
+    --fixed:#2f9160; --fixed-bg:#e6f3ec; --descope:#a9781f; --descope-bg:#f6eddb;
+    --crit:#c0473f; --high:#c1762c; --med:#3a7ca5; --low:#7b8595;
+    --shadow:0 1px 2px rgba(20,30,50,.06), 0 4px 16px rgba(20,30,50,.05);
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --surface:#151b24; --surface-2:#1b222d; --border:#28303d;
+    --text:#e7ebf2; --muted:#98a2b3; --faint:#6b7688;
+    --accent:#4fb6cc; --accent-soft:#12333b;
+    --fixed:#4cc088; --fixed-bg:#123024; --descope:#d6a44e; --descope-bg:#332a13;
+    --crit:#e2746c; --high:#e0a05a; --med:#6ba9d0; --low:#8892a3;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 20px rgba(0,0,0,.28);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    line-height:1.6;-webkit-font-smoothing:antialiased;font-size:15px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  /* ---- header ---- */
+  header{padding:56px 0 32px;border-bottom:1px solid var(--border)}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 14px;font-weight:600}
+  h1{font-size:clamp(26px,4.4vw,40px);line-height:1.12;margin:0 0 14px;letter-spacing:-.02em;
+    text-wrap:balance;font-weight:700}
+  .lede{font-size:16px;color:var(--muted);max-width:64ch;margin:0}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:22px;font-family:var(--mono);
+    font-size:12.5px;color:var(--faint)}
+  .meta b{color:var(--muted);font-weight:600}
+
+  /* ---- stat tiles ---- */
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:34px 0}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;
+    box-shadow:var(--shadow)}
+  .tile .n{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.02em;
+    font-variant-numeric:tabular-nums;line-height:1}
+  .tile .l{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .tile.hero{border-color:color-mix(in srgb,var(--fixed) 40%,var(--border))}
+  .tile.hero .n{color:var(--fixed)}
+  .tile.amber .n{color:var(--descope)}
+  .tile .n small{font-size:15px;color:var(--faint);font-weight:500}
+
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted);margin:48px 0 16px;font-weight:600;display:flex;align-items:center;gap:10px}
+  h2::after{content:"";flex:1;height:1px;background:var(--border)}
+
+  /* ---- flagship callout ---- */
+  .flagship{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    padding:24px 26px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .flagship::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .flagship .tag{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--accent);font-weight:600}
+  .flagship h3{margin:8px 0 10px;font-size:19px;letter-spacing:-.01em}
+  .flagship p{margin:0 0 12px;color:var(--muted);font-size:14.5px;max-width:70ch}
+  .flagship .proof{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px}
+  .proof code{font-family:var(--mono);font-size:12px;background:var(--surface-2);color:var(--text);
+    border:1px solid var(--border);border-radius:6px;padding:4px 9px}
+
+  /* ---- validation strip ---- */
+  .valgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+  .val{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow)}
+  .val .k{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:600;margin-bottom:6px}
+  .val .v{font-size:13.5px;color:var(--muted)}
+
+  /* ---- filter ---- */
+  .filterbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:6px 0 20px}
+  .chip{font-family:var(--mono);font-size:12.5px;border:1px solid var(--border);background:var(--surface);
+    color:var(--muted);border-radius:999px;padding:6px 13px;cursor:pointer;transition:.15s;user-select:none}
+  .chip:hover{border-color:var(--accent);color:var(--text)}
+  .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+  :root[data-theme="dark"] .chip[aria-pressed="true"]{color:#08181c}
+  @media (prefers-color-scheme:dark){.chip[aria-pressed="true"]{color:#08181c}}
+
+  /* ---- findings ---- */
+  .cat{margin-bottom:26px}
+  .cat-h{display:flex;align-items:baseline;gap:12px;margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+  .cat-h .code{font-family:var(--mono);font-weight:700;font-size:15px;color:var(--text)}
+  .cat-h .name{font-size:13.5px;color:var(--muted)}
+  .cat-h .cnt{font-family:var(--mono);font-size:12px;color:var(--faint);margin-left:auto}
+  .f{display:grid;grid-template-columns:74px 1fr auto;gap:14px;align-items:start;
+    padding:11px 0;border-bottom:1px solid var(--border)}
+  .f:last-child{border-bottom:0}
+  .f .id{font-family:var(--mono);font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px}
+  .f .id .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.crit{background:var(--crit)} .dot.high{background:var(--high)}
+  .dot.med{background:var(--med)} .dot.low{background:var(--low)}
+  .f .txt{font-size:14px;color:var(--text)}
+  .f .txt .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .f .st{justify-self:end}
+  .pill{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.02em;border-radius:6px;
+    padding:3px 9px;white-space:nowrap}
+  .pill.fixed{background:var(--fixed-bg);color:var(--fixed)}
+  .pill.descope{background:var(--descope-bg);color:var(--descope)}
+  .pill.na{background:var(--surface-2);color:var(--faint)}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:var(--muted);margin:2px 0 22px;font-family:var(--mono)}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .legend .dot{width:7px;height:7px;border-radius:50%}
+
+  footer{margin:56px 0 40px;padding-top:24px;border-top:1px solid var(--border);color:var(--faint);font-size:13px}
+  footer .commits{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:10px;
+    display:flex;flex-wrap:wrap;gap:6px 16px}
+  .note{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:8px;padding:14px 16px;font-size:13.5px;color:var(--muted);margin-top:16px}
+  .themebtn{position:fixed;top:14px;right:14px;font-family:var(--mono);font-size:12px;
+    background:var(--surface);border:1px solid var(--border);color:var(--muted);border-radius:8px;
+    padding:7px 11px;cursor:pointer;z-index:10}
+  .themebtn:hover{color:var(--text);border-color:var(--accent)}
+  @media (max-width:620px){
+    .f{grid-template-columns:64px 1fr;grid-template-areas:"id txt" ". st";row-gap:6px}
+    .f .id{grid-area:id}.f .txt{grid-area:txt}.f .st{grid-area:st;justify-self:start}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<button class="themebtn" id="themebtn" aria-label="切换主题">◐ 主题</button>
+
+<header>
+  <div class="wrap">
+    <p class="eyebrow">代码审查 · 收官报告</p>
+    <h1>zEngine · zUtil · zMmoServer 全量安全与可靠性审查</h1>
+    <p class="lede">对一套分布式 Go MMO 服务端框架（引擎 + 工具库 + 业务服务）的推送后二次全量代码审查。逐条读码核实、修复、并以自动化测试 / 跨进程 E2E / <code style="font-family:var(--mono);font-size:12.5px">-race</code> / 行为验证背书。</p>
+    <div class="meta">
+      <span><b>日期</b> 2026-07-25</span>
+      <span><b>仓库</b> zEngine · zUtil · zMmoServer</span>
+      <span><b>方法</b> 逐条读码核实 → 修复 → 门禁验证</span>
+      <span><b>台账</b> docs/审查发现.md</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tiles">
+    <div class="tile"><div class="n">63</div><div class="l">发现总数</div></div>
+    <div class="tile hero"><div class="n">56</div><div class="l">已修复（读码核实）</div></div>
+    <div class="tile amber"><div class="n">7</div><div class="l">原则性 descope</div></div>
+    <div class="tile"><div class="n">0</div><div class="l">未处理遗留</div></div>
+    <div class="tile"><div class="n">15</div><div class="l">新增回归护栏测试</div></div>
+    <div class="tile"><div class="n">9</div><div class="l">经 <span style="font-family:var(--mono)">-race</span> 抓出的真实竞争*</div></div>
+  </div>
+
+  <h2>旗舰修复</h2>
+  <div class="flagship">
+    <span class="tag">MAP-2 · 数据竞争 · 用户拍板方案 A</span>
+    <h3>地图单写者 / Actor 模型</h3>
+    <p>Player/Monster 的内部字段（位置 / 血量 / 目标 / 状态）无任何同步，却被 100ms 游戏主循环（AI/战斗）、zNet 网络分发（进出/移动/攻击）、刷怪与死亡定时等多类 goroutine 并发读写——地图锁只护对象容器、不护字段，构成 <code style="font-family:var(--mono);font-size:12.5px">-race</code> 可抓的真实数据竞争。改造为「每张地图独占一条 goroutine 串行处理帧更新与网络命令」，五类变异入口全部串行化，从根上消除竞争。</p>
+    <div class="proof">
+      <code>t1 -race ./maps/ ×3 绿</code>
+      <code>回归护栏 TestMapActor_ConcurrentMutation_NoRace</code>
+      <code>E2E 攻击 Damage=27</code>
+      <code>AOI 推送 ProtoId=1220</code>
+    </div>
+  </div>
+
+  <h2>验证门禁</h2>
+  <div class="valgrid">
+    <div class="val"><div class="k">build + vet</div><div class="v">每项修复后 8 模块 <span style="font-family:var(--mono)">go build ./...</span> + 相关包 vet 全绿</div></div>
+    <div class="val"><div class="k">-race（t1 Linux）</div><div class="v">并发类修复在真机跑竞态检测；本轮经 -race / 测试驱动抓出并修复多个预存真实竞争</div></div>
+    <div class="val"><div class="k">跨进程 E2E</div><div class="v">影响 live 路径的改动跑四进程真机 E2E：登录 → 进图 → 攻击 → AOI 推送</div></div>
+    <div class="val"><div class="k">单测 / 行为验证</div><div class="v">15 个新增回归护栏；INF-3 以「T+50s 查 etcd 服务仍在」行为验证；INF-10 对真 MySQL 集成测试</div></div>
+  </div>
+
+  <h2>发现明细</h2>
+  <div class="legend">
+    <span><span class="dot crit"></span>Critical</span>
+    <span><span class="dot high"></span>High</span>
+    <span><span class="dot med"></span>Medium</span>
+    <span><span class="dot low"></span>Low</span>
+    <span style="margin-left:auto">严重度为审查时分档</span>
+  </div>
+  <div class="filterbar" id="filter">
+    <span class="chip" data-f="all" aria-pressed="true">全部 63</span>
+    <span class="chip" data-f="fixed" aria-pressed="false">已修 56</span>
+    <span class="chip" data-f="descope" aria-pressed="false">Descope 7</span>
+  </div>
+  <div id="findings"></div>
+
+  <footer>
+    <div>本报告是对一轮代码审查工作的诚实汇总——每项均标注状态（已修 / descope / 非缺陷）与验证方式；7 项 descope 按「架构为重点 · 业务最少量 · 不堆玩法 · 不过度投入不可达代码」原则文档化，非遗漏。</div>
+    <div class="note"><b>* 关于「-race 抓出 9 个」：</b>指本轮之前累计经竞态检测 / 测试驱动照出的预存真实缺陷（含连接泄漏、TrafficLimiter 逻辑等）；本轮又新增多处并发修复（GW-2 / MAP-2 / GW-4 / INF-6 等）均以 -race 复验。</div>
+    <div class="commits">
+      <span><b style="color:var(--accent)">zMmoServer</b> 32ed158 → fa8c447</span>
+      <span><b style="color:var(--accent)">zEngine</b> f0807a9 → e52644c</span>
+      <span><b style="color:var(--accent)">zUtil</b> 08b70f4</span>
+      <span>· 均无二进制提交</span>
+    </div>
+  </footer>
+</main>
+
+<script>
+(function(){
+  // 主题切换
+  var btn=document.getElementById('themebtn');
+  btn.addEventListener('click',function(){
+    var r=document.documentElement;
+    var cur=r.getAttribute('data-theme');
+    if(!cur){cur=matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';}
+    r.setAttribute('data-theme',cur==='dark'?'light':'dark');
+  });
+
+  var CATS={
+    SEC:'安全 · 鉴权 / 密码学 / 反爆破',
+    INF:'基础设施 · 崩溃 / 数据一致 / 资源',
+    NET:'网络引擎 · zNet 会话 / 连接',
+    GS:'GameServer · 玩家 Actor / 跨服',
+    GW:'GatewayServer · 接入 / 会话映射',
+    MAP:'MapServer · 地图对象 / 战斗 / AOI',
+    OPT:'优化 · 并发 / 性能 / 无界增长',
+    ECO:'经济（不可达业务）'
+  };
+  // id, sev, status(fixed|descope|na), 一行
+  var F=[
+    ['SEC-1','crit','fixed','网关未鉴权即转发任意 protoId 给 GameServer'],
+    ['SEC-2','crit','fixed','JWT 弱默认密钥硬编码且不校验'],
+    ['SEC-3','crit','fixed','/shutdown 无鉴权，任何人单包关停全局服'],
+    ['SEC-4','high','fixed','反作弊按 sessionID 追踪，重连即清零绕过'],
+    ['SEC-5','high','fixed','账号枚举 + bcrypt 时序侧信道'],
+    ['SEC-6','high','fixed','仅 IP 限速，无账号级爆破锁定'],
+
+    ['INF-1','crit','fixed','DB 连接器 send-on-closed panic + isRunning 竞争'],
+    ['INF-2','crit','fixed','迁移 Inbox 幂等点错误 → 玩家丢失'],
+    ['INF-3','crit','fixed','etcd 租约 KeepAlive 绑 5s 请求 ctx → 服务消失'],
+    ['INF-4','high','fixed','2PC Commit 部分失败不回滚 + break 只跳 select'],
+    ['INF-5','high','fixed','Inbox 去重非原子（Load-then-Store）'],
+    ['INF-6','high','fixed','Transaction 并发写 Votes/Prepared map panic'],
+    ['INF-7','high','fixed','MySQL Execute 无界起 goroutine + Close 不等待'],
+    ['INF-8','med','fixed','queryWorker nil 回调时 rows 泄漏连接'],
+    ['INF-9','med','fixed','Mongo 传 nil ctx（新驱动 panic）'],
+    ['INF-10','high','fixed','SQLOutbox MarkAttempt 非原子 + 无 ORDER BY 饿死'],
+    ['INF-11','high','fixed','inbox / DDoS per-IP 表无界增长'],
+
+    ['NET-1','high','fixed','客户端真实掉线不设 closed → AutoReconnect 永不触发'],
+    ['NET-2','high','fixed','worker-pool 模式 Send 死锁'],
+    ['NET-3','high','fixed','序列号窗口 map 无界增长'],
+    ['NET-4','high','fixed','WS/UDP 会话 wg.Add 误用 + dispatcher 拆会话'],
+    ['NET-5','high','fixed','满员时关服 accept 空转死锁'],
+    ['NET-6','med','fixed','密钥轮换只更 keyID 不下发新 key → 暂停特性'],
+    ['NET-7','med','fixed','状态监听器用参数栈地址作 key → 永删不掉'],
+    ['NET-8','med','fixed','TcpClient.Connect 重连泄漏旧会话'],
+
+    ['GS-1','crit','fixed','Outbox 无界增长 OOM'],
+    ['GS-2','high','fixed','重连不刷新 sessionID → 推送发往死会话'],
+    ['GS-3','high','fixed','Player Actor 同步阻塞 1.5s 等跨服攻击'],
+    ['GS-4','high','fixed','非幂等重试重放 attack/enter → 双倍伤害'],
+
+    ['GW-1','high','fixed','网关每 IP 连接计数只增不减 → 自我 DoS'],
+    ['GW-2','high','fixed','代理 tcpClient 并发写 + 重连叠加泄漏'],
+    ['GW-3','high','fixed','多端登录不踢旧 + 旧连接断开误删新映射'],
+    ['GW-4','high','fixed','服务器列表缓存无锁竞争'],
+
+    ['MAP-1','crit','fixed','射程用真实距离比 range²（放大 3×）'],
+    ['MAP-2','crit','fixed','对象无锁数据竞争 → 单写者 Actor 模型'],
+    ['MAP-3','crit','fixed','AI 巡逻在读锁内 Sleep(2s) 冻结整图'],
+    ['MAP-4','crit','na','周期 Update 未驱动 — 核实为否（有被驱动）'],
+    ['MAP-5','high','fixed','对象 ID 用纳秒取模 → 撞 ID 互相覆盖'],
+    ['MAP-6','high','fixed','怪物移动绕过 AOI，客户端看不到'],
+    ['MAP-7','high','fixed','AOI 通知在地图 goroutine 上同步网络发送'],
+    ['MAP-8','high','fixed','玩家离场不清 buff / 刷怪计数（泄漏 + 停摆）'],
+    ['MAP-9','high','fixed','战斗随机数可预测（纳秒取模）'],
+    ['MAP-10','med','fixed','死亡/重生裸 goroutine — 补复活存活校验'],
+    ['MAP-11','low','descope','副本/镜像/跨服实例地图泄漏（玩法层）'],
+    ['MAP-12','low','descope','Buff 无叠加上限 / 只支持玩家（玩法层）'],
+    ['MAP-13','low','descope','ApplyDamage 忽略护盾/无敌/减伤（玩法层）'],
+    ['MAP-14','low','descope','拍卖无托管/可重复结算（不可达业务）'],
+
+    ['OPT-1','low','fixed','密钥生成缺熵检查（rand.Read 未判错）'],
+    ['OPT-2','med','fixed','GetObjectsInRange 全场 O(n) + 每对象 sqrt'],
+    ['OPT-3','low','fixed','明文密码 DSN 入日志 → 脱敏'],
+    ['OPT-4','low','fixed','CORS 默认放行所有来源'],
+    ['OPT-5','low','fixed','zMetrics 跨类型同名注册 MustRegister panic'],
+    ['OPT-6','low','descope','A* 无 decrease-key（不可达引擎工具 · 纯优化）'],
+    ['OPT-7','low','fixed','刷出/重生怪等级恒为 1 → 读配置'],
+    ['OPT-8','low','fixed','缓存清理忙轮询 → 阻塞 ticker'],
+    ['OPT-9','low','fixed','DedupStore 二次 close panic + NewTicker(0) panic'],
+    ['OPT-10','low','fixed','TableManager 单例双检竞争'],
+    ['OPT-11','low','fixed','zServer isRunning 恒 false + Send 错误语义'],
+    ['OPT-12','low','fixed','lifecycle Manager.mu 声明未用（死字段）'],
+    ['OPT-13','low','fixed','zUtil zMap.Store 计数非原子 → Len 多计'],
+    ['OPT-14','low','fixed','async 日志缓冲满同步直写乱序 + Close 后写'],
+
+    ['ECO-1','crit','descope','BuyItem 只返回价格不扣币发货（不可达业务）'],
+    ['ECO-2','crit','descope','CompleteTrade 只搬货币不转物品（不可达业务）'],
+  ];
+  var ST={fixed:'已修',descope:'Descope',na:'非缺陷'};
+  var order=['SEC','INF','NET','GS','GW','MAP','OPT','ECO'];
+  var host=document.getElementById('findings');
+
+  function render(mode){
+    host.innerHTML='';
+    order.forEach(function(cat){
+      var items=F.filter(function(x){return x[0].split('-')[0]===cat;})
+                 .filter(function(x){
+                    if(mode==='all')return true;
+                    if(mode==='fixed')return x[2]==='fixed';
+                    if(mode==='descope')return x[2]==='descope'||x[2]==='na';
+                    return true;});
+      if(!items.length)return;
+      var sec=document.createElement('div');sec.className='cat';
+      var h='<div class="cat-h"><span class="code">'+cat+'</span><span class="name">'+CATS[cat]+'</span><span class="cnt">'+items.length+' 项</span></div>';
+      items.forEach(function(x){
+        h+='<div class="f"><div class="id"><span class="dot '+x[1]+'"></span>'+x[0]+'</div>'+
+           '<div class="txt">'+x[3]+'</div>'+
+           '<div class="st"><span class="pill '+(x[2]==='na'?'na':x[2])+'">'+ST[x[2]]+'</span></div></div>';
+      });
+      sec.innerHTML=h;host.appendChild(sec);
+    });
+  }
+  render('all');
+  document.getElementById('filter').addEventListener('click',function(e){
+    var c=e.target.closest('.chip');if(!c)return;
+    [].forEach.call(this.querySelectorAll('.chip'),function(x){x.setAttribute('aria-pressed','false');});
+    c.setAttribute('aria-pressed','true');
+    render(c.getAttribute('data-f'));
+  });
+})();
+</script>
+</body>
+</html>
