@@ -343,6 +343,7 @@ func (ms *MapService) sendFramedToMap(mapID int, protoId int, enveloped []byte) 
 func (ms *MapService) outboxRetryLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
+	inboxCleanupCounter := 0
 	for {
 		select {
 		case <-ms.retryCtx.Done():
@@ -387,6 +388,16 @@ func (ms *MapService) outboxRetryLoop() {
 				}
 				ms.outbox.MarkSent(msg.RequestID)
 				ms.publishOutboxStats()
+			}
+
+			// INF-11: 周期清理请求去重表，防止 inbox 随每次跨服攻击响应无界增长（GameServer 侧，
+			// 对应 MapServer 的 inboxCleanupLoop）。每 ~60 拍（约 1 分钟）清一次 5 分钟前的记录。
+			inboxCleanupCounter++
+			if inboxCleanupCounter >= 60 {
+				inboxCleanupCounter = 0
+				if ms.inbox != nil {
+					ms.inbox.Cleanup(5 * time.Minute)
+				}
 			}
 		}
 	}

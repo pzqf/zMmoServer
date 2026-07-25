@@ -78,11 +78,12 @@ func NewTableManager() *TableManager {
 // GetTableManager ��ȡȫ�ֱ������ù�����ʵ��
 // ʹ�õ���ģʽȷ��ȫ��ֻ��һ��ʵ��
 func GetTableManager() *TableManager {
-	if GlobalTableManager == nil {
-		tableOnce.Do(func() {
-			GlobalTableManager = NewTableManager()
-		})
-	}
+	// OPT-10: 无条件走 Once.Do。此前 `if GlobalTableManager == nil` 的双检是坏优化——在别的
+	// goroutine 于 Once.Do 内写 GlobalTableManager 的同时无锁读它 → 数据竞争。Once.Do 本身线程
+	// 安全且首次后近乎零成本，Do 完成对该全局的读有 happens-before 保证。
+	tableOnce.Do(func() {
+		GlobalTableManager = NewTableManager()
+	})
 	return GlobalTableManager
 }
 

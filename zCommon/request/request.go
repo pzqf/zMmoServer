@@ -14,6 +14,7 @@ type DedupStore struct {
 	mutex    sync.RWMutex
 	expire   time.Duration
 	stopCh   chan struct{}
+	stopOnce sync.Once // OPT-9: Stop 幂等，避免二次 close(stopCh) panic
 }
 
 func NewDedupStore(expire time.Duration) *DedupStore {
@@ -52,11 +53,17 @@ func (s *DedupStore) GetSize() int {
 }
 
 func (s *DedupStore) Stop() {
-	close(s.stopCh)
+	// OPT-9: 幂等停止，二次调用不再 panic（close of closed channel）。
+	s.stopOnce.Do(func() { close(s.stopCh) })
 }
 
 func (s *DedupStore) cleanupLoop() {
-	ticker := time.NewTicker(s.expire / 2)
+	// OPT-9: 清理间隔下限保护——expire 过小时 expire/2 可能为 0，NewTicker(0) 会 panic。
+	interval := s.expire / 2
+	if interval <= 0 {
+		interval = time.Second
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
 	for {
