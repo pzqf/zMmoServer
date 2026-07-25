@@ -527,6 +527,11 @@ func (mm *MigrationManager) handleMigrationData(meta Meta, payload []byte) ([]by
 
 	checksum := crc32.ChecksumIEEE(dataPayload.PlayerData)
 	if checksum != dataPayload.Checksum {
+		// INF-2: 处理失败必须撤销 TryAccept 占用，否则重投会命中"重复"分支误返成功→
+		// 源服删玩家而目标未落地→玩家丢失。
+		if mm.inbox != nil {
+			mm.inbox.Release(dataPayload.MigrationID)
+		}
 		resp := MigrationCommitPayload{
 			MigrationID: dataPayload.MigrationID,
 			PlayerID:    dataPayload.PlayerID,
@@ -549,6 +554,10 @@ func (mm *MigrationManager) handleMigrationData(meta Meta, payload []byte) ([]by
 
 	if mm.callback != nil {
 		if err := mm.callback.OnMigrationDataReceived(record); err != nil {
+			// INF-2: 失败撤销占用，允许重投。
+			if mm.inbox != nil {
+				mm.inbox.Release(dataPayload.MigrationID)
+			}
 			resp := MigrationCommitPayload{
 				MigrationID: dataPayload.MigrationID,
 				PlayerID:    dataPayload.PlayerID,
@@ -562,6 +571,10 @@ func (mm *MigrationManager) handleMigrationData(meta Meta, payload []byte) ([]by
 
 	if mm.serializer != nil {
 		if err := mm.serializer.DeserializePlayer(dataPayload.PlayerData, dataPayload.MapData); err != nil {
+			// INF-2: 失败撤销占用，允许重投。
+			if mm.inbox != nil {
+				mm.inbox.Release(dataPayload.MigrationID)
+			}
 			resp := MigrationCommitPayload{
 				MigrationID: dataPayload.MigrationID,
 				PlayerID:    dataPayload.PlayerID,

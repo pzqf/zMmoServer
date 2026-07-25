@@ -45,6 +45,9 @@ type InboxStore interface {
 	TryAccept(requestID uint64) bool
 	Ack(requestID uint64) bool
 	IsProcessed(requestID uint64) bool
+	// Release 撤销一次 TryAccept 的占用（INF-2）。当处理在 TryAccept 之后失败、需要允许后续
+	// 重投重新处理时调用；否则失败请求会被永久判为"重复"、重投误返成功。
+	Release(requestID uint64)
 	Cleanup(olderThan time.Duration)
 }
 
@@ -298,6 +301,17 @@ func (m *MemoryInbox) Ack(requestID uint64) bool {
 func (m *MemoryInbox) IsProcessed(requestID uint64) bool {
 	_, exists := m.entries.Load(requestID)
 	return exists
+}
+
+// Release 删除去重记录，使同 requestID 可被后续 TryAccept 重新接受（INF-2 失败回滚用）。
+func (m *MemoryInbox) Release(requestID uint64) {
+	if requestID == 0 {
+		return
+	}
+	if _, ok := m.entries.Load(requestID); ok {
+		m.entries.Delete(requestID)
+		m.count.Add(-1)
+	}
 }
 
 func (m *MemoryInbox) Cleanup(olderThan time.Duration) {

@@ -332,6 +332,18 @@ func (i *SQLInbox) Ack(requestID uint64) bool {
 	return n > 0
 }
 
+// Release 删除去重记录，使同 requestID 可被后续 TryAccept 重新接受（INF-2 失败回滚用）。
+func (i *SQLInbox) Release(requestID uint64) {
+	if requestID == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), sqlOpTimeout)
+	defer cancel()
+	if _, err := i.db.ExecContext(ctx, "DELETE FROM "+i.table+" WHERE request_id=?", requestID); err != nil {
+		zLog.Error("SQLInbox Release failed", zap.Uint64("request_id", requestID), zap.Error(err))
+	}
+}
+
 func (i *SQLInbox) IsProcessed(requestID uint64) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), sqlOpTimeout)
 	defer cancel()
