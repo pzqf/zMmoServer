@@ -307,20 +307,41 @@ func (m *Map) MoveEntityAOI(objectID id.ObjectIdType, oldPos, newPos common.Vect
 	m.aoiManager.MoveEntity(int64(objectID), m.posToCoord(oldPos), m.posToCoord(newPos))
 }
 
-func (m *Map) GetObjectsInRange(position common.Vector3, radius float32) []common.IGameObject {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
+// collectInRange 收集 position 半径内、满足 accept 的对象（OPT-2）。
+// 优化点：①半径 ≤ 单格尺寸时用 AOI 网格把候选从"全场 O(n)"缩到"周边 3x3 格"，半径可能超出
+// 周边格覆盖时回退全量扫描以保正确；②用平方距离比较，省掉每对象一次 sqrt。
+// 调用方须持有 m.mu 读锁（AOI 网格读与对象容器读一致）。
+func (m *Map) collectInRange(position common.Vector3, radius float32, accept func(common.IGameObject) bool) []common.IGameObject {
 	objects := make([]common.IGameObject, 0)
-	m.objects.Range(func(objectID id.ObjectIdType, obj common.IGameObject) bool {
-		distance := position.DistanceTo(obj.GetPosition())
-		if distance <= radius {
+	radiusSq := radius * radius
+
+	if radius <= defaultGridSize {
+		candidates := m.aoiManager.GetSurroundingEntities(m.posToCoord(position))
+		for entityID := range candidates {
+			obj, ok := m.objects.Load(id.ObjectIdType(entityID))
+			if !ok || !accept(obj) {
+				continue
+			}
+			if position.DistanceSquared(obj.GetPosition()) <= radiusSq {
+				objects = append(objects, obj)
+			}
+		}
+		return objects
+	}
+
+	m.objects.Range(func(_ id.ObjectIdType, obj common.IGameObject) bool {
+		if accept(obj) && position.DistanceSquared(obj.GetPosition()) <= radiusSq {
 			objects = append(objects, obj)
 		}
 		return true
 	})
-
 	return objects
+}
+
+func (m *Map) GetObjectsInRange(position common.Vector3, radius float32) []common.IGameObject {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.collectInRange(position, radius, func(common.IGameObject) bool { return true })
 }
 
 func (m *Map) GetPlayersInRange(position common.Vector3, radius float32) []common.IGameObject {
@@ -338,19 +359,7 @@ func (m *Map) GetNPCsInRange(position common.Vector3, radius float32) []common.I
 func (m *Map) getObjectsInRangeByType(position common.Vector3, radius float32, objType common.GameObjectType) []common.IGameObject {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-
-	objects := make([]common.IGameObject, 0)
-	m.objects.Range(func(objectID id.ObjectIdType, obj common.IGameObject) bool {
-		if obj.GetType() == objType {
-			distance := position.DistanceTo(obj.GetPosition())
-			if distance <= radius {
-				objects = append(objects, obj)
-			}
-		}
-		return true
-	})
-
-	return objects
+	return m.collectInRange(position, radius, func(obj common.IGameObject) bool { return obj.GetType() == objType })
 }
 
 func (m *Map) GetObjectsByType(objectType common.GameObjectType) []common.IGameObject {
