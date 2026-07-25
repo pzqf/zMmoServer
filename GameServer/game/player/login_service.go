@@ -122,6 +122,8 @@ func (ls *LoginService) LeaveGame(playerID id.PlayerIdType) error {
 	ls.syncPlayerDataToService(p)
 	// 把 actor 的背包/技能写回 DB（登出存盘）。
 	savePlayerAssets(ls.playerService, p, playerID)
+	// 统一清理该玩家的跨玩家会话（交易/组队等注册的下线钩子），避免悬挂→重登被锁（T3/M1）。
+	ls.playerManager.RunOfflineHooks(playerID)
 
 	sess, exists := ls.sessionManager.GetSessionByPlayer(playerID)
 	if exists {
@@ -139,6 +141,21 @@ func (ls *LoginService) LeaveGame(playerID id.PlayerIdType) error {
 
 	zLog.Info("Player left game successfully", zap.Int64("player_id", int64(playerID)))
 	return nil
+}
+
+// PersistAllOnline 关服时把所有在线玩家落库（属性 sync→缓存 + 背包/技能/仓库存盘）+ 清理跨玩家会话。
+// 由 OnBeforeStop 在停网络前调用（此时玩家 actor 仍在）；players 表由随后的 PlayerService 存盘写入。
+// 弥补 F-3：此前关服不 sync actor、不存背包/技能/仓库 → 优雅重启丢在线玩家资产与会话增益。
+func (ls *LoginService) PersistAllOnline() {
+	players := ls.playerManager.GetAllPlayers()
+	for _, p := range players {
+		pid := p.GetPlayerID()
+		ls.syncPlayerDataToService(p)
+		savePlayerAssets(ls.playerService, p, pid)
+		ls.playerManager.RunOfflineHooks(pid)
+	}
+	ls.playerService.FlushAllOnline() // 把 sync 后的 online 缓存写回 players 表（属性/金币）
+	zLog.Info("Persisted all online players on shutdown", zap.Int("count", len(players)))
 }
 
 // syncPlayerDataToService 将 PlayerActor 中的数据同步到 PlayerService 的 OnlinePlayer

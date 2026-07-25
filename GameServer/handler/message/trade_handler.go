@@ -21,7 +21,14 @@ type TradeHandler struct {
 }
 
 func NewTradeHandler(pm *player.PlayerManager, serverID int32) *TradeHandler {
-	return &TradeHandler{playerManager: pm, tradeManager: trade.NewTradeManager(), serverID: serverID}
+	h := &TradeHandler{playerManager: pm, tradeManager: trade.NewTradeManager(), serverID: serverID}
+	// 玩家下线清理钩子（T3）：掉线/登出时取消其所在交易并通知对方，避免会话悬挂→重登被锁"already trading"。
+	pm.RegisterOfflineHook(func(pid id.PlayerIdType) {
+		if s, err := h.tradeManager.Cancel(pid); err == nil {
+			h.broadcast(s, int32(protocol.TradeState_TRADE_CANCELLED), "对方掉线，交易取消")
+		}
+	})
+	return h
 }
 
 func (h *TradeHandler) Handle(session zNet.Session, protoId int32, data []byte) error {

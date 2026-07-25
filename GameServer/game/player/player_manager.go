@@ -2,6 +2,7 @@ package player
 
 import (
 	"errors"
+	"sync"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/lifecycle"
@@ -19,6 +20,28 @@ type PlayerManager struct {
 	mapOp            MapOperator
 	clientSender     common.ClientSender
 	loginService     *LoginService
+
+	// 玩家下线清理钩子：跨玩家状态的持有者（如交易/组队 handler）注册进来，玩家下线时统一回调清理，
+	// 避免"掉线→会话悬挂→重登被锁"（架构隐患审查 T3/M1）。
+	hooksMu      sync.RWMutex
+	offlineHooks []func(id.PlayerIdType)
+}
+
+// RegisterOfflineHook 注册一个玩家下线清理回调（交易/组队等在构造时挂入）。
+func (pm *PlayerManager) RegisterOfflineHook(fn func(id.PlayerIdType)) {
+	pm.hooksMu.Lock()
+	defer pm.hooksMu.Unlock()
+	pm.offlineHooks = append(pm.offlineHooks, fn)
+}
+
+// RunOfflineHooks 玩家下线时统一回调所有清理钩子（登出 / 关服路径调用）。
+func (pm *PlayerManager) RunOfflineHooks(playerID id.PlayerIdType) {
+	pm.hooksMu.RLock()
+	hooks := pm.offlineHooks
+	pm.hooksMu.RUnlock()
+	for _, fn := range hooks {
+		fn(playerID)
+	}
 }
 
 func NewPlayerManager() *PlayerManager {

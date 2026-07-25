@@ -294,6 +294,14 @@ func (s *BaseServer) OnBeforeStop() {
 	zLog.Info("Game server entering draining state")
 	s.notifyGatewayStatusChange()
 
+	// 关服前把所有在线玩家落库（属性/金币/背包/技能/仓库）+ 清理跨玩家会话（F-3）。须在停网络前，
+	// 此时玩家 actor 仍在。
+	if s.PlayerManager != nil {
+		if ls := s.PlayerManager.GetLoginService(); ls != nil {
+			ls.PersistAllOnline()
+		}
+	}
+
 	if s.TCPService != nil {
 		s.TCPService.Stop(s.GetContext())
 	}

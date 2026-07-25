@@ -371,6 +371,19 @@ func (ps *PlayerService) saveLoop() {
 	}
 }
 
+// FlushAllOnline 立即把所有在线玩家的 online 缓存写回 players 表（关服时用；调用方须先 sync actor→缓存）。
+func (ps *PlayerService) FlushAllOnline() {
+	ps.onlineMu.RLock()
+	players := make([]*OnlinePlayer, 0, len(ps.onlinePlayers))
+	for _, p := range ps.onlinePlayers {
+		players = append(players, p)
+	}
+	ps.onlineMu.RUnlock()
+	for _, p := range players {
+		ps.savePlayer(p)
+	}
+}
+
 func (ps *PlayerService) savePlayer(p *OnlinePlayer) {
 	p.mu.RLock()
 	player := &models.Player{

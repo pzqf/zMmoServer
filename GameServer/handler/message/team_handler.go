@@ -22,7 +22,15 @@ type TeamHandler struct {
 }
 
 func NewTeamHandler(pm *player.PlayerManager, serverID int32) *TeamHandler {
-	return &TeamHandler{playerManager: pm, teamManager: team.NewTeamManager(), serverID: serverID}
+	h := &TeamHandler{playerManager: pm, teamManager: team.NewTeamManager(), serverID: serverID}
+	// 玩家下线清理钩子（M1）：掉线/登出时把该玩家移出队伍并给剩余成员推最新花名册，
+	// 避免 playerTeam/teams 悬挂 + 重登被锁"already in a team"。
+	pm.RegisterOfflineHook(func(pid id.PlayerIdType) {
+		if t, disbanded, err := h.teamManager.Leave(pid); err == nil && !disbanded {
+			h.broadcastRoster(t.ID, t.Leader, t.Members)
+		}
+	})
+	return h
 }
 
 func (h *TeamHandler) Handle(session zNet.Session, protoId int32, data []byte) error {
