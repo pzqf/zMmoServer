@@ -83,3 +83,84 @@ func TestMapActor_ConcurrentMutation_NoRace(t *testing.T) {
 	close(stop)
 	wg.Wait()
 }
+
+// TestSpawnRemove_NoDeadlockNoRace 压测 MAP-8 的锁序安全：刷怪循环
+// （checkSpawnPoints：持 sm.mu 建对象→释放→经 Do 加入地图）与地图 goroutine 上的
+// 对象移除（RemoveObject：持 m.mu→取 sm.mu 回退计数）并发。若二者锁序成环会死锁 → 本用例超时失败；
+// 同时在 -race 下验证 spawnedBy/currentCount 访问无竞争。
+func TestSpawnRemove_NoDeadlockNoRace(t *testing.T) {
+	m := NewMap(id.MapIdType(2), 2, "SpawnMap", 1000, 1000)
+	defer m.StopActor()
+
+	// 注入一个高频刷怪点（respawnTime=0，maxCount 较大），令 checkSpawnPoints 真正刷怪。
+	m.spawnManager.mu.Lock()
+	m.spawnManager.spawnPoints = append(m.spawnManager.spawnPoints, &SpawnPoint{
+		spawnID:     1,
+		spawnType:   1, // monster
+		objectID:    1,
+		position:    common.Vector3{X: 50, Y: 0, Z: 50},
+		respawnTime: 0,
+		maxCount:    20,
+		active:      true,
+		lastSpawn:   time.Now().Add(-time.Hour),
+	})
+	m.spawnManager.mu.Unlock()
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+
+	// 刷怪驱动：高频调用 checkSpawnPoints。
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				m.spawnManager.checkSpawnPoints()
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// 帧更新驱动（AI 会移动怪，触发 MAP-6 的 AOI 同步路径）。
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				m.postTick(50 * time.Millisecond)
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// 移除驱动：不断把已刷出的怪移除（经地图 goroutine），触发 RemoveObject→spawnManager.RemoveObject。
+	for w := 0; w < 3; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					for _, obj := range m.GetObjects() {
+						if obj.GetType() == common.GameObjectTypeMonster {
+							oid := obj.GetID()
+							m.Do(func() { m.RemoveObject(oid) })
+						}
+					}
+				}
+			}
+		}()
+	}
+
+	time.Sleep(700 * time.Millisecond)
+	close(stop)
+	wg.Wait()
+}

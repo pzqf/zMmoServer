@@ -265,11 +265,20 @@ func (m *Map) RemoveObject(objectID id.ObjectIdType) {
 	if obj.GetType() == common.GameObjectTypePlayer {
 		if p, ok := obj.(*object.Player); ok {
 			m.players.Delete(p.GetPlayerID())
+			// MAP-8: 清除该玩家在 BuffManager 里的全部 buff，否则 playerBuffs 随玩家进出无界增长。
+			if m.buffManager != nil {
+				m.buffManager.RemoveAllBuffs(p.GetPlayerID())
+			}
 		}
 	}
 
 	if obj.GetType() == common.GameObjectTypeMonster {
 		m.aiManager.RemoveMonsterAI(objectID)
+		// MAP-8: 回退刷怪点计数，否则 currentCount 只增不减→刷怪点达 maxCount 后永久停摆。
+		// spawnManager 只在锁外经 Do 加对象（见 checkSpawnPoints），此处持 m.mu 取 sm.mu 无锁序死锁。
+		if m.spawnManager != nil {
+			m.spawnManager.RemoveObject(objectID)
+		}
 	}
 
 	m.objects.Delete(objectID)

@@ -19,6 +19,9 @@ type SpawnManager struct {
 	mapObj      *Map
 	spawnPoints []*SpawnPoint
 	running     bool
+	// spawnedBy: 记录每个刷出对象归属的刷怪点（MAP-8），供对象移除时精确回退 currentCount，
+	// 否则刷怪点计数只增不减→达 maxCount 后永久停摆。
+	spawnedBy map[id.ObjectIdType]*SpawnPoint
 }
 
 type SpawnPoint struct {
@@ -41,6 +44,7 @@ func NewSpawnManager(mapID id.MapIdType, mapObj *Map) *SpawnManager {
 		mapObj:      mapObj,
 		spawnPoints: make([]*SpawnPoint, 0),
 		running:     false,
+		spawnedBy:   make(map[id.ObjectIdType]*SpawnPoint),
 	}
 }
 
@@ -109,84 +113,85 @@ func (sm *SpawnManager) spawnLoop() {
 }
 
 func (sm *SpawnManager) checkSpawnPoints() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
 	now := time.Now()
 
+	// 第一阶段：持 sm.mu 挑选到期刷怪点、创建对象、登记归属并递增计数，收集待加入对象。
+	sm.mu.Lock()
+	var toSpawn []common.IGameObject
 	for _, spawnPoint := range sm.spawnPoints {
 		if !spawnPoint.active {
 			continue
 		}
-
 		if spawnPoint.currentCount < spawnPoint.maxCount {
 			elapsed := now.Sub(spawnPoint.lastSpawn).Seconds()
 			if elapsed >= float64(spawnPoint.respawnTime) {
-				sm.spawnObject(spawnPoint)
-				spawnPoint.lastSpawn = now
+				if obj := sm.createSpawnObject(spawnPoint); obj != nil {
+					toSpawn = append(toSpawn, obj)
+					spawnPoint.lastSpawn = now
+				}
 			}
 		}
 	}
-}
+	sm.mu.Unlock()
 
-func (sm *SpawnManager) spawnObject(spawnPoint *SpawnPoint) {
-	switch spawnPoint.spawnType {
-	case 1:
-		sm.spawnMonster(spawnPoint)
-	case 2:
-		sm.spawnNPC(spawnPoint)
-	default:
-		zLog.Warn("Unknown spawn type", zap.Int32("type", spawnPoint.spawnType))
+	// 第二阶段：在锁外把对象串行加入地图（经 actor）。
+	// 关键：绝不能持 sm.mu 跨阻塞的 Do——那样会与地图 goroutine 上（持 m.mu）需要 sm.mu 的
+	// RemoveObject 形成锁序死锁（MAP-8 修复的前提）。
+	for _, obj := range toSpawn {
+		o := obj
+		sm.mapObj.Do(func() { sm.mapObj.AddObject(o) })
 	}
 }
 
-func (sm *SpawnManager) spawnMonster(spawnPoint *SpawnPoint) {
-	objectID := nextMapObjectID()
+// createSpawnObject 在持 sm.mu 时创建刷出对象、登记归属并递增 currentCount，返回待加入地图的对象。
+func (sm *SpawnManager) createSpawnObject(spawnPoint *SpawnPoint) common.IGameObject {
+	var objectID id.ObjectIdType
+	var obj common.IGameObject
+	switch spawnPoint.spawnType {
+	case 1:
+		objectID = nextMapObjectID()
+		obj = object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, 1)
+		zLog.Debug("Spawning monster",
+			zap.Int32("monster_id", spawnPoint.objectID),
+			zap.Int64("object_id", int64(objectID)),
+			zap.Float32("x", spawnPoint.position.X),
+			zap.Float32("y", spawnPoint.position.Y))
+	case 2:
+		objectID = nextMapObjectID()
+		obj = object.NewNPC(objectID, spawnPoint.objectID, "NPC_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, "Hello, adventurer!")
+		zLog.Debug("Spawning NPC",
+			zap.Int32("npc_id", spawnPoint.objectID),
+			zap.Int64("object_id", int64(objectID)),
+			zap.Float32("x", spawnPoint.position.X),
+			zap.Float32("y", spawnPoint.position.Y))
+	default:
+		zLog.Warn("Unknown spawn type", zap.Int32("type", spawnPoint.spawnType))
+		return nil
+	}
 
-	monster := object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, 1)
-
-	// MAP-2: 刷怪在 spawnLoop goroutine，AddObject 须串行回地图 goroutine。
-	sm.mapObj.Do(func() { sm.mapObj.AddObject(monster) })
-
-	zLog.Debug("Spawning monster",
-		zap.Int32("monster_id", spawnPoint.objectID),
-		zap.Int64("object_id", int64(objectID)),
-		zap.Float32("x", spawnPoint.position.X),
-		zap.Float32("y", spawnPoint.position.Y))
-
+	sm.spawnedBy[objectID] = spawnPoint
 	spawnPoint.currentCount++
+	return obj
 }
 
-func (sm *SpawnManager) spawnNPC(spawnPoint *SpawnPoint) {
-	objectID := nextMapObjectID()
-
-	npc := object.NewNPC(objectID, spawnPoint.objectID, "NPC_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, "Hello, adventurer!")
-
-	// MAP-2: 刷 NPC 在 spawnLoop goroutine，AddObject 须串行回地图 goroutine。
-	sm.mapObj.Do(func() { sm.mapObj.AddObject(npc) })
-
-	zLog.Debug("Spawning NPC",
-		zap.Int32("npc_id", spawnPoint.objectID),
-		zap.Int64("object_id", int64(objectID)),
-		zap.Float32("x", spawnPoint.position.X),
-		zap.Float32("y", spawnPoint.position.Y))
-
-	spawnPoint.currentCount++
-}
-
+// RemoveObject 在对象移除时精确回退其归属刷怪点的 currentCount（MAP-8）。
+// 通过 spawnedBy 定位归属点，避免此前"递减第一个非零点"的错配（会让满员点被误减而超刷）。
+// 非本管理器刷出的对象（如死亡重生走 scheduleMonsterRespawn 直接 AddObject 的）不在表中，忽略。
 func (sm *SpawnManager) RemoveObject(objectID id.ObjectIdType) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	for _, spawnPoint := range sm.spawnPoints {
-		if spawnPoint.currentCount > 0 {
-			spawnPoint.currentCount--
-			zLog.Debug("Object removed from spawn point",
-				zap.Int32("spawn_id", spawnPoint.spawnID),
-				zap.Int("current_count", spawnPoint.currentCount))
-			break
-		}
+	spawnPoint, ok := sm.spawnedBy[objectID]
+	if !ok {
+		return
 	}
+	delete(sm.spawnedBy, objectID)
+	if spawnPoint.currentCount > 0 {
+		spawnPoint.currentCount--
+	}
+	zLog.Debug("Object removed from spawn point",
+		zap.Int32("spawn_id", spawnPoint.spawnID),
+		zap.Int("current_count", spawnPoint.currentCount))
 }
 
 func (sm *SpawnManager) Stop() {
