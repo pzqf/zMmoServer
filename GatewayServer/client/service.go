@@ -76,6 +76,12 @@ type Service struct {
 // NewService 创建客户端服务
 func NewService(cfg *config.Config, netServer *zNet.TcpServer, etcdClient *clientv3.Client) *Service {
 	connMgr := connection.NewClientConnMgr()
+	// GW-3: 注入踢人能力——同账号重复登录时关闭旧会话的底层连接。
+	connMgr.SetKickHandler(func(sessionID zNet.SessionIdType) {
+		if session := netServer.GetSession(sessionID); session != nil {
+			session.Close()
+		}
+	})
 	ipManager := security.NewIPManager(&cfg.Security, etcdClient)
 	antiCheatManager := security.NewAntiCheatManager(cfg)
 	tokenManager := auth.NewTokenManager(cfg)

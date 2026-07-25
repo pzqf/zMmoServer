@@ -13,6 +13,13 @@ type ClientConnMgr struct {
 	sessions   *zMap.TypedMap[zNet.SessionIdType, *SessionInfo]
 	accountMap *zMap.TypedMap[id.AccountIdType, zNet.SessionIdType]
 	nameMap    *zMap.TypedMap[string, id.AccountIdType]
+	// kickFn: 关闭指定会话底层连接（GW-3 单端登录踢旧）。由 Service 注入（持 netServer）。
+	kickFn func(zNet.SessionIdType)
+}
+
+// SetKickHandler 注入"按 sessionID 关闭连接"的能力，用于同账号重复登录时踢掉旧会话。
+func (cm *ClientConnMgr) SetKickHandler(fn func(zNet.SessionIdType)) {
+	cm.kickFn = fn
 }
 
 // SessionInfo 会话信息
@@ -49,14 +56,15 @@ func (cm *ClientConnMgr) RemoveSession(sessionID zNet.SessionIdType) {
 		return
 	}
 
-	// 从账号映射中移除
+	// GW-3: 仅当本会话仍是该账号的"当前会话"时才清账号/名称映射。否则（该账号已被新端登录接管，
+	// accountMap 指向新会话）旧连接断开会误删新会话的映射，导致新端后续按账号推送/查找全部失效。
 	if session.AccountID != 0 {
-		cm.accountMap.Delete(session.AccountID)
-	}
-
-	// 从名称映射中移除
-	if session.AccountName != "" {
-		cm.nameMap.Delete(session.AccountName)
+		if cur, ok := cm.accountMap.Load(session.AccountID); ok && cur == sessionID {
+			cm.accountMap.Delete(session.AccountID)
+			if session.AccountName != "" {
+				cm.nameMap.Delete(session.AccountName)
+			}
+		}
 	}
 
 	cm.sessions.Delete(sessionID)
@@ -71,6 +79,10 @@ func (cm *ClientConnMgr) SetAccountInfo(sessionID zNet.SessionIdType, accountID 
 		return
 	}
 
+	// GW-3: 同账号多端登录——踢掉该账号此前占用的旧会话（若存在且不同）。先落新映射再踢旧，
+	// 这样旧连接 OnClose→RemoveSession 时按 GW-3 的当前会话判定不会误删新映射。
+	oldSession, hasOld := cm.accountMap.Load(accountID)
+
 	session.AccountID = accountID
 	session.AccountName = accountName
 
@@ -80,7 +92,17 @@ func (cm *ClientConnMgr) SetAccountInfo(sessionID zNet.SessionIdType, accountID 
 	// 更新名称映射
 	cm.nameMap.Store(accountName, accountID)
 
-	zLog.Info("Account info set", 
+	if hasOld && oldSession != sessionID {
+		if cm.kickFn != nil {
+			cm.kickFn(oldSession)
+		}
+		zLog.Warn("Account re-login, kicked previous session",
+			zap.Int64("account_id", int64(accountID)),
+			zap.Uint64("old_session", uint64(oldSession)),
+			zap.Uint64("new_session", uint64(sessionID)))
+	}
+
+	zLog.Info("Account info set",
 		zap.Uint64("session_id", uint64(sessionID)), 
 		zap.Int64("account_id", int64(accountID)), 
 		zap.String("account_name", accountName))
