@@ -93,6 +93,7 @@ type MySQLConnector struct {
 	done         chan struct{}            // 关闭信号：替代 close(queryCh)，杜绝 send-on-closed panic
 	closeOnce    sync.Once                // 保证 Close 只执行一次
 	queryCh      chan *DBQuery            // 查询通道
+	execSem      chan struct{}            // INF-7: Execute 并发信号量（限并发+背压），纳入 wg 优雅关闭
 	capacity     int                      // 通道容量
 	workerCount  int                      // 工作协程数量
 	metrics      *metrics.BusinessMetrics // 数据库指标监控
@@ -110,6 +111,7 @@ func NewMySQLConnector(name string, capacity int) *MySQLConnector {
 			driver: "mysql",
 		},
 		queryCh:      make(chan *DBQuery, capacity),
+		execSem:      make(chan struct{}, capacity),
 		done:         make(chan struct{}),
 		capacity:     capacity,
 		workerCount:  10, // 默认10个工作协程
@@ -328,8 +330,22 @@ func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(s
 		return
 	}
 
-	// 异步执行查询
+	// INF-7: 用信号量限并发（满则阻塞调用方形成背压，替代此前每次 Execute 无界起 goroutine），
+	// 并纳入 c.wg 让 Close 等待在飞 Execute 完成（此前不等待→Close 后 goroutine 仍用已关闭的 db）。
+	select {
+	case c.execSem <- struct{}{}:
+	case <-c.done:
+		if callback != nil {
+			callback(nil, fmt.Errorf("mysql connector is closing"))
+		}
+		return
+	}
+
+	c.wg.Add(1)
 	go func() {
+		defer c.wg.Done()
+		defer func() { <-c.execSem }()
+
 		startTime := time.Now()
 		c.metrics.IncCounter("total_executes")
 

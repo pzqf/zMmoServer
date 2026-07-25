@@ -3,7 +3,6 @@ package lifecycle
 import (
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
@@ -123,7 +122,8 @@ type Manager struct {
 	hooks      *zMap.TypedMap[string, *LifecycleHooks]
 	serializers *zMap.TypedMap[string, Serializer]
 	factories  *zMap.TypedMap[string, ObjectFactory]
-	mu         sync.Mutex
+	// OPT-12: 移除此前声明但从未使用的 sync.Mutex——所有状态都存于线程安全的 zMap.TypedMap，
+	// 该锁是死字段（会误导读者以为有额外临界区保护）。
 }
 
 func NewManager() *Manager {

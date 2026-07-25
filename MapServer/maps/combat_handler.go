@@ -76,6 +76,11 @@ func (m *Map) handlePlayerDeath(player *object.Player, killer common.IGameObject
 		time.Sleep(5 * time.Second)
 		// MAP-2: 复活改动玩家状态，串行回地图 goroutine。
 		m.Do(func() {
+			// MAP-10: 存活校验——玩家可能在这 5s 内已离场（RemoveObject）。若已不在本地图则不复活，
+			// 避免复活一个已离场的对象（其可能已在别处重新进入）。
+			if m.GetObject(id.ObjectIdType(player.GetPlayerID())) == nil {
+				return
+			}
 			player.SetHealth(player.GetMaxHealth())
 			spawnPos := common.Vector3{X: m.width / 2, Y: 0, Z: m.height / 2}
 			player.SetPosition(spawnPos)

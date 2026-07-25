@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -66,6 +67,7 @@ type ParticipantVote struct {
 }
 
 type Transaction struct {
+	mu           sync.Mutex // INF-6: 守护 Votes/Prepared map 与 State，避免 Vote/Prepare 并发写 map panic
 	ID           uint64
 	State        TransactionState
 	Participants []string
@@ -152,12 +154,18 @@ func (tm *TransactionManager) Vote(ctx context.Context, txID uint64, participant
 		return ErrTransactionNotFound
 	}
 
+	// INF-6: 多参与者可能并发 Vote → 并发写 tx.Votes map 会 panic；加锁。
+	tx.mu.Lock()
 	tx.Votes[participant] = &ParticipantVote{
 		Participant: participant,
 		Vote:        vote,
 		Reason:      reason,
 		Timestamp:   time.Now(),
 	}
+	if vote == VoteAbort {
+		tx.State = TransactionStateAborted
+	}
+	tx.mu.Unlock()
 
 	zLog.Debug("Transaction vote received",
 		zap.Uint64("tx_id", txID),
@@ -166,7 +174,7 @@ func (tm *TransactionManager) Vote(ctx context.Context, txID uint64, participant
 		zap.String("reason", reason))
 
 	if vote == VoteAbort {
-		tx.State = TransactionStateAborted
+		// State 已在上方锁内置为 Aborted。
 		zLog.Warn("Transaction aborted due to vote reject",
 			zap.Uint64("tx_id", txID),
 			zap.String("participant", participant),
@@ -231,7 +239,9 @@ func (tm *TransactionManager) Prepare(ctx context.Context, txID uint64) error {
 			return fmt.Errorf("prepare failed for %s: %w", participant, err)
 		}
 
+		tx.mu.Lock() // INF-6: 守护 Prepared map 写
 		tx.Prepared[participant] = true
+		tx.mu.Unlock()
 
 		zLog.Debug("Transaction participant prepared",
 			zap.Uint64("tx_id", txID),
