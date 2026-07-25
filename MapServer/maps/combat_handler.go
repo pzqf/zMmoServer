@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zMmoServer/MapServer/maps/combat"
@@ -217,7 +218,11 @@ func (m *Map) attackTargetLocked(playerID id.PlayerIdType, objectID id.ObjectIdT
 
 	isKill := m.combatSystem.ApplyDamage(target, result)
 
+	// 场景同步增强：把 target 的最新血量广播给视野内玩家（不止攻击者自己）。
+	m.broadcastEntityAttr(target)
+
 	if isKill {
+		m.broadcastEntityDeath(target, attacker)
 		switch t := target.(type) {
 		case *object.Player:
 			m.handlePlayerDeath(t, attacker)
@@ -227,6 +232,61 @@ func (m *Map) attackTargetLocked(playerID id.PlayerIdType, objectID id.ObjectIdT
 	}
 
 	return result.Damage, 0, nil
+}
+
+// aoiBroadcastRadius 状态变更广播半径。取 AOI 网格边长的 2 倍，覆盖 target 所在格及相邻格
+// 里的观察者（近似 AOI 视野范围）。见 defaultGridSize。
+const aoiBroadcastRadius = defaultGridSize * 2
+
+// broadcastEntityAttr 把 target 的最新血量广播给视野内所有玩家(watcher)。
+// 由地图 actor goroutine 在战斗结算后同步调用；NotifyAOI 仅把值化事件入队，不阻塞 actor（MAP-7）。
+// 血量经 pos 载荷透传：X=当前血量, Y=最大血量（对端 aoi_push.go case AOIAttr 还原）。
+func (m *Map) broadcastEntityAttr(target common.IGameObject) {
+	if m.aoiNotifier == nil || target == nil {
+		return
+	}
+	var curHP, maxHP int32
+	switch t := target.(type) {
+	case *object.Player:
+		curHP, maxHP = t.GetHealth(), t.GetMaxHealth()
+	case *object.Monster:
+		curHP, maxHP = t.GetHealth(), t.GetMaxHealth()
+	default:
+		return
+	}
+	pos := target.GetPosition()
+	payload := common.Vector3{X: float32(curHP), Y: float32(maxHP)}
+	for _, w := range m.GetPlayersInRange(pos, aoiBroadcastRadius) {
+		wp, ok := w.(*object.Player)
+		if !ok {
+			continue
+		}
+		// watcher 用玩家 ID（GameServer 侧按 playerID 查会话；见 aoi_push.sendAOINotify）。
+		m.aoiNotifier.NotifyAOI(int64(wp.GetPlayerID()), int32(m.mapID),
+			crossserver.MsgInternalAOIAttr, int64(target.GetID()), payload)
+	}
+}
+
+// broadcastEntityDeath 把 target 死亡广播给视野内所有玩家(watcher)。
+// killer 对象 ID 经 pos.X 载荷透传（对端 aoi_push.go case AOIDeath 还原）。
+func (m *Map) broadcastEntityDeath(target, killer common.IGameObject) {
+	if m.aoiNotifier == nil || target == nil {
+		return
+	}
+	pos := target.GetPosition()
+	var killerID int64
+	if killer != nil {
+		killerID = int64(killer.GetID())
+	}
+	payload := common.Vector3{X: float32(killerID)}
+	for _, w := range m.GetPlayersInRange(pos, aoiBroadcastRadius) {
+		wp, ok := w.(*object.Player)
+		if !ok {
+			continue
+		}
+		m.aoiNotifier.NotifyAOI(int64(wp.GetPlayerID()), int32(m.mapID),
+			crossserver.MsgInternalAOIDeath, int64(target.GetID()), payload)
+	}
 }
 
 func (m *Map) GetTargetInRange(position common.Vector3, skillRange float32, casterID id.ObjectIdType, targetTypes []common.GameObjectType) []common.IGameObject {

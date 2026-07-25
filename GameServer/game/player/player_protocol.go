@@ -71,6 +71,8 @@ const (
 	MsgAOIEnterView MessageType = 17001
 	MsgAOILeaveView MessageType = 17002
 	MsgAOIMove      MessageType = 17003
+	MsgAOIAttr      MessageType = 17004 // 视野内实体血量变更
+	MsgAOIDeath     MessageType = 17005 // 视野内实体死亡
 )
 
 type MessageSource int

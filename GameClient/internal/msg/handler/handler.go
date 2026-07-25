@@ -101,6 +101,16 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		if proto.Unmarshal(data, &r) == nil {
 			fmt.Printf("SkillCastResponse: Result=%d, SkillID=%d, Err=%s\n", r.Result, r.SkillId, r.Error)
 		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTITY_ATTR):
+		var n protocol.EntityAttrNotify
+		if proto.Unmarshal(data, &n) == nil {
+			fmt.Printf("[AOI] 实体血量变更: entity=%d HP=%d/%d\n", n.EntityId, n.CurHp, n.MaxHp)
+		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTITY_DEATH):
+		var n protocol.EntityDeathNotify
+		if proto.Unmarshal(data, &n) == nil {
+			fmt.Printf("[AOI] 实体死亡: entity=%d killer=%d\n", n.EntityId, n.KillerId)
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

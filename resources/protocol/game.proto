@@ -51,6 +51,8 @@ enum MapMsgId {
   MSG_MAP_ENTER_VIEW = 1220;
   MSG_MAP_LEAVE_VIEW = 1221;
   MSG_MAP_ENTITY_MOVE = 1222;
+  MSG_MAP_ENTITY_ATTR = 1223;   // 实体属性(血量)变更广播
+  MSG_MAP_ENTITY_DEATH = 1224;  // 实体死亡广播
 }
 
 // ============================================
@@ -167,4 +169,17 @@ message EntityMoveNotify {
   int64 entity_id = 1;
   Position old_pos = 2;
   Position new_pos = 3;
+}
+
+// 实体属性(血量)变更通知——战斗结算后经 AOI 广播给视野内玩家
+message EntityAttrNotify {
+  int64 entity_id = 1;
+  int64 cur_hp = 2;
+  int64 max_hp = 3;
+}
+
+// 实体死亡通知——经 AOI 广播给视野内玩家
+message EntityDeathNotify {
+  int64 entity_id = 1;
+  int64 killer_id = 2;
 }

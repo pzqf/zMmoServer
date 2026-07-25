@@ -92,6 +92,19 @@ func (ts *TCPService) sendAOINotify(job aoiSendJob) {
 			EntityId: job.targetID,
 			NewPos:   &protocol.Position{X: job.pos.X, Y: job.pos.Y, Z: job.pos.Z},
 		})
+	case crossserver.MsgInternalAOIAttr:
+		// 属性广播复用 pos 承载血量载荷：X=当前血量, Y=最大血量（见 Map.broadcastEntityAttr）。
+		innerData, err = proto.Marshal(&protocol.EntityAttrNotify{
+			EntityId: job.targetID,
+			CurHp:    int64(job.pos.X),
+			MaxHp:    int64(job.pos.Y),
+		})
+	case crossserver.MsgInternalAOIDeath:
+		// 死亡广播复用 pos.X 承载 killer 对象 ID（见 Map.broadcastEntityDeath）。
+		innerData, err = proto.Marshal(&protocol.EntityDeathNotify{
+			EntityId: job.targetID,
+			KillerId: int64(job.pos.X),
+		})
 	default:
 		return
 	}

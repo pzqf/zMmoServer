@@ -217,7 +217,8 @@ func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet 
 		cm.handleMapMoveResponse(meta, baseMsg)
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION):
 		cm.handleMapAttackResponse(meta, baseMsg)
-	case crossserver.MsgInternalAOIEnter, crossserver.MsgInternalAOILeave, crossserver.MsgInternalAOIMove:
+	case crossserver.MsgInternalAOIEnter, crossserver.MsgInternalAOILeave, crossserver.MsgInternalAOIMove,
+		crossserver.MsgInternalAOIAttr, crossserver.MsgInternalAOIDeath:
 		cm.handleAOINotify(baseMsg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
@@ -263,6 +264,24 @@ func (cm *ConnectionManager) handleAOINotify(baseMsg *protocol.BaseMessage) {
 		if n.NewPos != nil {
 			x, y, z = n.NewPos.X, n.NewPos.Y, n.NewPos.Z
 		}
+	case crossserver.MsgInternalAOIAttr:
+		// 血量经 x/y 透传：x=当前血量, y=最大血量（player_aoi_handler 还原为 EntityAttrNotify）。
+		var n protocol.EntityAttrNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityAttrNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+		x, y = float32(n.CurHp), float32(n.MaxHp)
+	case crossserver.MsgInternalAOIDeath:
+		// killer 经 x 透传。
+		var n protocol.EntityDeathNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityDeathNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+		x = float32(n.KillerId)
 	default:
 		return
 	}

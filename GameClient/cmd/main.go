@@ -22,6 +22,10 @@ func main() {
 	clientCount := flag.Int("clients", 10, "并发客户端数量")
 	messageCount := flag.Int("messages", 100, "每个客户端发送的消息数")
 	testDuration := flag.Int("duration", 30, "长时测试持续时间(秒)")
+	// 场景同步增强 E2E：指定攻击目标(默认 2)、攻击次数、以及流程结束后驻留秒数(供 PvP 受害端在场接收广播)。
+	attackTarget := flag.Int64("attackTarget", 2, "攻击目标对象ID(玩家 objectID==playerID)")
+	attackCount := flag.Int("attackCount", 1, "攻击次数(击杀需多次)")
+	idleSeconds := flag.Int("idle", 0, "流程末尾驻留秒数(保持在场接收 AOI 广播)")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -33,7 +37,7 @@ func main() {
 
 	switch *mode {
 	case "full":
-		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName)
+		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds)
 	case "gateway-only":
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
@@ -49,7 +53,7 @@ func main() {
 }
 
 // runFullTest 运行完整测试（全局服+网关服）
-func runFullTest(globalServer, gatewayServer, account, password, playerName string) {
+func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int) {
 	fmt.Println("=== 完整测试模式 ===")
 
 	// 1. 连接GlobalServer，获取token
@@ -137,12 +141,15 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 		return
 	}
 
-	// 11. 攻击
-	fmt.Println("9. 攻击...")
-	if err := c.SendMapAttack(playerID, 1001, 2); err != nil {
-		fmt.Printf("攻击失败: %v\n", err)
-		c.Disconnect()
-		return
+	// 11. 攻击（attackTarget 默认 2；PvP 场景传对方 playerID。attackCount>1 用于打到击杀触发死亡广播）
+	fmt.Printf("9. 攻击 target=%d x%d...\n", attackTarget, attackCount)
+	for i := 0; i < attackCount; i++ {
+		if err := c.SendMapAttack(playerID, 1001, attackTarget); err != nil {
+			fmt.Printf("攻击失败: %v\n", err)
+			c.Disconnect()
+			return
+		}
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	// 12. 等待响应
@@ -193,6 +200,12 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	fmt.Println("21. 再释放一次(应在冷却)...")
 	_ = c.SendSkillCast(playerID, 2001, 2)
 	time.Sleep(600 * time.Millisecond)
+
+	// 驻留：保持在场以接收其他玩家攻击我方时的 AOI 血量/死亡广播
+	if idleSeconds > 0 {
+		fmt.Printf("驻留 %ds 接收 AOI 广播...\n", idleSeconds)
+		time.Sleep(time.Duration(idleSeconds) * time.Second)
+	}
 
 	// 13. 登出
 	fmt.Println("10. 登出...")
