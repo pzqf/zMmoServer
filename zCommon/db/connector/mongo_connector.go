@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/pzqf/zEngine/zLog"
 	"go.mongodb.org/mongo-driver/bson"
@@ -59,15 +60,19 @@ func (c *MongoConnector) Init(dbConfig DBConfig) error {
 	clientOptions.SetMinPoolSize(uint64(dbConfig.MaxIdle))
 
 	// 创建MongoDB客户端
+	// INF-9: 不能传 nil ctx——新版 mongo 驱动对 nil ctx 会 panic。用带超时的真实 ctx。
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	var err error
-	c.mongoClient, err = mongo.Connect(nil, clientOptions)
+	c.mongoClient, err = mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		zLog.Error("Failed to create MongoDB client", zap.Error(err))
 		return err
 	}
 
 	// 测试连接
-	if err := c.mongoClient.Ping(nil, nil); err != nil {
+	if err := c.mongoClient.Ping(ctx, nil); err != nil {
 		zLog.Error("Failed to ping MongoDB database", zap.Error(err))
 		return err
 	}
@@ -178,7 +183,10 @@ func (c *MongoConnector) Close() error {
 
 	// 关闭MongoDB连接
 	if c.mongoClient != nil {
-		if err := c.mongoClient.Disconnect(nil); err != nil {
+		// INF-9: 不能传 nil ctx（新驱动会 panic）。用带超时的真实 ctx。
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := c.mongoClient.Disconnect(ctx); err != nil {
 			return fmt.Errorf("failed to close MongoDB connection: %v", err)
 		}
 	}
