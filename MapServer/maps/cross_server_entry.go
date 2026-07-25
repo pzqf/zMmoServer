@@ -104,9 +104,12 @@ func (cse *CrossServerMapEntry) LeaveCrossServerMap(playerID id.PlayerIdType, ma
 
 	if m.IsDungeon() {
 		instanceID := m.GetDungeonInstanceID()
-		dlm := cse.mapManager.GetDungeonLifecycleManager()
-		if dlm != nil {
-			dlm.DestroyDungeon(instanceID)
+		// 用 DestroyDungeonMap 统一销毁：既销毁副本生命周期，又 Cleanup 底层 Map（停 actor +
+		// 刷怪 goroutine）并从 MapManager 注销——此前只 dlm.DestroyDungeon 会漏掉 Map 本体（MAP-11）。
+		// EnterDungeonMap 建的是单人实例，玩家离开即可销毁；多人副本应改为"最后一人离开/副本完成"再销毁。
+		if err := cse.mapManager.DestroyDungeonMap(instanceID); err != nil {
+			zLog.Warn("Failed to destroy dungeon map on leave",
+				zap.Int64("instance_id", int64(instanceID)), zap.Error(err))
 		}
 	}
 

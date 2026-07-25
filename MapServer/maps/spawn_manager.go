@@ -19,6 +19,10 @@ type SpawnManager struct {
 	mapObj      *Map
 	spawnPoints []*SpawnPoint
 	running     bool
+	// stopCh/stopOnce: spawnLoop 的停止信号（实例地图销毁时需可靠停掉刷怪 goroutine）。
+	// 此前 spawnLoop 用 `for sm.running` 无同步读、Stop 写 running → 数据竞争；改用 channel。
+	stopCh   chan struct{}
+	stopOnce sync.Once
 	// spawnedBy: 记录每个刷出对象归属的刷怪点（MAP-8），供对象移除时精确回退 currentCount，
 	// 否则刷怪点计数只增不减→达 maxCount 后永久停摆。
 	spawnedBy map[id.ObjectIdType]*SpawnPoint
@@ -44,6 +48,7 @@ func NewSpawnManager(mapID id.MapIdType, mapObj *Map) *SpawnManager {
 		mapObj:      mapObj,
 		spawnPoints: make([]*SpawnPoint, 0),
 		running:     false,
+		stopCh:      make(chan struct{}),
 		spawnedBy:   make(map[id.ObjectIdType]*SpawnPoint),
 	}
 }
@@ -104,8 +109,10 @@ func (sm *SpawnManager) spawnLoop() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	for sm.running {
+	for {
 		select {
+		case <-sm.stopCh:
+			return
 		case <-ticker.C:
 			sm.checkSpawnPoints()
 		}
@@ -196,7 +203,11 @@ func (sm *SpawnManager) RemoveObject(objectID id.ObjectIdType) {
 		zap.Int("current_count", spawnPoint.currentCount))
 }
 
+// Stop 停止刷怪 goroutine（幂等）。实例地图销毁时调用，避免 spawnLoop 泄漏。
 func (sm *SpawnManager) Stop() {
-	sm.running = false
+	sm.stopOnce.Do(func() {
+		sm.running = false
+		close(sm.stopCh)
+	})
 	zLog.Info("Spawn manager stopped", zap.Int32("map_id", int32(sm.mapID)))
 }

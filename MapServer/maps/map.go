@@ -626,7 +626,16 @@ func (m *Map) GetResourceByID(resourceID int32) *models.MapResource {
 
 func (m *Map) CreateDefaultEvents() {}
 
+// Cleanup 销毁地图：停掉本地图的所有 goroutine 并清空状态（MAP-11）。
+// 此前只清数据、不停 actor / spawnLoop → 实例地图（副本/镜像/跨服）销毁后这两条 goroutine
+// 永久泄漏、还继续往死图刷怪。实例地图生命周期由 MapManager.DestroyDungeonMap 等驱动本方法。
 func (m *Map) Cleanup() {
+	// 先停 goroutine（幂等）：actor 单写者 + 刷怪循环。二者停止信号是 channel close，非阻塞。
+	m.StopActor()
+	if m.spawnManager != nil {
+		m.spawnManager.Stop()
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
