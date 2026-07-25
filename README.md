@@ -4,6 +4,23 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 zMmoServer 是一个基于 Go 语言的分布式 MMORPG 游戏服务器，采用微服务架构设计，支持多服务器协同工作。
+它建立在游戏引擎 [zEngine](https://github.com/pzqf/zEngine) 与工具库 [zUtil](https://github.com/pzqf/zUtil) 之上，
+既是一套**可运行的分布式服务端**，也是**学习"MMO 服务端怎么分层、跨服怎么通信、状态怎么保证一致"的参考实现**。
+
+## 项目定位与适用范围
+
+**它是什么**：一套四层分布式游戏服务端（账号/网关/游戏/地图）的**参考实现 + 骨架**，把跨服通信、
+AOI 视野、Actor 单写者、Outbox/Inbox 一致性、服务发现、优雅生命周期这些"难做对"的部分做出了可运行、
+有测试/E2E 背书的样板。业务层刻意保持最小（够验证架构即可，不堆数值玩法）。
+
+**适合谁**：想学/借鉴分布式游戏服务端架构的开发者；想在一套现成骨架上长自己玩法的团队；
+想研究"跨进程一致性/AOI/单写者 Actor 在 Go 里怎么落地"的人。
+
+**不适合**：开箱即用的成品游戏（业务/玩法是最小闭环，需要自行扩建）；不想碰 etcd/MySQL 的轻量场景；
+把它当"引擎"用——引擎在 [zEngine](https://github.com/pzqf/zEngine)，本仓是长在引擎之上的服务端。
+
+**成熟度**：版本 `0.0.x`，成熟前不发 `1.0`。**状态以证据为准**——每条"完成"挂一个通过的测试或跨进程真
+E2E，权威清单见 [`docs/项目评估报告.md`](docs/项目评估报告.md)。文档导航见 [`docs/README.md`](docs/README.md)。
 
 ## 系统架构
 
@@ -258,6 +275,16 @@ Handler → Service → DAO → DBConnector → MySQL
 - [x] zUtil/zConfig 配置工具函数统一（GetStringWithDefault/GetEnv等）
 - [x] GlobalServer 数据库连接复用（DBService复用DBManager连接器）
 
+#### 业务层建设（2026-07-25，定向放开"最小闭环"，均有测试/E2E 背书）
+
+> 原则仍是"够验证架构即可、不堆数值"。以下每块均以真实证据收尾（全客户端 E2E 或确定性单测 + t1 `-race`）。
+
+- [x] 副本/镜像/跨服实例地图生命周期做实（销毁统一走 MapManager：StopActor + 停 spawnLoop + 清理；修复实例地图 goroutine 泄漏，含 cleanup 护栏测试）
+- [x] 物品 + 仓库（item.proto 协议 + Warehouse；全客户端四进程 E2E 数量一致性验证）
+- [x] 技能（skill.proto + 接既有 SkillManager；E2E 学习/查询/升级/释放，冷却校验生效）
+- [x] 场景同步增强：战斗**血量/死亡**经 AOI 广播给视野内所有玩家（双客户端 PvP E2E：攻防两端实时收到血量变化 + 死亡）
+- [x] 场景同步增强：技能 **buff 增/删**经 AOI 广播（确定性集成单测 + t1 `-race`）
+
 ### 待开发
 
 - [ ] 剩余8个 DAO 同步化（auction/login\_log/player\_buff 等）
@@ -320,8 +347,11 @@ ZMMO_TEST_MYSQL_DSN="root:pwd@tcp(host:3306)/db?parseTime=true" go -C zCommon te
 
 ## 文档
 
+完整文档导航（面向使用者 vs 内部工作台账的分类）见 [`docs/README.md`](docs/README.md)。常用入口：
+
 | 文档 | 用途 |
 |------|------|
+| [`docs/README.md`](docs/README.md) | **文档索引**：区分面向使用者的说明 与 内部演进台账 |
 | [`AGENTS.md`](AGENTS.md) | 跨工具（AI/编辑器/人）仓库入口，指向下列权威文档 |
 | [`docs/开发约定与工作流.md`](docs/开发约定与工作流.md) | 开发方法、验证纪律、环境约定（AI 无关、可移植的单一真相源）|
 | [`docs/成熟化改造-执行计划.md`](docs/成熟化改造-执行计划.md) | 进度台账（勾选框 = 进度真相）|
@@ -343,4 +373,4 @@ ZMMO_TEST_MYSQL_DSN="root:pwd@tcp(host:3306)/db?parseTime=true" go -C zCommon te
 
 ***
 
-*最后更新: 2026-07-24*
+*最后更新: 2026-07-25*
