@@ -205,6 +205,30 @@ func (s *MessageSender) SendTeamLeave(playerID int64) error {
 	return s.Send(uint32(protocol.TeamMsgId_MSG_TEAM_LEAVE), data)
 }
 
+func (s *MessageSender) SendTradeStart(playerID, targetID int64) error {
+	data, err := proto.Marshal(&protocol.ClientTradeStartRequest{PlayerId: playerID, TargetId: targetID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TradeMsgId_MSG_TRADE_START), data)
+}
+
+func (s *MessageSender) SendTradeSetGold(playerID, gold int64) error {
+	data, err := proto.Marshal(&protocol.ClientTradeSetGoldRequest{PlayerId: playerID, Gold: gold})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TradeMsgId_MSG_TRADE_SET_GOLD), data)
+}
+
+func (s *MessageSender) SendTradeConfirm(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientTradeConfirmRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TradeMsgId_MSG_TRADE_CONFIRM), data)
+}
+
 func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
 	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
 	if err != nil {

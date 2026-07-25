@@ -1,0 +1,53 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 交易协议（玩家间金币交易，最小闭环）
+// 消息ID范围: 1700-1799
+// ============================================
+
+enum TradeMsgId {
+  MSG_TRADE_INVALID = 0;
+  MSG_TRADE_START = 1700;         // 发起与目标玩家的交易
+  MSG_TRADE_SET_GOLD = 1702;      // 设置本方报价金币
+  MSG_TRADE_CONFIRM = 1704;       // 确认（双方确认→原子交换）
+  MSG_TRADE_CANCEL = 1706;        // 取消交易
+  MSG_TRADE_UPDATE_NOTIFY = 1708; // 交易状态变更（推送给双方）
+}
+
+// 交易状态
+enum TradeState {
+  TRADE_OPEN = 0;       // 进行中
+  TRADE_DONE = 1;       // 成交（金币已原子交换）
+  TRADE_CANCELLED = 2;  // 取消/失败
+}
+
+message ClientTradeStartRequest {
+  int64 player_id = 1;
+  int64 target_id = 2;
+}
+message ClientTradeSetGoldRequest {
+  int64 player_id = 1;
+  int64 gold = 2;
+}
+message ClientTradeConfirmRequest {
+  int64 player_id = 1;
+}
+message ClientTradeCancelRequest {
+  int64 player_id = 1;
+}
+
+// 交易状态通知：对称，双方收到同一份（含两侧报价/确认）
+message ClientTradeUpdateNotify {
+  int32 state = 1;            // TradeState
+  int64 a_player_id = 2;
+  int64 a_gold = 3;
+  bool a_confirmed = 4;
+  int64 b_player_id = 5;
+  int64 b_gold = 6;
+  bool b_confirmed = 7;
+  string message = 8;        // 失败/取消原因等
+}

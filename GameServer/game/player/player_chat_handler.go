@@ -35,3 +35,12 @@ func (p *Player) handleTeamUpdate(msg *PlayerMessage) {
 	}
 	p.pushToClient(int32(protocol.TeamMsgId_MSG_TEAM_UPDATE_NOTIFY), data.Data)
 }
+
+// handleTradeUpdate 收到一条交易状态变更（已 marshal 好的字节）→ 直接推客户端。
+func (p *Player) handleTradeUpdate(msg *PlayerMessage) {
+	data, ok := msg.Data.(*TradeUpdateData)
+	if !ok || data.Data == nil {
+		return
+	}
+	p.pushToClient(int32(protocol.TradeMsgId_MSG_TRADE_UPDATE_NOTIFY), data.Data)
+}

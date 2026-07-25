@@ -14,12 +14,28 @@ type MessageHandler struct {
 	mu              sync.Mutex
 	createdPlayerID int64
 	playerIDCh      chan int64
+
+	// 交易自动应价器（事件驱动）：收到交易 OPEN 通知时，本方若报价未到位则设价、报价到位未确认则确认。
+	tradeMyID    int64
+	tradeGold    int64
+	tradeSetGold func(gold int64)
+	tradeConfirm func()
 }
 
 func NewMessageHandler() *MessageHandler {
 	return &MessageHandler{
 		playerIDCh: make(chan int64, 1),
 	}
+}
+
+// EnableTradeAuto 开启交易自动应价：本方 playerID、愿出金币、以及设价/确认两个发送闭包。
+func (h *MessageHandler) EnableTradeAuto(myID, gold int64, setGold func(int64), confirm func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.tradeMyID = myID
+	h.tradeGold = gold
+	h.tradeSetGold = setGold
+	h.tradeConfirm = confirm
 }
 
 func (h *MessageHandler) GetCreatedPlayerID() int64 {
@@ -153,6 +169,38 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 					names += fmt.Sprintf("%s%s ", m.Name, tag)
 				}
 				fmt.Printf("[队伍] 更新: team=%d 成员数=%d [ %s]\n", n.TeamId, len(n.Members), names)
+			}
+		}
+	case uint32(protocol.TradeMsgId_MSG_TRADE_UPDATE_NOTIFY):
+		var n protocol.ClientTradeUpdateNotify
+		if proto.Unmarshal(data, &n) == nil {
+			st := "进行中"
+			if n.State == int32(protocol.TradeState_TRADE_DONE) {
+				st = "成交"
+			} else if n.State == int32(protocol.TradeState_TRADE_CANCELLED) {
+				st = "取消/失败"
+			}
+			fmt.Printf("[交易][%s] A(%d)出%d确认%v <-> B(%d)出%d确认%v %s\n",
+				st, n.APlayerId, n.AGold, n.AConfirmed, n.BPlayerId, n.BGold, n.BConfirmed, n.Message)
+			// 事件驱动自动应价（仅 OPEN 态）：本方报价未到位则设价，已到位未确认则确认，直至双方确认成交。
+			h.mu.Lock()
+			myID, gold, setGold, confirm := h.tradeMyID, h.tradeGold, h.tradeSetGold, h.tradeConfirm
+			h.mu.Unlock()
+			if n.State == int32(protocol.TradeState_TRADE_OPEN) && setGold != nil && gold > 0 {
+				var myGold int64
+				var myConfirmed, isParty bool
+				if n.APlayerId == myID {
+					myGold, myConfirmed, isParty = n.AGold, n.AConfirmed, true
+				} else if n.BPlayerId == myID {
+					myGold, myConfirmed, isParty = n.BGold, n.BConfirmed, true
+				}
+				if isParty {
+					if myGold != gold {
+						setGold(gold)
+					} else if !myConfirmed {
+						confirm()
+					}
+				}
 			}
 		}
 	default:

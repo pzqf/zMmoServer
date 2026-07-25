@@ -61,6 +61,12 @@ func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string
 		_, _ = p.inventory.AddItem(game.NewItem(1001, 1001, "TestPotion", game.ItemTypeConsumable, 3))
 		_, _ = p.inventory.AddItem(game.NewItem(1002, 1002, "TestMaterial", game.ItemTypeConsumable, 10))
 	}
+	// 测试种子金币（env ZMMO_TEST_GOLD=1 门控，供交易 E2E）。⚠ 注意：登录时 NewPlayer 并未从 DB 载入
+	// 玩家金币（login_service 只传 id/account/name），故 actor 内存金币默认 0——这是一个真实缺口
+	// （货币未随登录载入 actor），本种子仅为 E2E 兜底，不是修复。
+	if os.Getenv("ZMMO_TEST_GOLD") == "1" {
+		p.SetGold(10000)
+	}
 
 	return p
 }

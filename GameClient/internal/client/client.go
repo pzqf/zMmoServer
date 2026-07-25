@@ -178,6 +178,22 @@ func (c *Client) SendTeamJoin(playerID int64, teamID int32) error {
 	return c.messageSender.SendTeamJoin(playerID, teamID)
 }
 func (c *Client) SendTeamLeave(playerID int64) error { return c.messageSender.SendTeamLeave(playerID) }
+func (c *Client) SendTradeStart(playerID, targetID int64) error {
+	return c.messageSender.SendTradeStart(playerID, targetID)
+}
+func (c *Client) SendTradeSetGold(playerID, gold int64) error {
+	return c.messageSender.SendTradeSetGold(playerID, gold)
+}
+func (c *Client) SendTradeConfirm(playerID int64) error {
+	return c.messageSender.SendTradeConfirm(playerID)
+}
+
+// EnableTradeAuto 开启交易自动应价（本方收到 OPEN 通知即设价+确认，事件驱动收敛到成交）。
+func (c *Client) EnableTradeAuto(playerID, gold int64) {
+	c.messageHandler.EnableTradeAuto(playerID, gold,
+		func(g int64) { _ = c.SendTradeSetGold(playerID, g) },
+		func() { _ = c.SendTradeConfirm(playerID) })
+}
 func (c *Client) SendItemMove(playerID int64, from, to int32) error {
 	return c.messageSender.SendItemMove(playerID, from, to)
 }

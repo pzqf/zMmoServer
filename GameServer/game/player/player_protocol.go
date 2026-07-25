@@ -78,11 +78,17 @@ const (
 	MsgItemGrant    MessageType = 17007 // MapServer 拾取授权回推（发物品入背包）
 	MsgChatNotify   MessageType = 17008 // 聊天广播（推送给接收者客户端）
 	MsgTeamUpdate   MessageType = 17009 // 队伍花名册变更（推送给成员客户端）
+	MsgTradeUpdate  MessageType = 17010 // 交易状态变更（推送给交易双方客户端）
 )
 
 // TeamUpdateData 一条队伍花名册变更的载荷（已 marshal 好的 ClientTeamUpdateNotify 字节，
 // 由网关 TeamHandler 组装一次后路由给各成员 Actor 直接下发，省重复 marshal）。
 type TeamUpdateData struct {
+	Data []byte
+}
+
+// TradeUpdateData 一条交易状态变更的载荷（已 marshal 好的 ClientTradeUpdateNotify 字节，推给交易双方）。
+type TradeUpdateData struct {
 	Data []byte
 }
 

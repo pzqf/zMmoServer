@@ -82,6 +82,7 @@ func (ts *TCPService) initMessageRouter() {
 	skillHandler := msgHandler.NewSkillHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 	chatHandler := msgHandler.NewChatHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 	teamHandler := msgHandler.NewTeamHandler(ts.playerManager, int32(ts.config.Server.ServerID))
+	tradeHandler := msgHandler.NewTradeHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 
 	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
@@ -110,6 +111,11 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.TeamMsgId_MSG_TEAM_CREATE), teamHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.TeamMsgId_MSG_TEAM_JOIN), teamHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.TeamMsgId_MSG_TEAM_LEAVE), teamHandler)
+	// 交易（业务层建设 2026-07-25）：两方有状态事务 + 原子金币交换
+	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_START), tradeHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_SET_GOLD), tradeHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_CONFIRM), tradeHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_CANCEL), tradeHandler)
 }
 
 func (ts *TCPService) Name() string {

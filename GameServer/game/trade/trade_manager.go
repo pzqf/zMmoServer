@@ -1,0 +1,115 @@
+// Package trade 提供 GameServer 级的玩家间交易（P2P trade）会话管理。
+//
+// 这是本业务引入的又一类新架构路径：**两方有状态事务 + 跨玩家一致的原子交换**。
+// TradeManager 只持有会话态（双方 ID / 报价 / 确认标志），是纯粹的状态权威、不碰玩家金币；
+// 真正的原子金币交换由上层 handler 在双方确认后执行（金币本身是 atomic CAS，交换带回滚）。
+// 会话仅存于本 GameServer；跨服交易需 Global 层，未做。
+//
+// 最小闭环取舍：设置报价**不**重置确认（真实交易通常会重置以防最后一刻改价），以便事件驱动的
+// 客户端应价器能稳定收敛。
+package trade
+
+import (
+	"fmt"
+	"sync"
+
+	"github.com/pzqf/zCommon/common/id"
+)
+
+// Session 一笔交易会话（内部态或快照）。
+type Session struct {
+	A, B         id.PlayerIdType
+	GoldA, GoldB int64
+	ConfirmA     bool
+	ConfirmB     bool
+}
+
+// TradeManager 交易会话权威。一人同时至多一笔交易。
+type TradeManager struct {
+	mu       sync.Mutex
+	sessions map[id.PlayerIdType]*Session // A、B 都指向同一 *Session
+}
+
+func NewTradeManager() *TradeManager {
+	return &TradeManager{sessions: make(map[id.PlayerIdType]*Session)}
+}
+
+// Start 发起 a↔b 交易。双方须空闲且不同。
+func (tm *TradeManager) Start(a, b id.PlayerIdType) (*Session, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if a == b {
+		return nil, fmt.Errorf("cannot trade with self")
+	}
+	if _, ok := tm.sessions[a]; ok {
+		return nil, fmt.Errorf("player %d already trading", a)
+	}
+	if _, ok := tm.sessions[b]; ok {
+		return nil, fmt.Errorf("player %d already trading", b)
+	}
+	s := &Session{A: a, B: b}
+	tm.sessions[a] = s
+	tm.sessions[b] = s
+	return snapshot(s), nil
+}
+
+// SetGold 设置某方报价（>=0）。返回会话快照。
+func (tm *TradeManager) SetGold(by id.PlayerIdType, gold int64) (*Session, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if gold < 0 {
+		return nil, fmt.Errorf("gold must be >= 0")
+	}
+	s, ok := tm.sessions[by]
+	if !ok {
+		return nil, fmt.Errorf("player %d not trading", by)
+	}
+	if by == s.A {
+		s.GoldA = gold
+	} else {
+		s.GoldB = gold
+	}
+	return snapshot(s), nil
+}
+
+// Confirm 某方确认。返回(快照, 双方是否都已确认, err)。
+func (tm *TradeManager) Confirm(by id.PlayerIdType) (*Session, bool, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	s, ok := tm.sessions[by]
+	if !ok {
+		return nil, false, fmt.Errorf("player %d not trading", by)
+	}
+	if by == s.A {
+		s.ConfirmA = true
+	} else {
+		s.ConfirmB = true
+	}
+	return snapshot(s), s.ConfirmA && s.ConfirmB, nil
+}
+
+// Cancel 取消某方所在交易，清理会话。返回被取消会话的快照。
+func (tm *TradeManager) Cancel(by id.PlayerIdType) (*Session, error) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	s, ok := tm.sessions[by]
+	if !ok {
+		return nil, fmt.Errorf("player %d not trading", by)
+	}
+	delete(tm.sessions, s.A)
+	delete(tm.sessions, s.B)
+	return snapshot(s), nil
+}
+
+// Finish 成交后清理会话（handler 完成金币交换后调用）。
+func (tm *TradeManager) Finish(a, b id.PlayerIdType) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	delete(tm.sessions, a)
+	delete(tm.sessions, b)
+}
+
+func snapshot(s *Session) *Session {
+	cp := *s
+	return &cp
+}
