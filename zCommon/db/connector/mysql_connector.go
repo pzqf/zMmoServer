@@ -332,16 +332,19 @@ func (c *MySQLConnector) Execute(sql string, args []interface{}, callback func(s
 
 	// INF-7: 用信号量限并发（满则阻塞调用方形成背压，替代此前每次 Execute 无界起 goroutine），
 	// 并纳入 c.wg 让 Close 等待在飞 Execute 完成（此前不等待→Close 后 goroutine 仍用已关闭的 db）。
+	// 收尾修正：wg.Add(1) 放在获取信号量之前——保证任何越过本处的 Execute 都会被 Close 的 wg.Wait
+	// 等到，避免"Close 的 wg.Wait 已返回后再 wg.Add"的 TOCTOU（该残窗下 db 已关，Exec 返错由回调处理）。
+	c.wg.Add(1)
 	select {
-	case c.execSem <- struct{}{}:
 	case <-c.done:
+		c.wg.Done()
 		if callback != nil {
 			callback(nil, fmt.Errorf("mysql connector is closing"))
 		}
 		return
+	case c.execSem <- struct{}{}:
 	}
 
-	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
 		defer func() { <-c.execSem }()

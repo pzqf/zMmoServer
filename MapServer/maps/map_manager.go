@@ -229,7 +229,12 @@ func (mm *MapManager) PostTickAll(deltaTime time.Duration) {
 	})
 }
 
-// UpdateAllMapsAI 更新所有地图的AI
+// ⚠ 以下 UpdateAllMaps{AI,Buffs,Players,Skills,Events} 均为 MAP-2 前的旧路径，现已无任何调用方
+// （游戏主循环只用 PostTickAll）。**切勿把它们重新接回主循环**：它们在主循环 goroutine 上直接跑
+// AIManager.Update，会与 AddObject 形成 m.mu↔am.mu 的锁序反转——目前二者都只在地图 actor
+// goroutine 上串行执行才安全，一旦从主循环并发调用即死锁。保留仅为兼容旧调用签名。
+//
+// UpdateAllMapsAI 更新所有地图的AI（DEAD，勿用，见上）
 func (mm *MapManager) UpdateAllMapsAI(deltaTime time.Duration) {
 	maps := make([]*Map, 0)
 	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
