@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/consistency"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
@@ -34,6 +35,10 @@ type TCPService struct {
 	// goroutine 上剥离，避免慢连接阻塞整张地图。见 aoi_push.go。
 	aoiSendCh chan aoiSendJob
 	aoiStop   chan struct{}
+	// inbox: 请求侧幂等去重（GS-4）。GameServer 的 outboxRetryLoop 会重发失败的 enter/attack
+	// 请求，MapServer 无去重则会重放（双倍伤害 / 重复进图）。按 requestID 去重非幂等操作。
+	// 周期 Cleanup 限制其增长（INF-11）。
+	inbox consistency.InboxStore
 }
 
 func NewTCPService(cfg *config.Config, mapService *maps.MapManager) *TCPService {
@@ -42,6 +47,7 @@ func NewTCPService(cfg *config.Config, mapService *maps.MapManager) *TCPService 
 		mapService:         mapService,
 		isRunning:          false,
 		gameServerSessions: zMap.NewTypedMap[uint32, zNet.Session](),
+		inbox:              consistency.NewMemoryInbox(),
 	}
 }
 
@@ -107,6 +113,10 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	ts.wg.Add(1)
 	go ts.aoiSendLoop()
 
+	// 启动请求去重表清理 goroutine（GS-4 + INF-11）：定期驱逐旧 requestID，限制 inbox 增长。
+	ts.wg.Add(1)
+	go ts.inboxCleanupLoop()
+
 	ts.isRunning = true
 
 	zLog.Info("TCP service started successfully", zap.String("addr", ts.config.Server.ListenAddr))
@@ -137,6 +147,22 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 	zLog.Info("TCP service stopped")
 
 	return nil
+}
+
+// inboxCleanupLoop 周期驱逐旧的请求去重记录，限制 inbox 增长（GS-4 + INF-11）。
+// 5 分钟窗口远大于 outbox 重试上限（maxRetry×1s），足以覆盖任何重放又不无界累积。
+func (ts *TCPService) inboxCleanupLoop() {
+	defer ts.wg.Done()
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ts.aoiStop:
+			return
+		case <-ticker.C:
+			ts.inbox.Cleanup(5 * time.Minute)
+		}
+	}
 }
 
 // handleConnectionMessage 处理来自客户端的消息
@@ -197,6 +223,14 @@ func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *proto
 	var req protocol.MapEnterRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapEnterRequest", zap.Error(err))
+		return
+	}
+
+	// GS-4: 请求侧幂等去重——GameServer 的 outboxRetryLoop 可能重发本请求，重复进图会重跑
+	// AddObject/AOI 进入。按 requestID 去重，重放直接丢弃。
+	if meta != nil && meta.RequestID != 0 && !ts.inbox.TryAccept(meta.RequestID) {
+		zLog.Warn("Duplicate map enter request ignored",
+			zap.Uint64("request_id", meta.RequestID), zap.Int64("player_id", req.PlayerId))
 		return
 	}
 
@@ -315,6 +349,15 @@ func (ts *TCPService) handleMapAttackRequest(session zNet.Session, baseMsg *prot
 	var req protocol.MapAttackRequest
 	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
 		zLog.Error("Failed to unmarshal MapAttackRequest", zap.Error(err))
+		return
+	}
+
+	// GS-4: 请求侧幂等去重——重发的攻击会重复扣血（双倍伤害）。按 requestID 去重，重放直接丢弃：
+	// 原始请求已应答，此处不再扣血也不再回包（避免重复伤害的危害大于丢一个重复响应）。
+	if meta != nil && meta.RequestID != 0 && !ts.inbox.TryAccept(meta.RequestID) {
+		zLog.Warn("Duplicate map attack request ignored",
+			zap.Uint64("request_id", meta.RequestID),
+			zap.Int64("player_id", req.PlayerId), zap.Int64("target_id", req.TargetId))
 		return
 	}
 

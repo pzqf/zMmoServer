@@ -206,44 +206,43 @@ func (p *Player) handleNetMapAttack(msg *PlayerMessage) {
 		return
 	}
 
-	var damage, targetHP int64
-	if p.mapOp != nil {
-		var err error
-		damage, targetHP, err = p.mapOp.Attack(req.PlayerID, req.MapID, req.TargetID)
-		if err != nil {
-			zLog.Error("Failed to attack in map", zap.Error(err))
-			resp := &protocol.ClientMapAttackResponse{
-				Result:   1,
-				TargetId: int64(req.TargetID),
+	// GS-3: 攻击是"转发到 MapServer 权威 + 回填响应",不改玩家本地状态。此前直接在 Player
+	// actor goroutine 上同步等 MapServer 响应(最多 1.5s),期间该玩家的 move/AOI 等消息在
+	// 邮箱(容量 100)里堆积、超限即被静默丢弃(尤其人多时 AOI 事件密集)。改为把跨服往返放到
+	// 独立 goroutine,actor 立即返回继续服务本玩家其它消息;响应就绪后经 msg.Callback(缓冲 1,
+	// 不会因 handler 已超时而阻塞)回填,handler 侧仍带 3s 超时等待,客户端语义不变。
+	mapOp := p.mapOp
+	callback := msg.Callback
+	go func() {
+		var damage, targetHP int64
+		result := int32(0)
+		if mapOp != nil {
+			d, hp, err := mapOp.Attack(req.PlayerID, req.MapID, req.TargetID)
+			if err != nil {
+				zLog.Error("Failed to attack in map", zap.Error(err))
+				result = 1
+			} else {
+				damage, targetHP = d, hp
 			}
-			respData, _ := proto.Marshal(resp)
-			if msg.Callback != nil {
-				msg.Callback <- &NetResponse{
-					ProtoId: int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE),
-					Data:    respData,
-				}
-			}
+		}
+
+		if callback == nil {
 			return
 		}
-	}
-
-	resp := &protocol.ClientMapAttackResponse{
-		Result:   0,
-		TargetId: int64(req.TargetID),
-		Damage:   damage,
-		TargetHp: targetHP,
-	}
-
-	respData, err := proto.Marshal(resp)
-	if err != nil {
-		p.sendErrorResponse(msg, fmt.Sprintf("marshal error: %v", err))
-		return
-	}
-
-	if msg.Callback != nil {
-		msg.Callback <- &NetResponse{
+		resp := &protocol.ClientMapAttackResponse{
+			Result:   result,
+			TargetId: int64(req.TargetID),
+			Damage:   damage,
+			TargetHp: targetHP,
+		}
+		respData, err := proto.Marshal(resp)
+		if err != nil {
+			zLog.Error("Failed to marshal attack response", zap.Error(err))
+			return
+		}
+		callback <- &NetResponse{
 			ProtoId: int32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE),
 			Data:    respData,
 		}
-	}
+	}()
 }
