@@ -59,6 +59,15 @@ func (ls *LoginService) EnterGame(sessionID string, playerID id.PlayerIdType) er
 	}
 
 	p := NewPlayer(playerID, accountID, info.PlayerName)
+	// 从 DB 载入玩家属性到 actor。此前遗漏——actor 的等级/经验/金币/钻石恒为 0，与 DB 真值不符；
+	// 更严重的是登出时 syncPlayerDataToService 会把 actor 的 0 写回 online 缓存、再由 savePlayer
+	// 落库，等于每次登出把玩家金币清零（数据丢失）。载入后读写与持久化才一致。
+	if a := p.GetAttrs(); a != nil {
+		a.SetLevel(int32(info.Level))
+		a.SetExp(info.Exp)
+		a.SetGold(info.Gold)
+		a.SetDiamond(info.Diamond)
+	}
 	if ls.playerManager.mapOp != nil {
 		p.SetMapOperator(ls.playerManager.mapOp)
 	}
