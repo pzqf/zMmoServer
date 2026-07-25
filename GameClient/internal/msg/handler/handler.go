@@ -129,6 +129,15 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 				fmt.Printf("[拾取] 失败: %s\n", n.Error)
 			}
 		}
+	case uint32(protocol.ChatMsgId_MSG_CHAT_NOTIFY):
+		var n protocol.ClientChatNotify
+		if proto.Unmarshal(data, &n) == nil {
+			ch := "世界"
+			if n.Channel == int32(protocol.ChatChannel_CHAT_AREA) {
+				ch = "附近"
+			}
+			fmt.Printf("[聊天][%s] %s(%d): %s\n", ch, n.FromName, n.FromPlayerId, n.Text)
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

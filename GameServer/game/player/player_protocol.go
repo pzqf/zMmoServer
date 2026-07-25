@@ -76,12 +76,21 @@ const (
 	MsgAOIDeath     MessageType = 17005 // 视野内实体死亡
 	MsgAOIBuff      MessageType = 17006 // 视野内实体 buff 增删
 	MsgItemGrant    MessageType = 17007 // MapServer 拾取授权回推（发物品入背包）
+	MsgChatNotify   MessageType = 17008 // 聊天广播（推送给接收者客户端）
 )
 
 // ItemGrantRequest MapServer 拾取授权载荷（经 PlayerManager 路由到玩家 Actor 落背包）。
 type ItemGrantRequest struct {
 	ItemID int32
 	Count  int32
+}
+
+// ChatNotifyData 一条聊天广播的载荷（经 PlayerManager.BroadcastMessage 扇出到每个玩家 Actor 后推客户端）。
+type ChatNotifyData struct {
+	Channel      int32
+	FromPlayerID int64
+	FromName     string
+	Text         string
 }
 
 type MessageSource int

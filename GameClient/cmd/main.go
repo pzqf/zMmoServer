@@ -147,6 +147,11 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 		return
 	}
 
+	// 8.5 世界聊天（业务层建设）：发一条世界频道，全服在线（含自己 + 其它在场客户端）都会收到 [聊天] 广播
+	fmt.Println("8.5 发送世界聊天...")
+	_ = c.SendChat(playerID, 0 /*CHAT_WORLD*/, "Hello 世界, from "+playerName)
+	time.Sleep(600 * time.Millisecond)
+
 	// 11. 攻击（attackTarget 默认 2；PvP 场景传对方 playerID。attackCount>1 用于打到击杀触发死亡广播）
 	fmt.Printf("9. 攻击 target=%d x%d...\n", attackTarget, attackCount)
 	for i := 0; i < attackCount; i++ {

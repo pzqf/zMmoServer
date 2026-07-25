@@ -173,6 +173,14 @@ func (s *MessageSender) SendItemPickup(playerID int64, mapID int32) error {
 	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_PICKUP), data)
 }
 
+func (s *MessageSender) SendChat(playerID int64, channel int32, text string) error {
+	data, err := proto.Marshal(&protocol.ClientChatSendRequest{PlayerId: playerID, Channel: channel, Text: text})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ChatMsgId_MSG_CHAT_SEND), data)
+}
+
 func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
 	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
 	if err != nil {

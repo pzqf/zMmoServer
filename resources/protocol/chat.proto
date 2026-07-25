@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 聊天协议
+// 消息ID范围: 1500-1599
+// ============================================
+
+enum ChatMsgId {
+  MSG_CHAT_INVALID = 0;
+  MSG_CHAT_SEND = 1500;    // 客户端发送聊天
+  MSG_CHAT_NOTIFY = 1501;  // 服务器广播聊天（推送给接收者）
+}
+
+// 聊天频道
+enum ChatChannel {
+  CHAT_WORLD = 0;   // 世界（全服在线）
+  CHAT_AREA = 1;    // 附近（同图视野内，预留）
+}
+
+// 客户端 → 服务器：发送一条聊天
+message ClientChatSendRequest {
+  int64 player_id = 1;
+  int32 channel = 2;   // ChatChannel
+  string text = 3;
+}
+
+// 服务器 → 客户端：一条聊天广播
+message ClientChatNotify {
+  int32 channel = 1;
+  int64 from_player_id = 2;
+  string from_name = 3;
+  string text = 4;
+}

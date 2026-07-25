@@ -80,6 +80,7 @@ func (ts *TCPService) initMessageRouter() {
 	systemHandler := msgHandler.NewSystemHandler(ts.sessionManager)
 	itemHandler := msgHandler.NewItemHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 	skillHandler := msgHandler.NewSkillHandler(ts.playerManager, int32(ts.config.Server.ServerID))
+	chatHandler := msgHandler.NewChatHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 
 	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
@@ -102,6 +103,8 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_LEARN), skillHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_UPGRADE), skillHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_CAST), skillHandler)
+	// 聊天（业务层建设 2026-07-25）：世界频道扇出
+	ts.messageRouter.RegisterHandler(int32(protocol.ChatMsgId_MSG_CHAT_SEND), chatHandler)
 }
 
 func (ts *TCPService) Name() string {

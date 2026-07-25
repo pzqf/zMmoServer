@@ -76,6 +76,15 @@ if errorlevel 1 (
 echo [成功] skill.proto 编译完成
 
 echo.
+echo [9/9] 编译 chat.proto (聊天协议)...
+protoc --go_out="%OUTPUT_DIR%" --go_opt=paths=source_relative -I"%PROTO_DIR%" "%PROTO_DIR%chat.proto"
+if errorlevel 1 (
+    echo [错误] chat.proto 编译失败
+    exit /b 1
+)
+echo [成功] chat.proto 编译完成
+
+echo.
 echo ============================================
 echo 所有协议文件编译完成！
 echo 输出目录: %OUTPUT_DIR%
