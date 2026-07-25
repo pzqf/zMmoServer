@@ -733,9 +733,14 @@ func (ms *MapService) Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error
 }
 
 // HandleItemGrant 处理 MapServer 拾取授权回推(crossserver 506)：把物品发进该玩家背包并推客户端。
-// 经 PlayerManager 路由到玩家 Actor（背包权威在玩家侧）。
-func (ms *MapService) HandleItemGrant(playerID int64, itemID, count int32) {
+// 经 PlayerManager 路由到玩家 Actor（背包权威在玩家侧）。requestID 幂等去重（对齐 attack 407），
+// 防跨服重复投递导致同一次拾取重复发物品。
+func (ms *MapService) HandleItemGrant(requestID uint64, playerID int64, itemID, count int32) {
 	if ms.playerManager == nil {
+		return
+	}
+	if ms.inbox != nil && requestID != 0 && !ms.inbox.TryAccept(requestID) {
+		zLog.Warn("Duplicate item grant ignored", zap.Uint64("request_id", requestID), zap.Int64("player_id", playerID))
 		return
 	}
 	pid := id.PlayerIdType(playerID)

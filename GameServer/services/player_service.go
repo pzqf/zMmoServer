@@ -319,6 +319,16 @@ func (ps *PlayerService) ClaimMail(playerID, mailID int64) (int64, bool, error) 
 	return gold, true, nil
 }
 
+// UnclaimMail 回滚一次领取（领取后发现领取者已离线、金币无处入账时用），使其可再领。
+func (ps *PlayerService) UnclaimMail(playerID, mailID int64) {
+	if ps.connector == nil {
+		return
+	}
+	_, _ = ps.connector.ExecSync(
+		"UPDATE player_mails SET is_claimed = 0, updated_at = ? WHERE id = ? AND player_id = ?",
+		time.Now(), mailID, playerID)
+}
+
 func (ps *PlayerService) Stop() {
 	ps.isRunning = false
 	close(ps.stopChan)

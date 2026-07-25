@@ -22,6 +22,7 @@ type Session struct {
 	GoldA, GoldB int64
 	ConfirmA     bool
 	ConfirmB     bool
+	completing   bool // 已进入成交执行（防重复 CONFIRM 导致 ExecuteSwap 跑两次→金币翻倍）
 }
 
 // TradeManager 交易会话权威。一人同时至多一笔交易。
@@ -85,7 +86,13 @@ func (tm *TradeManager) Confirm(by id.PlayerIdType) (*Session, bool, error) {
 	} else {
 		s.ConfirmB = true
 	}
-	return snapshot(s), s.ConfirmA && s.ConfirmB, nil
+	// 只让第一次「双方都已确认」通过 ready=true（并置 completing 锁死后续）——防重复 CONFIRM
+	// 让 handler 侧的 ExecuteSwap 跑两次导致金币翻倍。锁内判定+置位，与并发 Confirm 互斥。
+	ready := s.ConfirmA && s.ConfirmB && !s.completing
+	if ready {
+		s.completing = true
+	}
+	return snapshot(s), ready, nil
 }
 
 // Cancel 取消某方所在交易，清理会话。返回被取消会话的快照。

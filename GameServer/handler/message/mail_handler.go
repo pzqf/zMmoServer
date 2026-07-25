@@ -93,14 +93,23 @@ func (h *MailHandler) Handle(session zNet.Session, protoId int32, data []byte) e
 			resp.Result = 1
 			resp.Error = "邮件不存在/非本人/已领取"
 		} else {
-			// 金币加进领取者在线 actor（金币原子；随登出持久化）
+			// 金币加进领取者在线 actor（金币原子；随登出持久化）。若此刻领取者已离线（GetPlayer 失败），
+			// 金币无处入账 → 回滚 is_claimed 使其可再领，避免"DB 已标已领但金币没到账"的不可逆丢币（ML1）。
+			granted := false
 			if gold > 0 {
 				if p, e := h.playerManager.GetPlayer(id.PlayerIdType(req.PlayerId)); e == nil && p != nil {
 					p.AddGold(gold)
+					granted = true
 				}
 			}
-			resp.Gold = gold
-			zLog.Info("Mail claimed", zap.Int64("player", req.PlayerId), zap.Int64("mail", req.MailId), zap.Int64("gold", gold))
+			if gold > 0 && !granted {
+				h.playerService.UnclaimMail(req.PlayerId, req.MailId)
+				resp.Result = 1
+				resp.Error = "领取者不在线,已回滚可重领"
+			} else {
+				resp.Gold = gold
+				zLog.Info("Mail claimed", zap.Int64("player", req.PlayerId), zap.Int64("mail", req.MailId), zap.Int64("gold", gold))
+			}
 		}
 		out, _ := proto.Marshal(resp)
 		return h.sendToClient(session, clientSessionID, id.PlayerIdType(req.PlayerId), int32(protocol.MailMsgId_MSG_MAIL_CLAIM_RESPONSE), out)

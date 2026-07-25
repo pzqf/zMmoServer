@@ -87,6 +87,32 @@ func TestTradeManager_SessionFlow(t *testing.T) {
 	}
 }
 
+// TestTradeManager_DoubleConfirmSingleFire 防重复 CONFIRM 导致 ExecuteSwap 跑两次(金币翻倍)。
+// 双方确认后,首次 Confirm 返回 ready=true,之后任何重复 Confirm 都必须 ready=false。
+func TestTradeManager_DoubleConfirmSingleFire(t *testing.T) {
+	tm := NewTradeManager()
+	a, b := id.PlayerIdType(1), id.PlayerIdType(2)
+	if _, err := tm.Start(a, b); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, _ = tm.SetGold(a, 100)
+	_, _ = tm.SetGold(b, 30)
+
+	if _, r, _ := tm.Confirm(a); r {
+		t.Fatalf("仅 a 确认不应 ready")
+	}
+	if _, r, _ := tm.Confirm(b); !r {
+		t.Fatalf("双方确认首次应 ready")
+	}
+	// 重复 CONFIRM（模拟客户端重发 / worker pool 并发）——绝不能再 ready
+	if _, r, _ := tm.Confirm(b); r {
+		t.Fatalf("重复确认不应再 ready(否则金币翻倍)")
+	}
+	if _, r, _ := tm.Confirm(a); r {
+		t.Fatalf("已 completing,任何再确认都不应 ready")
+	}
+}
+
 // TestTradeManager_ConcurrentNoRace 并发发起/报价/确认/取消,-race 下应零竞争。
 func TestTradeManager_ConcurrentNoRace(t *testing.T) {
 	tm := NewTradeManager()

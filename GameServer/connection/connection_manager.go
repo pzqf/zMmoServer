@@ -40,7 +40,8 @@ type MapResponseHandler interface {
 	// crossserver.MsgInternalAOIEnter/Leave/Move，路由到 watcher 玩家 Actor 后推送客户端。
 	HandleAOINotify(watcherID int64, targetID int64, mapID int32, eventType uint32, x, y, z float32)
 	// HandleItemGrant 处理 MapServer 拾取授权回推（crossserver.MsgInternalItemGrant）：把物品发进玩家背包。
-	HandleItemGrant(playerID int64, itemID, count int32)
+	// requestID 用于幂等去重（对齐 attack 407 的 inbox.TryAccept），防重复投递重复发物品。
+	HandleItemGrant(requestID uint64, playerID int64, itemID, count int32)
 }
 
 type ConnectionManager struct {
@@ -223,7 +224,7 @@ func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet 
 		crossserver.MsgInternalAOIAttr, crossserver.MsgInternalAOIDeath, crossserver.MsgInternalAOIBuff:
 		cm.handleAOINotify(baseMsg)
 	case crossserver.MsgInternalItemGrant:
-		cm.handleItemGrant(baseMsg)
+		cm.handleItemGrant(meta, baseMsg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
 	}
@@ -306,7 +307,7 @@ func (cm *ConnectionManager) handleAOINotify(baseMsg *protocol.BaseMessage) {
 }
 
 // handleItemGrant 解 MapServer 拾取授权回推（crossserver.MsgInternalItemGrant），发进玩家背包。
-func (cm *ConnectionManager) handleItemGrant(baseMsg *protocol.BaseMessage) {
+func (cm *ConnectionManager) handleItemGrant(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
 	if cm.mapResponseHandler == nil {
 		return
 	}
@@ -315,7 +316,7 @@ func (cm *ConnectionManager) handleItemGrant(baseMsg *protocol.BaseMessage) {
 		zLog.Error("Failed to unmarshal ItemGrantNotify", zap.Error(err))
 		return
 	}
-	cm.mapResponseHandler.HandleItemGrant(n.PlayerId, n.ItemId, n.Count)
+	cm.mapResponseHandler.HandleItemGrant(meta.RequestID, n.PlayerId, n.ItemId, n.Count)
 }
 
 func (cm *ConnectionManager) handleMapEnterResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
