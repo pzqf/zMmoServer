@@ -138,6 +138,23 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 			}
 			fmt.Printf("[聊天][%s] %s(%d): %s\n", ch, n.FromName, n.FromPlayerId, n.Text)
 		}
+	case uint32(protocol.TeamMsgId_MSG_TEAM_UPDATE_NOTIFY):
+		var n protocol.ClientTeamUpdateNotify
+		if proto.Unmarshal(data, &n) == nil {
+			if n.Disbanded {
+				fmt.Printf("[队伍] 已离队/解散: team=%d\n", n.TeamId)
+			} else {
+				names := ""
+				for _, m := range n.Members {
+					tag := ""
+					if m.IsLeader {
+						tag = "(队长)"
+					}
+					names += fmt.Sprintf("%s%s ", m.Name, tag)
+				}
+				fmt.Printf("[队伍] 更新: team=%d 成员数=%d [ %s]\n", n.TeamId, len(n.Members), names)
+			}
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

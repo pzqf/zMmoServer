@@ -181,6 +181,30 @@ func (s *MessageSender) SendChat(playerID int64, channel int32, text string) err
 	return s.Send(uint32(protocol.ChatMsgId_MSG_CHAT_SEND), data)
 }
 
+func (s *MessageSender) SendTeamCreate(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientTeamCreateRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TeamMsgId_MSG_TEAM_CREATE), data)
+}
+
+func (s *MessageSender) SendTeamJoin(playerID int64, teamID int32) error {
+	data, err := proto.Marshal(&protocol.ClientTeamJoinRequest{PlayerId: playerID, TeamId: teamID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TeamMsgId_MSG_TEAM_JOIN), data)
+}
+
+func (s *MessageSender) SendTeamLeave(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientTeamLeaveRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.TeamMsgId_MSG_TEAM_LEAVE), data)
+}
+
 func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
 	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
 	if err != nil {

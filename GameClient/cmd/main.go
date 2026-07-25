@@ -26,6 +26,8 @@ func main() {
 	attackTarget := flag.Int64("attackTarget", 2, "攻击目标对象ID(玩家 objectID==playerID)")
 	attackCount := flag.Int("attackCount", 1, "攻击次数(击杀需多次)")
 	idleSeconds := flag.Int("idle", 0, "流程末尾驻留秒数(保持在场接收 AOI 广播)")
+	teamCreate := flag.Bool("teamCreate", false, "进图后创建队伍(队长)")
+	teamJoin := flag.Int("teamJoin", 0, "进图后加入指定队伍ID(>0 生效)")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -37,7 +39,7 @@ func main() {
 
 	switch *mode {
 	case "full":
-		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds)
+		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin)
 	case "gateway-only":
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
@@ -53,7 +55,7 @@ func main() {
 }
 
 // runFullTest 运行完整测试（全局服+网关服）
-func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int) {
+func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int, teamCreate bool, teamJoin int) {
 	fmt.Println("=== 完整测试模式 ===")
 
 	// 1. 连接GlobalServer，获取token
@@ -151,6 +153,18 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	fmt.Println("8.5 发送世界聊天...")
 	_ = c.SendChat(playerID, 0 /*CHAT_WORLD*/, "Hello 世界, from "+playerName)
 	time.Sleep(600 * time.Millisecond)
+
+	// 8.6 组队（业务层建设）：队长创建、队员加入；花名册变更经 UPDATE_NOTIFY 推给全体成员
+	if teamCreate {
+		fmt.Println("8.6 创建队伍...")
+		_ = c.SendTeamCreate(playerID)
+		time.Sleep(600 * time.Millisecond)
+	}
+	if teamJoin > 0 {
+		fmt.Printf("8.6 加入队伍 team=%d...\n", teamJoin)
+		_ = c.SendTeamJoin(playerID, int32(teamJoin))
+		time.Sleep(600 * time.Millisecond)
+	}
 
 	// 11. 攻击（attackTarget 默认 2；PvP 场景传对方 playerID。attackCount>1 用于打到击杀触发死亡广播）
 	fmt.Printf("9. 攻击 target=%d x%d...\n", attackTarget, attackCount)

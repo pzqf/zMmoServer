@@ -173,6 +173,11 @@ func (c *Client) SendItemPickup(playerID int64, mapID int32) error {
 func (c *Client) SendChat(playerID int64, channel int32, text string) error {
 	return c.messageSender.SendChat(playerID, channel, text)
 }
+func (c *Client) SendTeamCreate(playerID int64) error { return c.messageSender.SendTeamCreate(playerID) }
+func (c *Client) SendTeamJoin(playerID int64, teamID int32) error {
+	return c.messageSender.SendTeamJoin(playerID, teamID)
+}
+func (c *Client) SendTeamLeave(playerID int64) error { return c.messageSender.SendTeamLeave(playerID) }
 func (c *Client) SendItemMove(playerID int64, from, to int32) error {
 	return c.messageSender.SendItemMove(playerID, from, to)
 }

@@ -26,3 +26,12 @@ func (p *Player) handleChatNotify(msg *PlayerMessage) {
 	}
 	p.pushToClient(int32(protocol.ChatMsgId_MSG_CHAT_NOTIFY), out)
 }
+
+// handleTeamUpdate 收到一条队伍花名册变更（已 marshal 好的字节）→ 直接推客户端。
+func (p *Player) handleTeamUpdate(msg *PlayerMessage) {
+	data, ok := msg.Data.(*TeamUpdateData)
+	if !ok || data.Data == nil {
+		return
+	}
+	p.pushToClient(int32(protocol.TeamMsgId_MSG_TEAM_UPDATE_NOTIFY), data.Data)
+}

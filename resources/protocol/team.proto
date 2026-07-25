@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 组队协议
+// 消息ID范围: 1600-1699
+// ============================================
+
+enum TeamMsgId {
+  MSG_TEAM_INVALID = 0;
+  MSG_TEAM_CREATE = 1600;         // 创建队伍
+  MSG_TEAM_JOIN = 1602;           // 加入队伍
+  MSG_TEAM_LEAVE = 1604;          // 离开队伍
+  MSG_TEAM_UPDATE_NOTIFY = 1606;  // 队伍花名册变更（推送给全体成员）
+}
+
+// 队伍成员
+message TeamMemberInfo {
+  int64 player_id = 1;
+  string name = 2;
+  bool is_leader = 3;
+}
+
+// 客户端 → 服务器（均为 fire；结果/花名册经 UPDATE_NOTIFY 回推）
+message ClientTeamCreateRequest {
+  int64 player_id = 1;
+}
+message ClientTeamJoinRequest {
+  int64 player_id = 1;
+  int32 team_id = 2;
+}
+message ClientTeamLeaveRequest {
+  int64 player_id = 1;
+}
+
+// 服务器 → 客户端：队伍花名册（成员增减/建队/离队都推一遍最新全量花名册）
+message ClientTeamUpdateNotify {
+  int32 team_id = 1;
+  repeated TeamMemberInfo members = 2;
+  bool disbanded = 3;   // 队伍已解散（最后一人离开）
+}

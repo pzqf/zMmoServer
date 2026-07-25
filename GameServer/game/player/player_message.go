@@ -97,6 +97,8 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleItemGrant(msg)
 	case MsgChatNotify:
 		p.handleChatNotify(msg)
+	case MsgTeamUpdate:
+		p.handleTeamUpdate(msg)
 	default:
 		zLog.Warn("Unknown message type",
 			zap.Int64("player_id", int64(p.GetPlayerID())),

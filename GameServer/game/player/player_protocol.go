@@ -77,7 +77,14 @@ const (
 	MsgAOIBuff      MessageType = 17006 // 视野内实体 buff 增删
 	MsgItemGrant    MessageType = 17007 // MapServer 拾取授权回推（发物品入背包）
 	MsgChatNotify   MessageType = 17008 // 聊天广播（推送给接收者客户端）
+	MsgTeamUpdate   MessageType = 17009 // 队伍花名册变更（推送给成员客户端）
 )
+
+// TeamUpdateData 一条队伍花名册变更的载荷（已 marshal 好的 ClientTeamUpdateNotify 字节，
+// 由网关 TeamHandler 组装一次后路由给各成员 Actor 直接下发，省重复 marshal）。
+type TeamUpdateData struct {
+	Data []byte
+}
 
 // ItemGrantRequest MapServer 拾取授权载荷（经 PlayerManager 路由到玩家 Actor 落背包）。
 type ItemGrantRequest struct {
