@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -48,7 +50,22 @@ func NewService() *HttpService {
 		Output: zLog.GetStandardLogger().Writer(),
 	}))
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
+	// OPT-4: 不再用 middleware.CORS()（默认放行所有来源 *，任意网站都能跨域打登录 API）。
+	// 仅当经 env ZMMO_HTTP_ALLOW_ORIGINS(逗号分隔)显式配置白名单时才放行对应来源；未配置则不加
+	// CORS 中间件——不下发 Access-Control-Allow-Origin，浏览器按同源策略拒绝跨域；原生客户端不发
+	// Origin 不受影响。
+	if v := strings.TrimSpace(os.Getenv("ZMMO_HTTP_ALLOW_ORIGINS")); v != "" {
+		origins := make([]string, 0)
+		for _, o := range strings.Split(v, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+		if len(origins) > 0 {
+			e.Use(middleware.CORSWithConfig(middleware.CORSConfig{AllowOrigins: origins}))
+			zLog.Info("HTTP CORS restricted to configured origins", zap.Strings("origins", origins))
+		}
+	}
 	e.Use(middleware.RateLimiter(middleware.NewRateLimiterMemoryStore(20))) // 20 requests per second
 
 	service := &HttpService{

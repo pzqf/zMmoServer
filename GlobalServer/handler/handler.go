@@ -29,6 +29,10 @@ var (
 	tokenExpiry time.Duration
 )
 
+// SEC-5: 账号不存在时用于抹平 bcrypt 计时的假哈希（cost 与真实密码一致 = DefaultCost），
+// 避免"账号存在则跑 bcrypt 慢、不存在则直接返回快"的时序侧信道泄露账号是否存在。
+var dummyBcryptHash, _ = bcrypt.GenerateFromPassword([]byte("timing-side-channel-equalizer"), bcrypt.DefaultCost)
+
 // InitJWTSecret 初始化JWT密钥和Token有效期
 func InitJWTSecret(secret string, expiryHours int) {
 	jwtSecret = secret
@@ -215,6 +219,19 @@ func HandleAccountLogin(c echo.Context) error {
 		})
 	}
 
+	// SEC-6: 账号级爆破锁定——窗口内失败超阈值即临时锁定该账号，换 IP 也无效。
+	if locked, remain := loginLockout.lockedFor(req.Account); locked {
+		zLog.Warn("Account login temporarily locked", zap.String("account", req.Account), zap.Duration("remaining", remain))
+		if m := getMetricsFromContext(c); m != nil {
+			m.IncrementAccountLoginFailures()
+			m.RecordAccountOperationTime(time.Since(start))
+		}
+		return c.JSON(http.StatusTooManyRequests, protocol.AccountLoginResponse{
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_PASSWORD_WRONG),
+			ErrorMsg: "登录尝试过于频繁，账号已临时锁定，请稍后再试",
+		})
+	}
+
 	// Get DB manager
 	dbMgr := db.GetMgr()
 	if dbMgr == nil {
@@ -243,18 +260,24 @@ func HandleAccountLogin(c echo.Context) error {
 
 	if account == nil {
 		zLog.Info("Account not found", zap.String("account", req.Account))
+		// SEC-5: 跑一次假 bcrypt 抹平与"密码错误"路径的时序差，并返回与密码错误完全相同的错误码/
+		// 文案，避免账号枚举（不再用 ERR_ACCOUNT_NOT_FOUND/"账号不存在"区分账号是否存在）。
+		_ = bcrypt.CompareHashAndPassword(dummyBcryptHash, []byte(req.Password))
+		loginLockout.recordFailure(req.Account) // SEC-6: 不存在的账号也计失败，防以枚举探测为幌子的爆破
 		if m := getMetricsFromContext(c); m != nil {
+			m.IncrementAccountLoginFailures()
 			m.RecordAccountOperationTime(time.Since(start))
 		}
 		return c.JSON(http.StatusUnauthorized, protocol.AccountLoginResponse{
-			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_NOT_FOUND),
-			ErrorMsg: "账号不存在",
+			Result:   int32(protocol.ErrorCode_ERR_ACCOUNT_PASSWORD_WRONG),
+			ErrorMsg: "账号或密码错误",
 		})
 	}
 
 	// Verify password with bcrypt
 	if err := bcrypt.CompareHashAndPassword([]byte(account.Password), []byte(req.Password)); err != nil {
 		zLog.Info("Password mismatch", zap.String("account", req.Account))
+		loginLockout.recordFailure(req.Account) // SEC-6
 		// 记录登录失败指标
 		if m := getMetricsFromContext(c); m != nil {
 			m.IncrementAccountLoginFailures()
@@ -265,6 +288,9 @@ func HandleAccountLogin(c echo.Context) error {
 			ErrorMsg: "账号或密码错误",
 		})
 	}
+
+	// SEC-6: 登录成功清除该账号的失败计数。
+	loginLockout.recordSuccess(req.Account)
 
 	// Update last login time
 	account.LastLoginAt = time.Now()

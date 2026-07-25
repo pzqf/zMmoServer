@@ -27,6 +27,9 @@ const (
 	TransactionStatePrepared
 	TransactionStateCommitted
 	TransactionStateAborted
+	// TransactionStateInconsistent：Prepared 后提交阶段部分参与者提交成功、部分重试耗尽仍失败
+	// （2PC 下不能安全回滚已提交者）→ 置此态并告警，等待人工/补偿介入（INF-4）。
+	TransactionStateInconsistent
 )
 
 func (s TransactionState) String() string {
@@ -41,6 +44,8 @@ func (s TransactionState) String() string {
 		return "committed"
 	case TransactionStateAborted:
 		return "aborted"
+	case TransactionStateInconsistent:
+		return "inconsistent"
 	default:
 		return "unknown"
 	}
@@ -249,33 +254,42 @@ func (tm *TransactionManager) Commit(ctx context.Context, txID uint64) error {
 		return fmt.Errorf("transaction %d is not in prepared state: %s", txID, tx.State)
 	}
 
+	// INF-4: 2PC 一旦进入 Prepared，所有参与者已投票同意，提交阶段必须对每个参与者最终成功——
+	// 不能中途因 ctx 取消而 break 放弃（原代码 `break` 只跳出 select 而非 for，实际根本没停；
+	// 且部分失败被误标 Aborted 暗示已回滚，实则已提交者未回滚）。改为：对失败的提交做有界重试；
+	// 仍失败则标记为需人工/补偿介入的不一致态，不误标 Aborted。
+	const maxCommitAttempts = 3
 	var commitErrors []error
 	for _, participant := range tx.Participants {
-		select {
-		case <-ctx.Done():
-			break
-		default:
-		}
-
-		if err := tm.commitFn(ctx, txID, participant, tx.Data); err != nil {
-			commitErrors = append(commitErrors, fmt.Errorf("%s: %w", participant, err))
-			zLog.Error("Transaction commit failed for participant",
+		var lastErr error
+		for attempt := 0; attempt < maxCommitAttempts; attempt++ {
+			if lastErr = tm.commitFn(ctx, txID, participant, tx.Data); lastErr == nil {
+				break
+			}
+			zLog.Warn("Transaction commit attempt failed, retrying",
 				zap.Uint64("tx_id", txID),
 				zap.String("participant", participant),
-				zap.Error(err))
+				zap.Int("attempt", attempt+1),
+				zap.Error(lastErr))
 		}
-	}
-
-	if len(commitErrors) == 0 {
-		tx.State = TransactionStateCommitted
-	} else {
-		tx.State = TransactionStateAborted
+		if lastErr != nil {
+			commitErrors = append(commitErrors, fmt.Errorf("%s: %w", participant, lastErr))
+			zLog.Error("Transaction commit failed for participant after retries",
+				zap.Uint64("tx_id", txID),
+				zap.String("participant", participant),
+				zap.Error(lastErr))
+		}
 	}
 
 	if len(commitErrors) > 0 {
-		return fmt.Errorf("commit errors: %v", commitErrors)
+		// 部分参与者已提交、部分重试耗尽仍失败：2PC 下不能安全回滚已提交者。
+		tx.State = TransactionStateInconsistent
+		zLog.Error("Transaction left INCONSISTENT: some participants committed, others failed after retries — needs manual/compensation intervention",
+			zap.Uint64("tx_id", txID), zap.Int("failed_participants", len(commitErrors)))
+		return fmt.Errorf("commit errors (transaction inconsistent, needs intervention): %v", commitErrors)
 	}
 
+	tx.State = TransactionStateCommitted
 	zLog.Info("Transaction committed", zap.Uint64("tx_id", txID))
 	return nil
 }
