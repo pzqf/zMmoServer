@@ -26,6 +26,12 @@ const (
 	MsgNetWarehouseStore    MessageType = 1312 // MSG_WAREHOUSE_STORE
 	MsgNetWarehouseRetrieve MessageType = 1314 // MSG_WAREHOUSE_RETRIEVE
 
+	// 技能（业务层建设 2026-07-25，值对齐 SkillMsgId）
+	MsgNetSkillList    MessageType = 1400 // MSG_SKILL_LIST
+	MsgNetSkillLearn   MessageType = 1402 // MSG_SKILL_LEARN
+	MsgNetSkillUpgrade MessageType = 1404 // MSG_SKILL_UPGRADE
+	MsgNetSkillCast    MessageType = 1406 // MSG_SKILL_CAST
+
 	// 资源相关 (10000-10999)
 	MsgAddGold       MessageType = 10001
 	MsgDeductGold    MessageType = 10002

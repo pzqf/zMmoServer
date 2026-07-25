@@ -1,0 +1,68 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 技能协议
+// 消息ID范围: 1400-1499
+// ============================================
+
+enum SkillMsgId {
+  MSG_SKILL_INVALID = 0;
+  MSG_SKILL_LIST = 1400;                 // 查询已学技能
+  MSG_SKILL_LIST_RESPONSE = 1401;
+  MSG_SKILL_LEARN = 1402;                // 学习技能
+  MSG_SKILL_LEARN_RESPONSE = 1403;
+  MSG_SKILL_UPGRADE = 1404;              // 升级技能
+  MSG_SKILL_UPGRADE_RESPONSE = 1405;
+  MSG_SKILL_CAST = 1406;                 // 释放技能
+  MSG_SKILL_CAST_RESPONSE = 1407;
+}
+
+message SkillInfo {
+  int32 skill_id = 1;
+  int32 level = 2;
+  int32 max_level = 3;
+}
+
+message ClientSkillListRequest {
+  int64 player_id = 1;
+}
+message ClientSkillListResponse {
+  int32 result = 1;
+  repeated SkillInfo skills = 2;
+}
+
+message ClientSkillLearnRequest {
+  int64 player_id = 1;
+  int32 skill_id = 2;
+}
+message ClientSkillLearnResponse {
+  int32 result = 1;
+  int32 skill_id = 2;
+  string error = 3;
+}
+
+message ClientSkillUpgradeRequest {
+  int64 player_id = 1;
+  int32 skill_id = 2;
+}
+message ClientSkillUpgradeResponse {
+  int32 result = 1;
+  int32 skill_id = 2;
+  int32 level = 3;
+  string error = 4;
+}
+
+message ClientSkillCastRequest {
+  int64 player_id = 1;
+  int32 skill_id = 2;
+  int64 target_id = 3;
+}
+message ClientSkillCastResponse {
+  int32 result = 1;
+  int32 skill_id = 2;
+  string error = 3;
+}

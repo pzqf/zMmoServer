@@ -180,6 +180,18 @@ func (c *Client) SendWarehouseRetrieve(playerID int64, warehouseSlot, count int3
 	return c.messageSender.SendWarehouseRetrieve(playerID, warehouseSlot, count)
 }
 
+// —— 技能（业务层建设 2026-07-25）——
+func (c *Client) SendSkillList(playerID int64) error { return c.messageSender.SendSkillList(playerID) }
+func (c *Client) SendSkillLearn(playerID int64, skillID int32) error {
+	return c.messageSender.SendSkillLearn(playerID, skillID)
+}
+func (c *Client) SendSkillUpgrade(playerID int64, skillID int32) error {
+	return c.messageSender.SendSkillUpgrade(playerID, skillID)
+}
+func (c *Client) SendSkillCast(playerID int64, skillID int32, targetID int64) error {
+	return c.messageSender.SendSkillCast(playerID, skillID, targetID)
+}
+
 // SetGatewayAddr 设置网关地址
 func (c *Client) SetGatewayAddr(addr string) {
 	c.gatewayAddr = addr

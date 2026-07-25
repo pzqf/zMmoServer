@@ -78,6 +78,29 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		if proto.Unmarshal(data, &r) == nil {
 			fmt.Printf("WarehouseRetrieveResponse: Result=%d, 背包格=%d, Err=%s\n", r.Result, r.BagSlot, r.Error)
 		}
+	case uint32(protocol.SkillMsgId_MSG_SKILL_LIST_RESPONSE):
+		var r protocol.ClientSkillListResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("SkillListResponse: Result=%d, 技能数=%d\n", r.Result, len(r.Skills))
+			for _, s := range r.Skills {
+				fmt.Printf("  技能 id=%d Lv%d/%d\n", s.SkillId, s.Level, s.MaxLevel)
+			}
+		}
+	case uint32(protocol.SkillMsgId_MSG_SKILL_LEARN_RESPONSE):
+		var r protocol.ClientSkillLearnResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("SkillLearnResponse: Result=%d, SkillID=%d, Err=%s\n", r.Result, r.SkillId, r.Error)
+		}
+	case uint32(protocol.SkillMsgId_MSG_SKILL_UPGRADE_RESPONSE):
+		var r protocol.ClientSkillUpgradeResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("SkillUpgradeResponse: Result=%d, SkillID=%d, Level=%d, Err=%s\n", r.Result, r.SkillId, r.Level, r.Error)
+		}
+	case uint32(protocol.SkillMsgId_MSG_SKILL_CAST_RESPONSE):
+		var r protocol.ClientSkillCastResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("SkillCastResponse: Result=%d, SkillID=%d, Err=%s\n", r.Result, r.SkillId, r.Error)
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

@@ -39,6 +39,14 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleNetWarehouseStore(msg)
 	case MsgNetWarehouseRetrieve:
 		p.handleNetWarehouseRetrieve(msg)
+	case MsgNetSkillList:
+		p.handleNetSkillList(msg)
+	case MsgNetSkillLearn:
+		p.handleNetSkillLearn(msg)
+	case MsgNetSkillUpgrade:
+		p.handleNetSkillUpgrade(msg)
+	case MsgNetSkillCast:
+		p.handleNetSkillCast(msg)
 	case MsgAddGold:
 		p.handleAddGold(msg)
 	case MsgDeductGold:

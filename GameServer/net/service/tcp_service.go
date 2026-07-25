@@ -79,6 +79,7 @@ func (ts *TCPService) initMessageRouter() {
 	mapHandler := msgHandler.NewMapHandler(ts.mapService, ts.playerManager, int32(ts.config.Server.ServerID))
 	systemHandler := msgHandler.NewSystemHandler(ts.sessionManager)
 	itemHandler := msgHandler.NewItemHandler(ts.playerManager, int32(ts.config.Server.ServerID))
+	skillHandler := msgHandler.NewSkillHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 
 	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
@@ -95,6 +96,11 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_STORE), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE), itemHandler)
+	// 技能（业务层建设 2026-07-25）
+	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_LIST), skillHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_LEARN), skillHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_UPGRADE), skillHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.SkillMsgId_MSG_SKILL_CAST), skillHandler)
 }
 
 func (ts *TCPService) Name() string {

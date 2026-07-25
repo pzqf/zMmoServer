@@ -173,6 +173,27 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	_ = c.SendItemList(playerID)
 	time.Sleep(800 * time.Millisecond)
 
+	// —— 技能（业务层建设 2026-07-25）——
+	fmt.Println("17. 学习技能 2001...")
+	_ = c.SendSkillLearn(playerID, 2001)
+	time.Sleep(400 * time.Millisecond)
+
+	fmt.Println("18. 查技能...")
+	_ = c.SendSkillList(playerID)
+	time.Sleep(400 * time.Millisecond)
+
+	fmt.Println("19. 升级技能 2001...")
+	_ = c.SendSkillUpgrade(playerID, 2001)
+	time.Sleep(400 * time.Millisecond)
+
+	fmt.Println("20. 释放技能 2001(目标2)...")
+	_ = c.SendSkillCast(playerID, 2001, 2)
+	time.Sleep(400 * time.Millisecond)
+
+	fmt.Println("21. 再释放一次(应在冷却)...")
+	_ = c.SendSkillCast(playerID, 2001, 2)
+	time.Sleep(600 * time.Millisecond)
+
 	// 13. 登出
 	fmt.Println("10. 登出...")
 	if err := c.SendPlayerLogout(); err != nil {

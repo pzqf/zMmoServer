@@ -196,3 +196,37 @@ func (s *MessageSender) SendWarehouseRetrieve(playerID int64, warehouseSlot, cou
 	}
 	return s.Send(uint32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE), data)
 }
+
+// —— 技能（业务层建设 2026-07-25）——
+
+func (s *MessageSender) SendSkillList(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientSkillListRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.SkillMsgId_MSG_SKILL_LIST), data)
+}
+
+func (s *MessageSender) SendSkillLearn(playerID int64, skillID int32) error {
+	data, err := proto.Marshal(&protocol.ClientSkillLearnRequest{PlayerId: playerID, SkillId: skillID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.SkillMsgId_MSG_SKILL_LEARN), data)
+}
+
+func (s *MessageSender) SendSkillUpgrade(playerID int64, skillID int32) error {
+	data, err := proto.Marshal(&protocol.ClientSkillUpgradeRequest{PlayerId: playerID, SkillId: skillID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.SkillMsgId_MSG_SKILL_UPGRADE), data)
+}
+
+func (s *MessageSender) SendSkillCast(playerID int64, skillID int32, targetID int64) error {
+	data, err := proto.Marshal(&protocol.ClientSkillCastRequest{PlayerId: playerID, SkillId: skillID, TargetId: targetID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.SkillMsgId_MSG_SKILL_CAST), data)
+}
