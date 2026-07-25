@@ -41,6 +41,11 @@ type ServiceDiscovery struct {
 	etcdAvailable bool
 	lastEtcdError time.Time
 	failureCount  int
+	// leaseCtx/leaseCancel: 租约与 KeepAlive 的服务级生命周期 ctx（INF-3）。此前 KeepAlive 绑
+	// 5s 请求超时 ctx→5s 后保活流关闭、30s 租约到期后服务从 etcd 消失并反复重 grant churn。
+	// KeepAlive 必须绑这个存活到 Close 的 ctx。
+	leaseCtx    context.Context
+	leaseCancel context.CancelFunc
 }
 
 type EtcdConfig struct {
@@ -77,6 +82,7 @@ func NewServiceDiscoveryWithConfig(endpoints []string, cfg *EtcdConfig) (*Servic
 		return nil, fmt.Errorf("create etcd client failed: %w", err)
 	}
 
+	leaseCtx, leaseCancel := context.WithCancel(context.Background())
 	return &ServiceDiscovery{
 		etcdClient:    etcdClient,
 		servicePrefix: "/services/",
@@ -86,6 +92,8 @@ func NewServiceDiscoveryWithConfig(endpoints []string, cfg *EtcdConfig) (*Servic
 		etcdAvailable: true,
 		lastEtcdError: time.Time{},
 		failureCount:  0,
+		leaseCtx:      leaseCtx,
+		leaseCancel:   leaseCancel,
 	}, nil
 }
 
@@ -419,6 +427,10 @@ func withRetry(fn func() error) error {
 }
 
 func (sd *ServiceDiscovery) Close() error {
+	// INF-3: 取消服务级 leaseCtx，终止 KeepAlive goroutine（否则保活流泄漏）。
+	if sd.leaseCancel != nil {
+		sd.leaseCancel()
+	}
 	if atomic.LoadUint64(&sd.leaseID) != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		_, _ = sd.etcdClient.Revoke(ctx, clientv3.LeaseID(atomic.LoadUint64(&sd.leaseID)))
@@ -452,7 +464,9 @@ func (sd *ServiceDiscovery) ensureLeaseAlive(ctx context.Context, ttl time.Durat
 	}
 	atomic.StoreUint64(&sd.leaseID, uint64(leaseResp.ID))
 
-	sd.keepAliveCh, err = sd.etcdClient.KeepAlive(ctx, clientv3.LeaseID(atomic.LoadUint64(&sd.leaseID)))
+	// INF-3: KeepAlive 绑服务级 leaseCtx（存活到 Close），不能绑传入的 5s 请求 ctx，否则 5s 后
+	// 保活流关闭、租约到期服务消失。Grant 用传入 ctx 做一次性超时无妨。
+	sd.keepAliveCh, err = sd.etcdClient.KeepAlive(sd.leaseCtx, clientv3.LeaseID(atomic.LoadUint64(&sd.leaseID)))
 	if err != nil {
 		return fmt.Errorf("keepalive failed: %w", err)
 	}
