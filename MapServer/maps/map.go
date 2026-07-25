@@ -300,6 +300,17 @@ func (m *Map) MoveObject(objectID id.ObjectIdType, newPos common.Vector3) error 
 	return nil
 }
 
+// monsterConfigLevel 按怪物配置 ID 读取其配置等级（OPT-7）。此前刷怪/重生恒用硬编码 level=1
+// 致数值全错。配置缺失或等级非法时回退 1。
+func (m *Map) monsterConfigLevel(monsterConfigID int32) int32 {
+	if m.lootSystem != nil {
+		if cfg := m.lootSystem.GetMonsterConfig(monsterConfigID); cfg != nil && cfg.Level > 0 {
+			return cfg.Level
+		}
+	}
+	return 1
+}
+
 // MoveEntityAOI 在对象移动后同步 AOI 网格（MAP-6，供 AI 在地图 goroutine 上调用）。
 // 只触碰 AOI 网格（AddObject/RemoveObject/MoveObject 与本方法均在地图 goroutine 上串行执行，
 // 故无需 m.mu）。MoveEntity 会向观察者补发 AOI Move 事件 → 客户端得以看到怪移动。

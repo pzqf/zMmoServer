@@ -137,7 +137,8 @@ func (m *Map) scheduleMonsterRespawn(monster *object.Monster) {
 		// MAP-2: 重生怪进地图，串行回地图 goroutine。
 		m.Do(func() {
 			objectID := nextMapObjectID()
-			newMonster := object.NewMonster(objectID, monsterConfigID, "Monster", monsterPos, 1)
+			// OPT-7: 重生怪等级从配置读，不再硬编码 1。
+			newMonster := object.NewMonster(objectID, monsterConfigID, "Monster", monsterPos, m.monsterConfigLevel(monsterConfigID))
 
 			if m.lootSystem != nil {
 				config := m.lootSystem.GetMonsterConfig(monsterConfigID)

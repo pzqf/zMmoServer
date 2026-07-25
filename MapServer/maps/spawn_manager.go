@@ -150,7 +150,9 @@ func (sm *SpawnManager) createSpawnObject(spawnPoint *SpawnPoint) common.IGameOb
 	switch spawnPoint.spawnType {
 	case 1:
 		objectID = nextMapObjectID()
-		obj = object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, 1)
+		// OPT-7: 从怪物配置读等级，不再硬编码 1。
+		level := sm.mapObj.monsterConfigLevel(spawnPoint.objectID)
+		obj = object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, level)
 		zLog.Debug("Spawning monster",
 			zap.Int32("monster_id", spawnPoint.objectID),
 			zap.Int64("object_id", int64(objectID)),
