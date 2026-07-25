@@ -1,0 +1,98 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 物品 / 仓库协议
+// 消息ID范围: 1300-1399
+// ============================================
+
+// 物品/仓库消息
+enum ItemMsgId {
+  MSG_ITEM_INVALID = 0;
+  MSG_ITEM_LIST = 1300;                    // 查询背包
+  MSG_ITEM_LIST_RESPONSE = 1301;
+  MSG_ITEM_USE = 1302;                     // 使用物品
+  MSG_ITEM_USE_RESPONSE = 1303;
+  MSG_ITEM_MOVE = 1304;                    // 背包内移动格子
+  MSG_ITEM_MOVE_RESPONSE = 1305;
+  MSG_WAREHOUSE_LIST = 1310;               // 查询仓库
+  MSG_WAREHOUSE_LIST_RESPONSE = 1311;
+  MSG_WAREHOUSE_STORE = 1312;              // 背包 → 仓库
+  MSG_WAREHOUSE_STORE_RESPONSE = 1313;
+  MSG_WAREHOUSE_RETRIEVE = 1314;           // 仓库 → 背包
+  MSG_WAREHOUSE_RETRIEVE_RESPONSE = 1315;
+}
+
+// 一个格子的物品信息（背包/仓库通用）
+message ItemSlot {
+  int32 slot = 1;
+  int32 item_id = 2;
+  int32 count = 3;
+}
+
+// —— 背包 ——
+
+message ClientItemListRequest {
+  int64 player_id = 1;
+}
+message ClientItemListResponse {
+  int32 result = 1;                        // 0=成功
+  repeated ItemSlot items = 2;
+}
+
+message ClientItemUseRequest {
+  int64 player_id = 1;
+  int32 slot = 2;
+  int32 count = 3;
+}
+message ClientItemUseResponse {
+  int32 result = 1;
+  int32 slot = 2;
+  int32 remaining = 3;                     // 使用后该格剩余数量
+  string error = 4;
+}
+
+message ClientItemMoveRequest {
+  int64 player_id = 1;
+  int32 from_slot = 2;
+  int32 to_slot = 3;
+}
+message ClientItemMoveResponse {
+  int32 result = 1;
+  string error = 2;
+}
+
+// —— 仓库 ——
+
+message ClientWarehouseListRequest {
+  int64 player_id = 1;
+}
+message ClientWarehouseListResponse {
+  int32 result = 1;
+  repeated ItemSlot items = 2;
+}
+
+message ClientWarehouseStoreRequest {         // 把背包某格存入仓库
+  int64 player_id = 1;
+  int32 bag_slot = 2;
+  int32 count = 3;
+}
+message ClientWarehouseStoreResponse {
+  int32 result = 1;
+  int32 warehouse_slot = 2;
+  string error = 3;
+}
+
+message ClientWarehouseRetrieveRequest {      // 把仓库某格取回背包
+  int64 player_id = 1;
+  int32 warehouse_slot = 2;
+  int32 count = 3;
+}
+message ClientWarehouseRetrieveResponse {
+  int32 result = 1;
+  int32 bag_slot = 2;
+  string error = 3;
+}

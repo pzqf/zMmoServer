@@ -1,6 +1,7 @@
 package player
 
 import (
+	"os"
 	"sync"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -26,6 +27,7 @@ type Player struct {
 	accountID   id.AccountIdType
 	attrs       *game.PlayerAttributes
 	inventory   *game.Inventory
+	warehouse   *game.Warehouse
 	equipment   *game.Equipment
 	skillMgr    *game.SkillManager
 	buffMgr     *game.BuffManager
@@ -44,12 +46,21 @@ func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string
 		accountID:    accountID,
 		attrs:        game.NewPlayerAttributes(),
 		inventory:    game.NewInventory(60),
+		warehouse:    game.NewWarehouse(120),
 		equipment:    game.NewEquipment(),
 		skillMgr:     game.NewSkillManager(50),
 		buffMgr:      game.NewBuffManager(),
 		taskMgr:      game.NewTaskManager(20),
 	}
 	baseActor.SetSelf(p)
+
+	// 业务层建设：测试种子物品（env ZMMO_TEST_ITEMS=1 门控，生产默认关）。放在 NewPlayer——所有
+	// 玩家构造的必经点，供物品/仓库 E2E 有货可操作。两件不同 configID → 落入背包 slot 0 / slot 1。
+	if os.Getenv("ZMMO_TEST_ITEMS") == "1" {
+		_, _ = p.inventory.AddItem(game.NewItem(1001, 1001, "TestPotion", game.ItemTypeConsumable, 3))
+		_, _ = p.inventory.AddItem(game.NewItem(1002, 1002, "TestMaterial", game.ItemTypeConsumable, 10))
+	}
+
 	return p
 }
 
@@ -99,6 +110,10 @@ func (p *Player) GetAttrs() *game.PlayerAttributes {
 
 func (p *Player) GetInventory() *game.Inventory {
 	return p.inventory
+}
+
+func (p *Player) GetWarehouse() *game.Warehouse {
+	return p.warehouse
 }
 
 func (p *Player) GetEquipment() *game.Equipment {

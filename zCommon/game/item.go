@@ -172,6 +172,31 @@ func (inv *Inventory) RemoveItem(slot int32, count int32) (*Item, error) {
 	return item, nil
 }
 
+// MoveItem 把 from 格的物品移到 to 格；to 有物品则与之交换（业务层建设新增，背包内整理）。
+func (inv *Inventory) MoveItem(from, to int32) error {
+	inv.mu.Lock()
+	defer inv.mu.Unlock()
+
+	if from == to {
+		return nil
+	}
+	if from < 0 || from >= inv.size || to < 0 || to >= inv.size {
+		return fmt.Errorf("slot out of range")
+	}
+	src, ok := inv.items.Load(from)
+	if !ok {
+		return fmt.Errorf("no item in slot %d", from)
+	}
+	if dst, ok2 := inv.items.Load(to); ok2 {
+		inv.items.Store(from, dst)
+		inv.items.Store(to, src)
+	} else {
+		inv.items.Delete(from)
+		inv.items.Store(to, src)
+	}
+	return nil
+}
+
 func (inv *Inventory) HasSpace(configID int32, count int32) bool {
 	inv.mu.RLock()
 	defer inv.mu.RUnlock()

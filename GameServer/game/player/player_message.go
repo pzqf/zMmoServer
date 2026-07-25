@@ -27,6 +27,18 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleNetMapMove(msg)
 	case MsgNetMapAttack:
 		p.handleNetMapAttack(msg)
+	case MsgNetItemList:
+		p.handleNetItemList(msg)
+	case MsgNetItemUse:
+		p.handleNetItemUse(msg)
+	case MsgNetItemMove:
+		p.handleNetItemMove(msg)
+	case MsgNetWarehouseList:
+		p.handleNetWarehouseList(msg)
+	case MsgNetWarehouseStore:
+		p.handleNetWarehouseStore(msg)
+	case MsgNetWarehouseRetrieve:
+		p.handleNetWarehouseRetrieve(msg)
 	case MsgAddGold:
 		p.handleAddGold(msg)
 	case MsgDeductGold:

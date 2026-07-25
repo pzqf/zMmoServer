@@ -18,6 +18,14 @@ const (
 	MsgNetMapMove   MessageType = 1204 // MSG_MAP_MOVE
 	MsgNetMapAttack MessageType = 1206 // MSG_MAP_ATTACK
 
+	// 物品 / 仓库（业务层建设 2026-07-25，值对齐客户端 protoId ItemMsgId）
+	MsgNetItemList          MessageType = 1300 // MSG_ITEM_LIST
+	MsgNetItemUse           MessageType = 1302 // MSG_ITEM_USE
+	MsgNetItemMove          MessageType = 1304 // MSG_ITEM_MOVE
+	MsgNetWarehouseList     MessageType = 1310 // MSG_WAREHOUSE_LIST
+	MsgNetWarehouseStore    MessageType = 1312 // MSG_WAREHOUSE_STORE
+	MsgNetWarehouseRetrieve MessageType = 1314 // MSG_WAREHOUSE_RETRIEVE
+
 	// 资源相关 (10000-10999)
 	MsgAddGold       MessageType = 10001
 	MsgDeductGold    MessageType = 10002

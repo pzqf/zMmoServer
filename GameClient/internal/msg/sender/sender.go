@@ -146,3 +146,53 @@ func (s *MessageSender) SendMapAttack(playerID int64, mapID int32, targetID int6
 	}
 	return s.Send(uint32(protocol.MapMsgId_MSG_MAP_ATTACK), data)
 }
+
+// —— 物品 / 仓库（业务层建设 2026-07-25）——
+
+func (s *MessageSender) SendItemList(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientItemListRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_LIST), data)
+}
+
+func (s *MessageSender) SendItemUse(playerID int64, slot, count int32) error {
+	data, err := proto.Marshal(&protocol.ClientItemUseRequest{PlayerId: playerID, Slot: slot, Count: count})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_USE), data)
+}
+
+func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
+	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_MOVE), data)
+}
+
+func (s *MessageSender) SendWarehouseList(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientWarehouseListRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST), data)
+}
+
+func (s *MessageSender) SendWarehouseStore(playerID int64, bagSlot, count int32) error {
+	data, err := proto.Marshal(&protocol.ClientWarehouseStoreRequest{PlayerId: playerID, BagSlot: bagSlot, Count: count})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_WAREHOUSE_STORE), data)
+}
+
+func (s *MessageSender) SendWarehouseRetrieve(playerID int64, warehouseSlot, count int32) error {
+	data, err := proto.Marshal(&protocol.ClientWarehouseRetrieveRequest{PlayerId: playerID, WarehouseSlot: warehouseSlot, Count: count})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE), data)
+}

@@ -162,6 +162,24 @@ func (c *Client) SendMapAttack(playerID int64, mapID int32, targetID int64) erro
 	return c.messageSender.SendMapAttack(playerID, mapID, targetID)
 }
 
+// —— 物品 / 仓库（业务层建设 2026-07-25）——
+func (c *Client) SendItemList(playerID int64) error { return c.messageSender.SendItemList(playerID) }
+func (c *Client) SendItemUse(playerID int64, slot, count int32) error {
+	return c.messageSender.SendItemUse(playerID, slot, count)
+}
+func (c *Client) SendItemMove(playerID int64, from, to int32) error {
+	return c.messageSender.SendItemMove(playerID, from, to)
+}
+func (c *Client) SendWarehouseList(playerID int64) error {
+	return c.messageSender.SendWarehouseList(playerID)
+}
+func (c *Client) SendWarehouseStore(playerID int64, bagSlot, count int32) error {
+	return c.messageSender.SendWarehouseStore(playerID, bagSlot, count)
+}
+func (c *Client) SendWarehouseRetrieve(playerID int64, warehouseSlot, count int32) error {
+	return c.messageSender.SendWarehouseRetrieve(playerID, warehouseSlot, count)
+}
+
 // SetGatewayAddr 设置网关地址
 func (c *Client) SetGatewayAddr(addr string) {
 	c.gatewayAddr = addr

@@ -78,6 +78,7 @@ func (ts *TCPService) initMessageRouter() {
 	playerHandler := msgHandler.NewPlayerHandler(ts.sessionManager, ts.playerManager, ts.playerService, ts.loginService, int32(ts.config.Server.ServerID))
 	mapHandler := msgHandler.NewMapHandler(ts.mapService, ts.playerManager, int32(ts.config.Server.ServerID))
 	systemHandler := msgHandler.NewSystemHandler(ts.sessionManager)
+	itemHandler := msgHandler.NewItemHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 
 	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
@@ -87,6 +88,13 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_LEAVE), mapHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_MOVE), mapHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_ATTACK), mapHandler)
+	// 物品 / 仓库（业务层建设 2026-07-25）
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_LIST), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_USE), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_MOVE), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_STORE), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE), itemHandler)
 }
 
 func (ts *TCPService) Name() string {

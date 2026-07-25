@@ -42,6 +42,42 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		h.handleMapMoveResponse(data)
 	case uint32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE):
 		h.handleMapAttackResponse(data)
+	case uint32(protocol.ItemMsgId_MSG_ITEM_LIST_RESPONSE):
+		var r protocol.ClientItemListResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("ItemListResponse: Result=%d, 背包物品数=%d\n", r.Result, len(r.Items))
+			for _, s := range r.Items {
+				fmt.Printf("  背包[%d] item=%d x%d\n", s.Slot, s.ItemId, s.Count)
+			}
+		}
+	case uint32(protocol.ItemMsgId_MSG_ITEM_USE_RESPONSE):
+		var r protocol.ClientItemUseResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("ItemUseResponse: Result=%d, Slot=%d, Remaining=%d, Err=%s\n", r.Result, r.Slot, r.Remaining, r.Error)
+		}
+	case uint32(protocol.ItemMsgId_MSG_ITEM_MOVE_RESPONSE):
+		var r protocol.ClientItemMoveResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("ItemMoveResponse: Result=%d, Err=%s\n", r.Result, r.Error)
+		}
+	case uint32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST_RESPONSE):
+		var r protocol.ClientWarehouseListResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("WarehouseListResponse: Result=%d, 仓库物品数=%d\n", r.Result, len(r.Items))
+			for _, s := range r.Items {
+				fmt.Printf("  仓库[%d] item=%d x%d\n", s.Slot, s.ItemId, s.Count)
+			}
+		}
+	case uint32(protocol.ItemMsgId_MSG_WAREHOUSE_STORE_RESPONSE):
+		var r protocol.ClientWarehouseStoreResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("WarehouseStoreResponse: Result=%d, 仓库格=%d, Err=%s\n", r.Result, r.WarehouseSlot, r.Error)
+		}
+	case uint32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE_RESPONSE):
+		var r protocol.ClientWarehouseRetrieveResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("WarehouseRetrieveResponse: Result=%d, 背包格=%d, Err=%s\n", r.Result, r.BagSlot, r.Error)
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

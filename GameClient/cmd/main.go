@@ -148,6 +148,31 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	// 12. 等待响应
 	time.Sleep(3 * time.Second)
 
+	// —— 物品 / 仓库（业务层建设 2026-07-25，服务端 ZMMO_TEST_ITEMS 门控在进入游戏时种子几件物品）——
+	fmt.Println("11. 查背包...")
+	_ = c.SendItemList(playerID)
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Println("12. 使用背包槽0一件...")
+	_ = c.SendItemUse(playerID, 0, 1)
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Println("13. 背包槽1整格存入仓库...")
+	_ = c.SendWarehouseStore(playerID, 1, 5)
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Println("14. 查仓库...")
+	_ = c.SendWarehouseList(playerID)
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Println("15. 从仓库槽0取回2件到背包...")
+	_ = c.SendWarehouseRetrieve(playerID, 0, 2)
+	time.Sleep(500 * time.Millisecond)
+
+	fmt.Println("16. 再查背包...")
+	_ = c.SendItemList(playerID)
+	time.Sleep(800 * time.Millisecond)
+
 	// 13. 登出
 	fmt.Println("10. 登出...")
 	if err := c.SendPlayerLogout(); err != nil {
