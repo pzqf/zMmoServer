@@ -74,11 +74,14 @@ func (m *Map) handlePlayerDeath(player *object.Player, killer common.IGameObject
 
 	go func() {
 		time.Sleep(5 * time.Second)
-		player.SetHealth(player.GetMaxHealth())
-		spawnPos := common.Vector3{X: m.width / 2, Y: 0, Z: m.height / 2}
-		player.SetPosition(spawnPos)
-		zLog.Info("Player auto-respawned",
-			zap.Int64("player_id", int64(player.GetPlayerID())))
+		// MAP-2: 复活改动玩家状态，串行回地图 goroutine。
+		m.Do(func() {
+			player.SetHealth(player.GetMaxHealth())
+			spawnPos := common.Vector3{X: m.width / 2, Y: 0, Z: m.height / 2}
+			player.SetPosition(spawnPos)
+			zLog.Info("Player auto-respawned",
+				zap.Int64("player_id", int64(player.GetPlayerID())))
+		})
 	}()
 }
 
@@ -131,21 +134,24 @@ func (m *Map) scheduleMonsterRespawn(monster *object.Monster) {
 
 	go func() {
 		time.Sleep(time.Duration(respawnTime) * time.Second)
-		objectID := nextMapObjectID()
-		newMonster := object.NewMonster(objectID, monsterConfigID, "Monster", monsterPos, 1)
+		// MAP-2: 重生怪进地图，串行回地图 goroutine。
+		m.Do(func() {
+			objectID := nextMapObjectID()
+			newMonster := object.NewMonster(objectID, monsterConfigID, "Monster", monsterPos, 1)
 
-		if m.lootSystem != nil {
-			config := m.lootSystem.GetMonsterConfig(monsterConfigID)
-			if config != nil {
-				newMonster.SetAIType(config.AIType)
-				newMonster.SetDifficulty(config.Difficulty)
+			if m.lootSystem != nil {
+				config := m.lootSystem.GetMonsterConfig(monsterConfigID)
+				if config != nil {
+					newMonster.SetAIType(config.AIType)
+					newMonster.SetDifficulty(config.Difficulty)
+				}
 			}
-		}
 
-		m.AddObject(newMonster)
-		zLog.Debug("Monster respawned",
-			zap.Int32("monster_config_id", monsterConfigID),
-			zap.Int64("object_id", int64(objectID)))
+			m.AddObject(newMonster)
+			zLog.Debug("Monster respawned",
+				zap.Int32("monster_config_id", monsterConfigID),
+				zap.Int64("object_id", int64(objectID)))
+		})
 	}()
 }
 
@@ -160,7 +166,17 @@ func (m *Map) dropItems(position common.Vector3, monsterLevel int32) {
 	}
 }
 
+// AttackTarget 玩家攻击（网络入口）。经 Do 串行到地图 goroutine，与 AI/帧更新互斥（MAP-2）。
 func (m *Map) AttackTarget(playerID id.PlayerIdType, objectID id.ObjectIdType, targetID id.ObjectIdType) (int64, int64, error) {
+	var dmg, extra int64
+	var err error
+	m.Do(func() {
+		dmg, extra, err = m.attackTargetLocked(playerID, objectID, targetID)
+	})
+	return dmg, extra, err
+}
+
+func (m *Map) attackTargetLocked(playerID id.PlayerIdType, objectID id.ObjectIdType, targetID id.ObjectIdType) (int64, int64, error) {
 	attacker := m.GetObject(objectID)
 	if attacker == nil {
 		return 0, 0, fmt.Errorf("attacker not found")

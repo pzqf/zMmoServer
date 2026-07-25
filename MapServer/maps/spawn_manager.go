@@ -145,7 +145,8 @@ func (sm *SpawnManager) spawnMonster(spawnPoint *SpawnPoint) {
 
 	monster := object.NewMonster(objectID, spawnPoint.objectID, "Monster_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, 1)
 
-	sm.mapObj.AddObject(monster)
+	// MAP-2: 刷怪在 spawnLoop goroutine，AddObject 须串行回地图 goroutine。
+	sm.mapObj.Do(func() { sm.mapObj.AddObject(monster) })
 
 	zLog.Debug("Spawning monster",
 		zap.Int32("monster_id", spawnPoint.objectID),
@@ -161,7 +162,8 @@ func (sm *SpawnManager) spawnNPC(spawnPoint *SpawnPoint) {
 
 	npc := object.NewNPC(objectID, spawnPoint.objectID, "NPC_"+string(rune('A'+spawnPoint.objectID%26)), spawnPoint.position, "Hello, adventurer!")
 
-	sm.mapObj.AddObject(npc)
+	// MAP-2: 刷 NPC 在 spawnLoop goroutine，AddObject 须串行回地图 goroutine。
+	sm.mapObj.Do(func() { sm.mapObj.AddObject(npc) })
 
 	zLog.Debug("Spawning NPC",
 		zap.Int32("npc_id", spawnPoint.objectID),

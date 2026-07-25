@@ -71,6 +71,11 @@ type Map struct {
 	lootSystem        *loot.LootSystem
 	aoiNotifier       AOINotifier
 	createdAt         time.Time
+
+	// 单写者 Actor（MAP-2）：所有对象状态改动串行到 cmdCh 上的这条 goroutine 执行。见 map_actor.go。
+	cmdCh    chan func()
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 const defaultGridSize = 50.0
@@ -130,6 +135,10 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 		m.AddObject(dummy)
 		zLog.Info("Test dummy monster spawned (ZMMO_TEST_SPAWN)", zap.Int64("object_id", 2), zap.Int32("map_id", int32(mapID)))
 	}
+
+	// 启动单写者 goroutine：此后所有对象状态改动都经 cmdCh 串行到这条 goroutine（MAP-2）。
+	// 放在最后，确保各子系统 manager 均已初始化。
+	m.startActor()
 
 	return m
 }
@@ -608,20 +617,31 @@ func (m *Map) UpdateEvents() {
 	}
 }
 
+// AddPlayer 玩家进入地图（网络入口）。经 Do 串行到地图 goroutine，避免与帧更新竞争（MAP-2）。
 func (m *Map) AddPlayer(playerID id.PlayerIdType, objectID id.ObjectIdType, x, y, z float32) error {
-	position := common.Vector3{X: x, Y: y, Z: z}
-	player := object.NewPlayer(objectID, playerID, "Player", position, 1)
-	m.AddObject(player)
+	m.Do(func() {
+		position := common.Vector3{X: x, Y: y, Z: z}
+		player := object.NewPlayer(objectID, playerID, "Player", position, 1)
+		m.AddObject(player)
+	})
 	return nil
 }
 
+// RemovePlayer 玩家离开地图（网络入口）。经 Do 串行到地图 goroutine（MAP-2）。
 func (m *Map) RemovePlayer(playerID id.PlayerIdType) {
-	m.RemoveObject(id.ObjectIdType(playerID))
+	m.Do(func() {
+		m.RemoveObject(id.ObjectIdType(playerID))
+	})
 }
 
+// MovePlayer 玩家移动（网络入口）。经 Do 串行到地图 goroutine（MAP-2）。
 func (m *Map) MovePlayer(playerID id.PlayerIdType, objectID id.ObjectIdType, x, y, z float32) error {
-	position := common.Vector3{X: x, Y: y, Z: z}
-	return m.MoveObject(objectID, position)
+	var err error
+	m.Do(func() {
+		position := common.Vector3{X: x, Y: y, Z: z}
+		err = m.MoveObject(objectID, position)
+	})
+	return err
 }
 
 func (m *Map) UpdatePlayers() {

@@ -218,6 +218,17 @@ func (mm *MapManager) UpdateAllMapsSkills() {
 	}
 }
 
+// PostTickAll 向每张地图的单写者 goroutine 投递一帧更新（MAP-2）。
+// 取代此前由游戏主循环直接调用各 UpdateAllMaps* 的做法——那样帧更新跑在主循环 goroutine 上，
+// 与网络分发 goroutine 并发改动同一批对象，构成数据竞争。改为投递到每张地图各自的 goroutine，
+// 使帧更新与网络命令在该地图内严格串行。队列满则合帧丢弃，见 map_actor.go。
+func (mm *MapManager) PostTickAll(deltaTime time.Duration) {
+	mm.maps.Range(func(_ id.MapIdType, m *Map) bool {
+		m.postTick(deltaTime)
+		return true
+	})
+}
+
 // UpdateAllMapsAI 更新所有地图的AI
 func (mm *MapManager) UpdateAllMapsAI(deltaTime time.Duration) {
 	maps := make([]*Map, 0)

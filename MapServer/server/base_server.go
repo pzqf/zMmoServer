@@ -248,11 +248,10 @@ func (bs *BaseServer) startGameLoop() {
 			deltaTime := now.Sub(lastTime)
 			lastTime = now
 
-			bs.mapManager.UpdateAllMapsAI(deltaTime)
-			bs.mapManager.UpdateAllMapsBuffs(deltaTime)
-			bs.mapManager.UpdateAllMapsPlayers()
-			bs.mapManager.UpdateAllMapsSkills()
-			bs.mapManager.UpdateAllMapsEvents()
+			// MAP-2 单写者模型：不再在本主循环 goroutine 上直接跑各地图的帧更新
+			// （那样会与网络分发 goroutine 并发改动同一批对象 → 数据竞争），改为向每张
+			// 地图各自的 goroutine 投递一帧,由该 goroutine 串行执行 AI/Buff/玩家/技能/事件更新。
+			bs.mapManager.PostTickAll(deltaTime)
 		}
 	}
 }
