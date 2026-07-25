@@ -214,11 +214,19 @@ func (bm *BuffManager) GetBuffStackCount(playerID id.PlayerIdType, buffID int32)
 	return 0
 }
 
-func (bm *BuffManager) Update(deltaTime time.Duration) {
+// ExpiredBuff 一条到期被移除的 buff（Update 返回，供上层做 AOI 移除广播）。
+type ExpiredBuff struct {
+	PlayerID id.PlayerIdType
+	BuffID   int32
+}
+
+// Update 推进 buff 计时，移除到期 buff，并返回本次到期清单（供地图广播 buff 移除）。
+func (bm *BuffManager) Update(deltaTime time.Duration) []ExpiredBuff {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
 	now := time.Now()
+	var expired []ExpiredBuff
 
 	for playerID, buffs := range bm.playerBuffs {
 		for buffID, buff := range buffs {
@@ -229,6 +237,7 @@ func (bm *BuffManager) Update(deltaTime time.Duration) {
 			if now.After(buff.EndTime) {
 				buff.IsActive = false
 				delete(bm.playerBuffs[playerID], buffID)
+				expired = append(expired, ExpiredBuff{PlayerID: playerID, BuffID: buffID})
 
 				zLog.Debug("Buff expired",
 					zap.Int64("player_id", int64(playerID)),
@@ -236,6 +245,7 @@ func (bm *BuffManager) Update(deltaTime time.Duration) {
 			}
 		}
 	}
+	return expired
 }
 
 func (bm *BuffManager) CalculateBuffEffect(playerID id.PlayerIdType, property string) int32 {

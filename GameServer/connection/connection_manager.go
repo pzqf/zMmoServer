@@ -218,7 +218,7 @@ func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet 
 	case uint32(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION):
 		cm.handleMapAttackResponse(meta, baseMsg)
 	case crossserver.MsgInternalAOIEnter, crossserver.MsgInternalAOILeave, crossserver.MsgInternalAOIMove,
-		crossserver.MsgInternalAOIAttr, crossserver.MsgInternalAOIDeath:
+		crossserver.MsgInternalAOIAttr, crossserver.MsgInternalAOIDeath, crossserver.MsgInternalAOIBuff:
 		cm.handleAOINotify(baseMsg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
@@ -282,6 +282,19 @@ func (cm *ConnectionManager) handleAOINotify(baseMsg *protocol.BaseMessage) {
 		}
 		targetID = n.EntityId
 		x = float32(n.KillerId)
+	case crossserver.MsgInternalAOIBuff:
+		// buff 经 x/y/z 透传：x=buffID, y=added(1/0), z=remaining_ms。
+		var n protocol.EntityBuffNotify
+		if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
+			zLog.Error("Failed to unmarshal EntityBuffNotify", zap.Error(err))
+			return
+		}
+		targetID = n.EntityId
+		x = float32(n.BuffId)
+		if n.Added {
+			y = 1
+		}
+		z = float32(n.RemainingMs)
 	default:
 		return
 	}

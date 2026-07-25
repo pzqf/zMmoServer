@@ -19,4 +19,5 @@ const (
 	MsgInternalAOIMove  uint32 = 502
 	MsgInternalAOIAttr  uint32 = 503
 	MsgInternalAOIDeath uint32 = 504
+	MsgInternalAOIBuff  uint32 = 505 // 视野内实体 buff 增删（EntityBuffNotify）
 )

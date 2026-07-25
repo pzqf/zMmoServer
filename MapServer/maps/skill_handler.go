@@ -151,6 +151,8 @@ func (m *Map) handleSkillEffect(skill *skill.Skill) {
 							zap.Int64("player_id", int64(player.GetPlayerID())),
 							zap.Int32("buff_id", buffID),
 							zap.Int32("skill_id", skill.GetSkillConfigID()))
+						// 场景同步增强：把新增 buff 广播给视野内玩家。
+						m.broadcastEntityBuff(player, buffID, true, m.buffRemainingSec(player.GetPlayerID(), buffID))
 					}
 				}
 			}
@@ -168,6 +170,8 @@ func (m *Map) handleSkillEffect(skill *skill.Skill) {
 							zap.Int64("player_id", int64(player.GetPlayerID())),
 							zap.Int32("buff_id", buffID),
 							zap.Int32("skill_id", skill.GetSkillConfigID()))
+						// 场景同步增强：把新增控制类 debuff 广播给视野内玩家。
+						m.broadcastEntityBuff(player, buffID, true, m.buffRemainingSec(player.GetPlayerID(), buffID))
 					}
 				} else if monster, ok := obj.(*object.Monster); ok {
 					zLog.Debug("Control effect applied to monster",

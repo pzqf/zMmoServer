@@ -105,6 +105,14 @@ func (ts *TCPService) sendAOINotify(job aoiSendJob) {
 			EntityId: job.targetID,
 			KillerId: int64(job.pos.X),
 		})
+	case crossserver.MsgInternalAOIBuff:
+		// buff 广播复用 pos 承载：X=buffID, Y=added(1/0), Z=剩余秒数（见 Map.broadcastEntityBuff）。
+		innerData, err = proto.Marshal(&protocol.EntityBuffNotify{
+			EntityId:    job.targetID,
+			BuffId:      int32(job.pos.X),
+			Added:       job.pos.Y > 0.5,
+			RemainingMs: int64(job.pos.Z * 1000),
+		})
 	default:
 		return
 	}

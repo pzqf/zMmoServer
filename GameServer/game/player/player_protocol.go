@@ -73,6 +73,7 @@ const (
 	MsgAOIMove      MessageType = 17003
 	MsgAOIAttr      MessageType = 17004 // 视野内实体血量变更
 	MsgAOIDeath     MessageType = 17005 // 视野内实体死亡
+	MsgAOIBuff      MessageType = 17006 // 视野内实体 buff 增删
 )
 
 type MessageSource int

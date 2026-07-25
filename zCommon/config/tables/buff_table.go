@@ -72,6 +72,17 @@ func (btl *BuffTableLoader) GetBuff(buffID int32) (*models.Buff, bool) {
 	return buff, ok
 }
 
+// SetBuffConfig 以编程方式登记一条 buff 配置（测试种子/运行时补充用；不经 Excel）。
+func (btl *BuffTableLoader) SetBuffConfig(b *models.Buff) {
+	if b == nil {
+		return
+	}
+	if btl.buffs == nil {
+		btl.buffs = make(map[int32]*models.Buff)
+	}
+	btl.buffs[b.BuffID] = b
+}
+
 // GetAllBuffs ��ȡ����buff
 func (btl *BuffTableLoader) GetAllBuffs() map[int32]*models.Buff {
 	buffsCopy := make(map[int32]*models.Buff, len(btl.buffs))

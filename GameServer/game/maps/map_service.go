@@ -806,6 +806,9 @@ func (ms *MapService) HandleAOINotify(watcherID, targetID int64, mapID int32, ev
 	case crossserver.MsgInternalAOIDeath:
 		// x=killer 对象 ID（复用 AOIViewRequest.PosX 承载）。
 		_ = ms.playerManager.RouteMessage(watcher, player.NewPlayerMessage(watcher, player.SourceMapServer, player.MsgAOIDeath, req))
+	case crossserver.MsgInternalAOIBuff:
+		// x=buffID, y=added(1/0), z=remaining_ms（复用 AOIViewRequest.PosX/PosY/PosZ 承载）。
+		_ = ms.playerManager.RouteMessage(watcher, player.NewPlayerMessage(watcher, player.SourceMapServer, player.MsgAOIBuff, req))
 	}
 }
 

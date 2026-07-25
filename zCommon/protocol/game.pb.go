@@ -166,6 +166,7 @@ const (
 	MapMsgId_MSG_MAP_ENTITY_MOVE     MapMsgId = 1222
 	MapMsgId_MSG_MAP_ENTITY_ATTR     MapMsgId = 1223 // 实体属性(血量)变更广播
 	MapMsgId_MSG_MAP_ENTITY_DEATH    MapMsgId = 1224 // 实体死亡广播
+	MapMsgId_MSG_MAP_ENTITY_BUFF     MapMsgId = 1225 // 实体 buff 增删广播
 )
 
 // Enum value maps for MapMsgId.
@@ -185,6 +186,7 @@ var (
 		1222: "MSG_MAP_ENTITY_MOVE",
 		1223: "MSG_MAP_ENTITY_ATTR",
 		1224: "MSG_MAP_ENTITY_DEATH",
+		1225: "MSG_MAP_ENTITY_BUFF",
 	}
 	MapMsgId_value = map[string]int32{
 		"MSG_MAP_INVALID":         0,
@@ -201,6 +203,7 @@ var (
 		"MSG_MAP_ENTITY_MOVE":     1222,
 		"MSG_MAP_ENTITY_ATTR":     1223,
 		"MSG_MAP_ENTITY_DEATH":    1224,
+		"MSG_MAP_ENTITY_BUFF":     1225,
 	}
 )
 
@@ -1296,6 +1299,75 @@ func (x *EntityDeathNotify) GetKillerId() int64 {
 	return 0
 }
 
+// 实体 buff 增删通知——经 AOI 广播给视野内玩家
+type EntityBuffNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EntityId      int64                  `protobuf:"varint,1,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	BuffId        int32                  `protobuf:"varint,2,opt,name=buff_id,json=buffId,proto3" json:"buff_id,omitempty"`
+	Added         bool                   `protobuf:"varint,3,opt,name=added,proto3" json:"added,omitempty"`                                // true=获得, false=移除
+	RemainingMs   int64                  `protobuf:"varint,4,opt,name=remaining_ms,json=remainingMs,proto3" json:"remaining_ms,omitempty"` // 剩余毫秒(获得时有效)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EntityBuffNotify) Reset() {
+	*x = EntityBuffNotify{}
+	mi := &file_game_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EntityBuffNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EntityBuffNotify) ProtoMessage() {}
+
+func (x *EntityBuffNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EntityBuffNotify.ProtoReflect.Descriptor instead.
+func (*EntityBuffNotify) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *EntityBuffNotify) GetEntityId() int64 {
+	if x != nil {
+		return x.EntityId
+	}
+	return 0
+}
+
+func (x *EntityBuffNotify) GetBuffId() int32 {
+	if x != nil {
+		return x.BuffId
+	}
+	return 0
+}
+
+func (x *EntityBuffNotify) GetAdded() bool {
+	if x != nil {
+		return x.Added
+	}
+	return false
+}
+
+func (x *EntityBuffNotify) GetRemainingMs() int64 {
+	if x != nil {
+		return x.RemainingMs
+	}
+	return 0
+}
+
 var File_game_proto protoreflect.FileDescriptor
 
 const file_game_proto_rawDesc = "" +
@@ -1375,7 +1447,12 @@ const file_game_proto_rawDesc = "" +
 	"\x06max_hp\x18\x03 \x01(\x03R\x05maxHp\"M\n" +
 	"\x11EntityDeathNotify\x12\x1b\n" +
 	"\tentity_id\x18\x01 \x01(\x03R\bentityId\x12\x1b\n" +
-	"\tkiller_id\x18\x02 \x01(\x03R\bkillerId*\x82\x02\n" +
+	"\tkiller_id\x18\x02 \x01(\x03R\bkillerId\"\x81\x01\n" +
+	"\x10EntityBuffNotify\x12\x1b\n" +
+	"\tentity_id\x18\x01 \x01(\x03R\bentityId\x12\x17\n" +
+	"\abuff_id\x18\x02 \x01(\x05R\x06buffId\x12\x14\n" +
+	"\x05added\x18\x03 \x01(\bR\x05added\x12!\n" +
+	"\fremaining_ms\x18\x04 \x01(\x03R\vremainingMs*\x82\x02\n" +
 	"\vSystemMsgId\x12\x16\n" +
 	"\x12MSG_SYSTEM_INVALID\x10\x00\x12\x18\n" +
 	"\x14MSG_SYSTEM_HEARTBEAT\x10\x01\x12\x13\n" +
@@ -1393,7 +1470,7 @@ const file_game_proto_rawDesc = "" +
 	"\x1aMSG_PLAYER_CREATE_RESPONSE\x10\xc9\x01\x12\x1a\n" +
 	"\x15MSG_PLAYER_ENTER_GAME\x10\xca\x01\x12#\n" +
 	"\x1eMSG_PLAYER_ENTER_GAME_RESPONSE\x10\xcb\x01\x12\x1a\n" +
-	"\x15MSG_PLAYER_LEAVE_GAME\x10\xcc\x01*\xe4\x02\n" +
+	"\x15MSG_PLAYER_LEAVE_GAME\x10\xcc\x01*\xfe\x02\n" +
 	"\bMapMsgId\x12\x13\n" +
 	"\x0fMSG_MAP_INVALID\x10\x00\x12\x12\n" +
 	"\rMSG_MAP_ENTER\x10\xb0\t\x12\x1b\n" +
@@ -1408,7 +1485,8 @@ const file_game_proto_rawDesc = "" +
 	"\x12MSG_MAP_LEAVE_VIEW\x10\xc5\t\x12\x18\n" +
 	"\x13MSG_MAP_ENTITY_MOVE\x10\xc6\t\x12\x18\n" +
 	"\x13MSG_MAP_ENTITY_ATTR\x10\xc7\t\x12\x19\n" +
-	"\x14MSG_MAP_ENTITY_DEATH\x10\xc8\tB\rZ\v./;protocolb\x06proto3"
+	"\x14MSG_MAP_ENTITY_DEATH\x10\xc8\t\x12\x18\n" +
+	"\x13MSG_MAP_ENTITY_BUFF\x10\xc9\tB\rZ\v./;protocolb\x06proto3"
 
 var (
 	file_game_proto_rawDescOnce sync.Once
@@ -1423,7 +1501,7 @@ func file_game_proto_rawDescGZIP() []byte {
 }
 
 var file_game_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_game_proto_goTypes = []any{
 	(SystemMsgId)(0),                // 0: protocol.SystemMsgId
 	(PlayerMsgId)(0),                // 1: protocol.PlayerMsgId
@@ -1446,15 +1524,16 @@ var file_game_proto_goTypes = []any{
 	(*EntityMoveNotify)(nil),        // 18: protocol.EntityMoveNotify
 	(*EntityAttrNotify)(nil),        // 19: protocol.EntityAttrNotify
 	(*EntityDeathNotify)(nil),       // 20: protocol.EntityDeathNotify
-	(*Position)(nil),                // 21: protocol.Position
+	(*EntityBuffNotify)(nil),        // 21: protocol.EntityBuffNotify
+	(*Position)(nil),                // 22: protocol.Position
 }
 var file_game_proto_depIdxs = []int32{
-	21, // 0: protocol.ClientMapEnterResponse.pos:type_name -> protocol.Position
-	21, // 1: protocol.ClientMapMoveRequest.pos:type_name -> protocol.Position
-	21, // 2: protocol.ClientMapMoveResponse.pos:type_name -> protocol.Position
-	21, // 3: protocol.EntityEnterViewNotify.pos:type_name -> protocol.Position
-	21, // 4: protocol.EntityMoveNotify.old_pos:type_name -> protocol.Position
-	21, // 5: protocol.EntityMoveNotify.new_pos:type_name -> protocol.Position
+	22, // 0: protocol.ClientMapEnterResponse.pos:type_name -> protocol.Position
+	22, // 1: protocol.ClientMapMoveRequest.pos:type_name -> protocol.Position
+	22, // 2: protocol.ClientMapMoveResponse.pos:type_name -> protocol.Position
+	22, // 3: protocol.EntityEnterViewNotify.pos:type_name -> protocol.Position
+	22, // 4: protocol.EntityMoveNotify.old_pos:type_name -> protocol.Position
+	22, // 5: protocol.EntityMoveNotify.new_pos:type_name -> protocol.Position
 	6,  // [6:6] is the sub-list for method output_type
 	6,  // [6:6] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
@@ -1474,7 +1553,7 @@ func file_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_proto_rawDesc), len(file_game_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

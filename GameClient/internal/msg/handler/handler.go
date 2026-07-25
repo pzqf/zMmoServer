@@ -111,6 +111,15 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		if proto.Unmarshal(data, &n) == nil {
 			fmt.Printf("[AOI] 实体死亡: entity=%d killer=%d\n", n.EntityId, n.KillerId)
 		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTITY_BUFF):
+		var n protocol.EntityBuffNotify
+		if proto.Unmarshal(data, &n) == nil {
+			op := "移除"
+			if n.Added {
+				op = "获得"
+			}
+			fmt.Printf("[AOI] 实体buff%s: entity=%d buff=%d 剩余=%dms\n", op, n.EntityId, n.BuffId, n.RemainingMs)
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

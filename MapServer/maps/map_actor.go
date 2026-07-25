@@ -3,6 +3,7 @@ package maps
 import (
 	"time"
 
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"go.uber.org/zap"
 )
@@ -95,7 +96,13 @@ func (m *Map) tick(dt time.Duration) {
 		m.aiManager.Update(dt)
 	}
 	if m.buffManager != nil {
-		m.buffManager.Update(dt)
+		// 到期 buff 经 AOI 广播移除给视野内玩家（场景同步增强）。本调用在地图 actor
+		// goroutine 内，broadcastEntityBuff 只入队 NotifyAOI，不阻塞。
+		for _, e := range m.buffManager.Update(dt) {
+			if obj := m.GetObject(id.ObjectIdType(e.PlayerID)); obj != nil {
+				m.broadcastEntityBuff(obj, e.BuffID, false, 0)
+			}
+		}
 	}
 	m.UpdatePlayers()
 	if m.skillManager != nil {

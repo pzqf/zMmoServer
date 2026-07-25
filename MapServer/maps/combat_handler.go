@@ -289,6 +289,42 @@ func (m *Map) broadcastEntityDeath(target, killer common.IGameObject) {
 	}
 }
 
+// buffRemainingSec 返回玩家某 buff 的剩余秒数（buff 增广播载荷用）；查不到返回 0。
+func (m *Map) buffRemainingSec(playerID id.PlayerIdType, buffID int32) float32 {
+	if m.buffManager == nil {
+		return 0
+	}
+	for _, ab := range m.buffManager.GetActiveBuffs(playerID) {
+		if ab.BuffID == buffID {
+			return float32(ab.GetRemainingTime().Seconds())
+		}
+	}
+	return 0
+}
+
+// broadcastEntityBuff 把 target 的 buff 增/删广播给视野内所有玩家(watcher)。
+// added=true 为获得(remainingSec 为剩余秒数),false 为移除(remainingSec 忽略)。
+// buff 载荷经 pos 透传：X=buffID, Y=added?1:0, Z=剩余秒数（对端 aoi_push case AOIBuff 还原）。
+func (m *Map) broadcastEntityBuff(target common.IGameObject, buffID int32, added bool, remainingSec float32) {
+	if m.aoiNotifier == nil || target == nil {
+		return
+	}
+	var addedF float32
+	if added {
+		addedF = 1
+	}
+	pos := target.GetPosition()
+	payload := common.Vector3{X: float32(buffID), Y: addedF, Z: remainingSec}
+	for _, w := range m.GetPlayersInRange(pos, aoiBroadcastRadius) {
+		wp, ok := w.(*object.Player)
+		if !ok {
+			continue
+		}
+		m.aoiNotifier.NotifyAOI(int64(wp.GetPlayerID()), int32(m.mapID),
+			crossserver.MsgInternalAOIBuff, int64(target.GetID()), payload)
+	}
+}
+
 func (m *Map) GetTargetInRange(position common.Vector3, skillRange float32, casterID id.ObjectIdType, targetTypes []common.GameObjectType) []common.IGameObject {
 	objects := m.GetObjectsInRange(position, skillRange)
 	targets := make([]common.IGameObject, 0)

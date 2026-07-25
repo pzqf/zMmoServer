@@ -126,6 +126,27 @@ func (p *Player) handleAOIDeath(msg *PlayerMessage) {
 	p.pushToClient(int32(protocol.MapMsgId_MSG_MAP_ENTITY_DEATH), data)
 }
 
+// handleAOIBuff 视野内实体 buff 增删 → 推客户端 EntityBuffNotify。
+// PosX=buffID, PosY=added(1/0), PosZ=remaining_ms。
+func (p *Player) handleAOIBuff(msg *PlayerMessage) {
+	req, ok := msg.Data.(*AOIViewRequest)
+	if !ok {
+		return
+	}
+	notify := &protocol.EntityBuffNotify{
+		EntityId:    req.TargetID,
+		BuffId:      int32(req.PosX),
+		Added:       req.PosY > 0.5,
+		RemainingMs: int64(req.PosZ),
+	}
+	data, err := proto.Marshal(notify)
+	if err != nil {
+		zLog.Error("Failed to marshal entity buff notify", zap.Error(err))
+		return
+	}
+	p.pushToClient(int32(protocol.MapMsgId_MSG_MAP_ENTITY_BUFF), data)
+}
+
 // pushToClient 推送消息到客户端
 func (p *Player) pushToClient(protoId int32, data []byte) {
 	if p.clientSender == nil || p.sessionID == nil {
