@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package protocol;
+
+option go_package = "./;protocol";
+
+// ============================================
+// 邮件协议（离线持久异步投递 + 领取，最小闭环：仅金币附件）
+// 消息ID范围: 1800-1899
+// ============================================
+
+enum MailMsgId {
+  MSG_MAIL_INVALID = 0;
+  MSG_MAIL_SEND = 1800;            // 发送邮件（可发给离线玩家）
+  MSG_MAIL_LIST = 1802;            // 拉取本人邮件
+  MSG_MAIL_LIST_RESPONSE = 1803;
+  MSG_MAIL_CLAIM = 1804;           // 领取邮件附件
+  MSG_MAIL_CLAIM_RESPONSE = 1805;
+}
+
+message MailInfo {
+  int64 mail_id = 1;
+  string sender = 2;
+  string title = 3;
+  string content = 4;
+  int64 gold = 5;       // 金币附件
+  bool is_claimed = 6;
+}
+
+message ClientMailSendRequest {
+  int64 from_player_id = 1;
+  int64 to_player_id = 2;
+  string title = 3;
+  string content = 4;
+  int64 gold = 5;
+}
+
+message ClientMailListRequest {
+  int64 player_id = 1;
+}
+message ClientMailListResponse {
+  int32 result = 1;
+  repeated MailInfo mails = 2;
+}
+
+message ClientMailClaimRequest {
+  int64 player_id = 1;
+  int64 mail_id = 2;
+}
+message ClientMailClaimResponse {
+  int32 result = 1;     // 0=成功
+  int64 mail_id = 2;
+  int64 gold = 3;       // 到账金币
+  string error = 4;
+}

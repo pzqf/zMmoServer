@@ -83,6 +83,7 @@ func (ts *TCPService) initMessageRouter() {
 	chatHandler := msgHandler.NewChatHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 	teamHandler := msgHandler.NewTeamHandler(ts.playerManager, int32(ts.config.Server.ServerID))
 	tradeHandler := msgHandler.NewTradeHandler(ts.playerManager, int32(ts.config.Server.ServerID))
+	mailHandler := msgHandler.NewMailHandler(ts.playerManager, ts.playerService, int32(ts.config.Server.ServerID))
 
 	ts.messageRouter.RegisterHandler(int32(protocol.SystemMsgId_MSG_SYSTEM_ACCOUNT_LOGIN_NOTIFY), systemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME), playerHandler)
@@ -116,6 +117,10 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_SET_GOLD), tradeHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_CONFIRM), tradeHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.TradeMsgId_MSG_TRADE_CANCEL), tradeHandler)
+	// 邮件（业务层建设 2026-07-25）：离线持久投递 + 领取
+	ts.messageRouter.RegisterHandler(int32(protocol.MailMsgId_MSG_MAIL_SEND), mailHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MailMsgId_MSG_MAIL_LIST), mailHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MailMsgId_MSG_MAIL_CLAIM), mailHandler)
 }
 
 func (ts *TCPService) Name() string {

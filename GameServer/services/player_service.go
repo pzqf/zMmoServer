@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -66,6 +67,7 @@ func NewPlayerService(playerDAO *dao.PlayerDAO, dbConnector connector.DBConnecto
 		stopChan:      make(chan struct{}),
 	}
 
+	ps.ensureAuxSchema()
 	go ps.saveLoop()
 
 	return ps
@@ -166,6 +168,155 @@ func (ps *PlayerService) SavePlayerSkills(playerID int64, skills []PersistSkill)
 		}
 	}
 	return nil
+}
+
+// ensureAuxSchema 建仓库表（player_warehouse 无现成表）。幂等，启动时调一次。
+func (ps *PlayerService) ensureAuxSchema() {
+	if ps.connector == nil {
+		return
+	}
+	_, err := ps.connector.ExecSync(`CREATE TABLE IF NOT EXISTS player_warehouse (
+		id BIGINT NOT NULL AUTO_INCREMENT,
+		player_id BIGINT NOT NULL,
+		item_id INT NOT NULL,
+		count INT NOT NULL,
+		position INT NOT NULL,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (id),
+		KEY idx_player_id (player_id)
+	)`)
+	if err != nil {
+		zLog.Warn("ensure player_warehouse table failed", zap.Error(err))
+	}
+}
+
+func (ps *PlayerService) LoadPlayerWarehouse(playerID int64) ([]PersistItem, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync("SELECT item_id, count, position FROM player_warehouse WHERE player_id = ?", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersistItem
+	for rows.Next() {
+		var it PersistItem
+		if err := rows.Scan(&it.ConfigID, &it.Count, &it.Slot); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+func (ps *PlayerService) SavePlayerWarehouse(playerID int64, items []PersistItem) error {
+	if ps.connector == nil {
+		return nil
+	}
+	if _, err := ps.connector.ExecSync("DELETE FROM player_warehouse WHERE player_id = ?", playerID); err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, it := range items {
+		if _, err := ps.connector.ExecSync(
+			"INSERT INTO player_warehouse (player_id, item_id, count, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+			playerID, it.ConfigID, it.Count, it.Slot, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// —— 邮件（业务层建设 2026-07-25）：离线持久异步投递 + 领取。用现成 player_mails 表；附件仅金币（JSON）——
+
+type mailAttachment struct {
+	Gold int64 `json:"gold"`
+}
+
+// MailRow 一封邮件（列表用）。
+type MailRow struct {
+	MailID    int64
+	Sender    string
+	Title     string
+	Content   string
+	Gold      int64
+	IsClaimed bool
+}
+
+// SendMail 发一封邮件给 toPlayerID（收件人在线与否均可——落库即投递）。
+func (ps *PlayerService) SendMail(toPlayerID int64, sender, title, content string, gold int64) error {
+	if ps.connector == nil {
+		return fmt.Errorf("no db")
+	}
+	att, _ := json.Marshal(mailAttachment{Gold: gold})
+	now := time.Now()
+	_, err := ps.connector.ExecSync(
+		"INSERT INTO player_mails (player_id, sender, title, content, is_read, is_claimed, attachments, created_at, updated_at) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?)",
+		toPlayerID, sender, title, content, string(att), now, now)
+	return err
+}
+
+// ListMail 拉取某玩家的邮件（新→旧，最多 50 封）。
+func (ps *PlayerService) ListMail(playerID int64) ([]MailRow, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync(
+		"SELECT id, sender, title, content, attachments, is_claimed FROM player_mails WHERE player_id = ? ORDER BY id DESC LIMIT 50", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []MailRow
+	for rows.Next() {
+		var m MailRow
+		var attStr string
+		var claimed int
+		if err := rows.Scan(&m.MailID, &m.Sender, &m.Title, &m.Content, &attStr, &claimed); err != nil {
+			return nil, err
+		}
+		var att mailAttachment
+		_ = json.Unmarshal([]byte(attStr), &att)
+		m.Gold = att.Gold
+		m.IsClaimed = claimed != 0
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// ClaimMail 领取邮件附件：原子标记已领（WHERE is_claimed=0 防重复领），返回到账金币。
+func (ps *PlayerService) ClaimMail(playerID, mailID int64) (int64, bool, error) {
+	if ps.connector == nil {
+		return 0, false, fmt.Errorf("no db")
+	}
+	res, err := ps.connector.ExecSync(
+		"UPDATE player_mails SET is_claimed = 1, is_read = 1, updated_at = ? WHERE id = ? AND player_id = ? AND is_claimed = 0",
+		time.Now(), mailID, playerID)
+	if err != nil {
+		return 0, false, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return 0, false, nil // 不存在/非本人/已领
+	}
+	// 读附件金币
+	rows, err := ps.connector.QuerySync("SELECT attachments FROM player_mails WHERE id = ?", mailID)
+	if err != nil {
+		return 0, true, err
+	}
+	defer rows.Close()
+	var gold int64
+	if rows.Next() {
+		var attStr string
+		if err := rows.Scan(&attStr); err == nil {
+			var att mailAttachment
+			_ = json.Unmarshal([]byte(attStr), &att)
+			gold = att.Gold
+		}
+	}
+	return gold, true, nil
 }
 
 func (ps *PlayerService) Stop() {

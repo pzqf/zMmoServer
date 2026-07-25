@@ -103,6 +103,15 @@ if errorlevel 1 (
 echo [成功] trade.proto 编译完成
 
 echo.
+echo [12/12] 编译 mail.proto (邮件协议)...
+protoc --go_out="%OUTPUT_DIR%" --go_opt=paths=source_relative -I"%PROTO_DIR%" "%PROTO_DIR%mail.proto"
+if errorlevel 1 (
+    echo [错误] mail.proto 编译失败
+    exit /b 1
+)
+echo [成功] mail.proto 编译完成
+
+echo.
 echo ============================================
 echo 所有协议文件编译完成！
 echo 输出目录: %OUTPUT_DIR%

@@ -229,6 +229,30 @@ func (s *MessageSender) SendTradeConfirm(playerID int64) error {
 	return s.Send(uint32(protocol.TradeMsgId_MSG_TRADE_CONFIRM), data)
 }
 
+func (s *MessageSender) SendMail(fromID, toID int64, title, content string, gold int64) error {
+	data, err := proto.Marshal(&protocol.ClientMailSendRequest{FromPlayerId: fromID, ToPlayerId: toID, Title: title, Content: content, Gold: gold})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.MailMsgId_MSG_MAIL_SEND), data)
+}
+
+func (s *MessageSender) SendMailList(playerID int64) error {
+	data, err := proto.Marshal(&protocol.ClientMailListRequest{PlayerId: playerID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.MailMsgId_MSG_MAIL_LIST), data)
+}
+
+func (s *MessageSender) SendMailClaim(playerID, mailID int64) error {
+	data, err := proto.Marshal(&protocol.ClientMailClaimRequest{PlayerId: playerID, MailId: mailID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.MailMsgId_MSG_MAIL_CLAIM), data)
+}
+
 func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
 	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
 	if err != nil {

@@ -194,6 +194,19 @@ func (c *Client) EnableTradeAuto(playerID, gold int64) {
 		func(g int64) { _ = c.SendTradeSetGold(playerID, g) },
 		func() { _ = c.SendTradeConfirm(playerID) })
 }
+
+func (c *Client) SendMail(fromID, toID int64, title, content string, gold int64) error {
+	return c.messageSender.SendMail(fromID, toID, title, content, gold)
+}
+func (c *Client) SendMailList(playerID int64) error { return c.messageSender.SendMailList(playerID) }
+func (c *Client) SendMailClaim(playerID, mailID int64) error {
+	return c.messageSender.SendMailClaim(playerID, mailID)
+}
+
+// EnableMailAutoClaim 开启邮件自动领取（收到邮件列表后逐封领取未领）。
+func (c *Client) EnableMailAutoClaim(playerID int64) {
+	c.messageHandler.EnableMailAutoClaim(func(mailID int64) { _ = c.SendMailClaim(playerID, mailID) })
+}
 func (c *Client) SendItemMove(playerID int64, from, to int32) error {
 	return c.messageSender.SendItemMove(playerID, from, to)
 }

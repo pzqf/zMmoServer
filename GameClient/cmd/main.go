@@ -31,6 +31,9 @@ func main() {
 	tradeTarget := flag.Int64("tradeTarget", 0, "向该玩家发起交易(>0 生效,本方为发起者)")
 	tradeGold := flag.Int64("tradeGold", 0, "交易愿出金币(>0 则开启自动应价,双方均需设置)")
 	loginPlayerID := flag.Int64("loginPlayerID", 0, "复用已有角色ID登录(>0 跳过创建,用于持久化重登验证)")
+	mailTo := flag.Int64("mailTo", 0, "发邮件给该玩家(>0 生效)")
+	mailGold := flag.Int64("mailGold", 0, "邮件金币附件")
+	mailClaim := flag.Bool("mailClaim", false, "登录后拉取邮件并自动领取")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -42,7 +45,7 @@ func main() {
 
 	switch *mode {
 	case "full":
-		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin, *tradeTarget, *tradeGold, *loginPlayerID)
+		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin, *tradeTarget, *tradeGold, *loginPlayerID, *mailTo, *mailGold, *mailClaim)
 	case "gateway-only":
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
@@ -58,7 +61,7 @@ func main() {
 }
 
 // runFullTest 运行完整测试（全局服+网关服）
-func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int, teamCreate bool, teamJoin int, tradeTarget, tradeGold, loginPlayerID int64) {
+func runFullTest(globalServer, gatewayServer, account, password, playerName string, attackTarget int64, attackCount, idleSeconds int, teamCreate bool, teamJoin int, tradeTarget, tradeGold, loginPlayerID, mailTo, mailGold int64, mailClaim bool) {
 	fmt.Println("=== 完整测试模式 ===")
 
 	// 1. 连接GlobalServer，获取token
@@ -127,6 +130,10 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	if tradeGold > 0 {
 		c.EnableTradeAuto(playerID, tradeGold)
 	}
+	// 邮件自动领取：登录后拉取邮件列表，对未领邮件逐封领取
+	if mailClaim {
+		c.EnableMailAutoClaim(playerID)
+	}
 
 	// 7. 进入游戏
 	fmt.Println("6. 进入游戏...")
@@ -183,6 +190,18 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 		fmt.Printf("8.7 向 %d 发起交易(本方出 %d 金币)...\n", tradeTarget, tradeGold)
 		_ = c.SendTradeStart(playerID, tradeTarget)
 		time.Sleep(2500 * time.Millisecond) // 等自动应价来回收敛到成交
+	}
+
+	// 8.8 邮件（业务层建设）：发件（可发给离线玩家）/ 拉取并自动领取
+	if mailTo > 0 {
+		fmt.Printf("8.8 发邮件给 %d(附 %d 金币)...\n", mailTo, mailGold)
+		_ = c.SendMail(playerID, mailTo, "测试邮件", "领点金币", mailGold)
+		time.Sleep(500 * time.Millisecond)
+	}
+	if mailClaim {
+		fmt.Println("8.8 拉取邮件并自动领取...")
+		_ = c.SendMailList(playerID)
+		time.Sleep(1500 * time.Millisecond) // 等列表→逐封领取往返
 	}
 
 	// 11. 攻击（attackTarget 默认 2；PvP 场景传对方 playerID。attackCount>1 用于打到击杀触发死亡广播）

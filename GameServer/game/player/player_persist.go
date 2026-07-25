@@ -37,6 +37,14 @@ func loadPlayerAssets(ps *playerservice.PlayerService, p *Player, playerID id.Pl
 			_ = p.skillMgr.LearnSkill(&game.Skill{SkillID: r.SkillID, Level: r.Level, MaxLevel: 10})
 		}
 	}
+
+	if wh, err := ps.LoadPlayerWarehouse(int64(playerID)); err != nil {
+		zLog.Warn("Load player warehouse failed", zap.Int64("player_id", int64(playerID)), zap.Error(err))
+	} else {
+		for _, r := range wh {
+			_, _ = p.warehouse.Store(game.NewItem(int64(r.ConfigID), r.ConfigID, "", game.ItemTypeConsumable, r.Count))
+		}
+	}
 }
 
 // savePlayerAssets 登出/存盘时把 actor 的背包/技能写回 DB。
@@ -57,5 +65,14 @@ func savePlayerAssets(ps *playerservice.PlayerService, p *Player, playerID id.Pl
 	}
 	if err := ps.SavePlayerSkills(int64(playerID), srows); err != nil {
 		zLog.Warn("Save player skills failed", zap.Int64("player_id", int64(playerID)), zap.Error(err))
+	}
+
+	whItems := p.warehouse.GetAllItems()
+	wrows := make([]playerservice.PersistItem, 0, len(whItems))
+	for slot, it := range whItems {
+		wrows = append(wrows, playerservice.PersistItem{ConfigID: it.ConfigID, Count: it.Count, Slot: slot})
+	}
+	if err := ps.SavePlayerWarehouse(int64(playerID), wrows); err != nil {
+		zLog.Warn("Save player warehouse failed", zap.Int64("player_id", int64(playerID)), zap.Error(err))
 	}
 }

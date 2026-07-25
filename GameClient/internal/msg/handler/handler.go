@@ -20,6 +20,16 @@ type MessageHandler struct {
 	tradeGold    int64
 	tradeSetGold func(gold int64)
 	tradeConfirm func()
+
+	// 邮件自动领取：收到邮件列表时，对每封未领邮件调用 claim。
+	mailAutoClaim func(mailID int64)
+}
+
+// EnableMailAutoClaim 开启邮件自动领取：收到邮件列表后逐封领取未领邮件。
+func (h *MessageHandler) EnableMailAutoClaim(claim func(mailID int64)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.mailAutoClaim = claim
 }
 
 func NewMessageHandler() *MessageHandler {
@@ -201,6 +211,29 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 						confirm()
 					}
 				}
+			}
+		}
+	case uint32(protocol.MailMsgId_MSG_MAIL_LIST_RESPONSE):
+		var r protocol.ClientMailListResponse
+		if proto.Unmarshal(data, &r) == nil {
+			fmt.Printf("[邮件] 列表: %d 封\n", len(r.Mails))
+			h.mu.Lock()
+			claim := h.mailAutoClaim
+			h.mu.Unlock()
+			for _, m := range r.Mails {
+				fmt.Printf("  邮件#%d 来自%s: %s (金币%d) 已领=%v\n", m.MailId, m.Sender, m.Title, m.Gold, m.IsClaimed)
+				if claim != nil && !m.IsClaimed {
+					claim(m.MailId)
+				}
+			}
+		}
+	case uint32(protocol.MailMsgId_MSG_MAIL_CLAIM_RESPONSE):
+		var r protocol.ClientMailClaimResponse
+		if proto.Unmarshal(data, &r) == nil {
+			if r.Result == 0 {
+				fmt.Printf("[邮件] 领取成功: 邮件#%d 到账金币%d\n", r.MailId, r.Gold)
+			} else {
+				fmt.Printf("[邮件] 领取失败: 邮件#%d %s\n", r.MailId, r.Error)
 			}
 		}
 	default:
