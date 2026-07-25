@@ -165,6 +165,14 @@ func (s *MessageSender) SendItemUse(playerID int64, slot, count int32) error {
 	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_USE), data)
 }
 
+func (s *MessageSender) SendItemPickup(playerID int64, mapID int32) error {
+	data, err := proto.Marshal(&protocol.ClientItemPickupRequest{PlayerId: playerID, MapId: mapID})
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.ItemMsgId_MSG_ITEM_PICKUP), data)
+}
+
 func (s *MessageSender) SendItemMove(playerID int64, from, to int32) error {
 	data, err := proto.Marshal(&protocol.ClientItemMoveRequest{PlayerId: playerID, FromSlot: from, ToSlot: to})
 	if err != nil {

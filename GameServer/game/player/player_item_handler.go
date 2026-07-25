@@ -1,8 +1,11 @@
 package player
 
 import (
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/game"
 	"github.com/pzqf/zCommon/protocol"
+	"github.com/pzqf/zEngine/zLog"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -28,6 +31,44 @@ func itemsToSlots(items map[int32]*game.Item) []*protocol.ItemSlot {
 		slots = append(slots, &protocol.ItemSlot{Slot: slot, ItemId: it.ConfigID, Count: it.GetCount()})
 	}
 	return slots
+}
+
+// handleNetItemPickup 客户端就近拾取请求（fire）：转发到 MapServer（物品权威）。拾到的物品由
+// MapServer 判定后经 ItemGrant(506) 异步回推，由 handleItemGrant 落背包并推客户端 1307。
+func (p *Player) handleNetItemPickup(msg *PlayerMessage) {
+	req, ok := msg.Data.(*protocol.ClientItemPickupRequest)
+	if !ok {
+		return
+	}
+	mapOp := p.mapOp
+	if mapOp == nil {
+		return
+	}
+	playerID := id.PlayerIdType(req.PlayerId)
+	mapID := id.MapIdType(req.MapId)
+	go func() {
+		if err := mapOp.Pickup(playerID, mapID); err != nil {
+			zLog.Warn("Failed to forward pickup to MapServer", zap.Error(err))
+		}
+	}()
+}
+
+// handleItemGrant MapServer 拾取授权回推：把物品发进背包并推客户端拾取结果（1307）。
+func (p *Player) handleItemGrant(msg *PlayerMessage) {
+	req, ok := msg.Data.(*ItemGrantRequest)
+	if !ok {
+		return
+	}
+	notify := &protocol.ClientItemPickupNotify{ItemId: req.ItemID, Count: req.Count}
+	if _, err := p.inventory.AddItem(game.NewItem(int64(req.ItemID), req.ItemID, "Loot", game.ItemTypeConsumable, req.Count)); err != nil {
+		notify.Result = 1
+		notify.Error = err.Error()
+	}
+	data, err := proto.Marshal(notify)
+	if err != nil {
+		return
+	}
+	p.pushToClient(int32(protocol.ItemMsgId_MSG_ITEM_PICKUP_NOTIFY), data)
 }
 
 func (p *Player) handleNetItemList(msg *PlayerMessage) {

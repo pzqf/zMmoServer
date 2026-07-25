@@ -119,3 +119,7 @@ func (m *mockMapOperator) Move(playerID id.PlayerIdType, mapID id.MapIdType, pos
 func (m *mockMapOperator) Attack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error) {
 	return 0, 0, nil
 }
+
+func (m *mockMapOperator) Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error {
+	return nil
+}

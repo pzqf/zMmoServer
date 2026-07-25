@@ -18,6 +18,7 @@ type MapOperator interface {
 	LeaveMap(playerID id.PlayerIdType, mapID id.MapIdType) error
 	Move(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error
 	Attack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error)
+	Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error
 }
 
 type Player struct {

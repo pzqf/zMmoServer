@@ -93,6 +93,7 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_LIST), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_USE), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_MOVE), itemHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_PICKUP), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_STORE), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_WAREHOUSE_RETRIEVE), itemHandler)

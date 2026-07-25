@@ -22,6 +22,7 @@ const (
 	MsgNetItemList          MessageType = 1300 // MSG_ITEM_LIST
 	MsgNetItemUse           MessageType = 1302 // MSG_ITEM_USE
 	MsgNetItemMove          MessageType = 1304 // MSG_ITEM_MOVE
+	MsgNetItemPickup        MessageType = 1306 // MSG_ITEM_PICKUP（就近拾取，fire）
 	MsgNetWarehouseList     MessageType = 1310 // MSG_WAREHOUSE_LIST
 	MsgNetWarehouseStore    MessageType = 1312 // MSG_WAREHOUSE_STORE
 	MsgNetWarehouseRetrieve MessageType = 1314 // MSG_WAREHOUSE_RETRIEVE
@@ -74,7 +75,14 @@ const (
 	MsgAOIAttr      MessageType = 17004 // 视野内实体血量变更
 	MsgAOIDeath     MessageType = 17005 // 视野内实体死亡
 	MsgAOIBuff      MessageType = 17006 // 视野内实体 buff 增删
+	MsgItemGrant    MessageType = 17007 // MapServer 拾取授权回推（发物品入背包）
 )
+
+// ItemGrantRequest MapServer 拾取授权载荷（经 PlayerManager 路由到玩家 Actor 落背包）。
+type ItemGrantRequest struct {
+	ItemID int32
+	Count  int32
+}
 
 type MessageSource int
 

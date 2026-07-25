@@ -89,6 +89,14 @@ func (h *ItemHandler) Handle(session zNet.Session, protoId int32, data []byte) e
 			return err
 		}
 		return h.dispatch(session, id.PlayerIdType(req.PlayerId), player.MsgNetItemMove, &req)
+	case int32(protocol.ItemMsgId_MSG_ITEM_PICKUP):
+		var req protocol.ClientItemPickupRequest
+		if err := proto.Unmarshal(data, &req); err != nil {
+			return err
+		}
+		// 拾取是 fire：转发到 MapServer；物品经 ItemGrant(506) 异步回推后由 Player actor 主动推客户端 1307，不在此等回调。
+		return h.playerManager.RouteMessage(id.PlayerIdType(req.PlayerId),
+			player.NewPlayerMessage(id.PlayerIdType(req.PlayerId), player.SourceGateway, player.MsgNetItemPickup, &req))
 	case int32(protocol.ItemMsgId_MSG_WAREHOUSE_LIST):
 		var req protocol.ClientWarehouseListRequest
 		if err := proto.Unmarshal(data, &req); err != nil {

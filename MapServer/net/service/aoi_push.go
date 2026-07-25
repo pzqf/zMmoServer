@@ -134,3 +134,40 @@ func (ts *TCPService) sendAOINotify(job aoiSendJob) {
 		zLog.Warn("Failed to send AOI notify to GameServer", zap.Error(err))
 	}
 }
+
+// notifyItemGrant 把「拾取授权」推给持有该玩家的 GameServer（crossserver.MsgInternalItemGrant=506）：
+// MapServer 已权威移除掉落物，通知 GameServer 把物品发进该玩家背包。复用 AOI 回程的会话查找与打包。
+func (ts *TCPService) notifyItemGrant(playerID int64, itemID, count int32) {
+	if ts.playerGameServerManager == nil {
+		return
+	}
+	serverID, ok := ts.playerGameServerManager.GetGameServerID(id.PlayerIdType(playerID))
+	if !ok {
+		return
+	}
+	session, ok := ts.gameServerSessions.Load(serverID)
+	if !ok {
+		return
+	}
+	innerData, err := proto.Marshal(&protocol.ItemGrantNotify{
+		PlayerId: playerID,
+		ItemId:   itemID,
+		Count:    count,
+	})
+	if err != nil {
+		zLog.Error("Failed to marshal ItemGrantNotify", zap.Error(err))
+		return
+	}
+	base := crossserver.BuildBaseMessage(crossserver.MsgInternalItemGrant, uint64(playerID),
+		uint32(ts.config.Server.ServerID), 0, innerData)
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeMap, int32(ts.config.Server.ServerID))
+	enveloped, err := crossserver.PackMessage(meta, crossserver.ServiceTypeMap, crossserver.ServiceTypeGame,
+		uint32(ts.config.Server.ServerID), serverID, base)
+	if err != nil {
+		zLog.Error("Failed to pack ItemGrantNotify", zap.Error(err))
+		return
+	}
+	if err := session.Send(zNet.ProtoIdType(crossserver.MsgInternalItemGrant), enveloped); err != nil {
+		zLog.Warn("Failed to send ItemGrantNotify to GameServer", zap.Error(err))
+	}
+}

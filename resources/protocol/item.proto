@@ -18,6 +18,8 @@ enum ItemMsgId {
   MSG_ITEM_USE_RESPONSE = 1303;
   MSG_ITEM_MOVE = 1304;                    // 背包内移动格子
   MSG_ITEM_MOVE_RESPONSE = 1305;
+  MSG_ITEM_PICKUP = 1306;                  // 拾取附近掉落物（就近拾取）
+  MSG_ITEM_PICKUP_NOTIFY = 1307;           // 拾取结果通知（服务器→客户端）
   MSG_WAREHOUSE_LIST = 1310;               // 查询仓库
   MSG_WAREHOUSE_LIST_RESPONSE = 1311;
   MSG_WAREHOUSE_STORE = 1312;              // 背包 → 仓库
@@ -63,6 +65,27 @@ message ClientItemMoveRequest {
 message ClientItemMoveResponse {
   int32 result = 1;
   string error = 2;
+}
+
+// —— 掉落拾取（就近拾取，无需客户端知道掉落物 objectID）——
+
+// 客户端 → GameServer → MapServer：请求拾取玩家附近的掉落物
+message ClientItemPickupRequest {
+  int64 player_id = 1;
+  int32 map_id = 2;
+}
+// GameServer → 客户端：拾取结果
+message ClientItemPickupNotify {
+  int32 result = 1;                        // 0=拾到；非0=无可拾取/失败
+  int32 item_id = 2;
+  int32 count = 3;
+  string error = 4;
+}
+// MapServer → GameServer（跨服 push，crossserver 506）：授权把物品发给玩家背包
+message ItemGrantNotify {
+  int64 player_id = 1;
+  int32 item_id = 2;
+  int32 count = 3;
 }
 
 // —— 仓库 ——

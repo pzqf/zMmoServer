@@ -167,6 +167,9 @@ func (c *Client) SendItemList(playerID int64) error { return c.messageSender.Sen
 func (c *Client) SendItemUse(playerID int64, slot, count int32) error {
 	return c.messageSender.SendItemUse(playerID, slot, count)
 }
+func (c *Client) SendItemPickup(playerID int64, mapID int32) error {
+	return c.messageSender.SendItemPickup(playerID, mapID)
+}
 func (c *Client) SendItemMove(playerID int64, from, to int32) error {
 	return c.messageSender.SendItemMove(playerID, from, to)
 }

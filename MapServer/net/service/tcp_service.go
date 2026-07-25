@@ -213,6 +213,8 @@ func (ts *TCPService) handleGameServerMessage(session zNet.Session, protoId int3
 		ts.handleMapMoveRequest(session, baseMsg, &meta)
 	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_ATTACK_REQUEST):
 		ts.handleMapAttackRequest(session, baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_PICKUP_REQUEST):
+		ts.handleMapPickupRequest(session, baseMsg, &meta)
 	default:
 		zLog.Info("Received unknown message from GameServer", zap.Int32("proto_id", protoId))
 	}
@@ -399,6 +401,33 @@ func (ts *TCPService) handleMapAttackRequest(session zNet.Session, baseMsg *prot
 		TargetHp: targetHp,
 	}
 	ts.sendResponse(session, int(protocol.InternalMsgId_MSG_INTERNAL_COMBAT_ACTION), resp, baseMsg, meta)
+}
+
+// handleMapPickupRequest 处理玩家就近拾取请求（GameServer → MapServer）。
+// 地图侧权威判定并移除掉落物；拾到则把 grant 推回该玩家所在 GameServer 落背包（无阻塞等待）。
+func (ts *TCPService) handleMapPickupRequest(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
+	var req protocol.ClientItemPickupRequest
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
+		zLog.Error("Failed to unmarshal ClientItemPickupRequest", zap.Error(err))
+		return
+	}
+	// 幂等去重：拾取会移除地图物 + 发放背包，重放会致重复发放，按 requestID 丢弃重放。
+	if meta != nil && meta.RequestID != 0 && !ts.inbox.TryAccept(meta.RequestID) {
+		zLog.Warn("Duplicate map pickup request ignored",
+			zap.Uint64("request_id", meta.RequestID), zap.Int64("player_id", req.PlayerId))
+		return
+	}
+	if ts.mapService == nil {
+		return
+	}
+	itemID, count, ok := ts.mapService.HandlePlayerPickup(req.PlayerId, int64(req.MapId))
+	if !ok {
+		zLog.Debug("Pickup: nothing in range", zap.Int64("player_id", req.PlayerId))
+		return
+	}
+	zLog.Info("Player picked up item",
+		zap.Int64("player_id", req.PlayerId), zap.Int32("item_id", itemID), zap.Int32("count", count))
+	ts.notifyItemGrant(req.PlayerId, itemID, count)
 }
 
 // sendResponse 发送响应消息

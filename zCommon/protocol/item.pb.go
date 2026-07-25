@@ -32,6 +32,8 @@ const (
 	ItemMsgId_MSG_ITEM_USE_RESPONSE           ItemMsgId = 1303
 	ItemMsgId_MSG_ITEM_MOVE                   ItemMsgId = 1304 // 背包内移动格子
 	ItemMsgId_MSG_ITEM_MOVE_RESPONSE          ItemMsgId = 1305
+	ItemMsgId_MSG_ITEM_PICKUP                 ItemMsgId = 1306 // 拾取附近掉落物（就近拾取）
+	ItemMsgId_MSG_ITEM_PICKUP_NOTIFY          ItemMsgId = 1307 // 拾取结果通知（服务器→客户端）
 	ItemMsgId_MSG_WAREHOUSE_LIST              ItemMsgId = 1310 // 查询仓库
 	ItemMsgId_MSG_WAREHOUSE_LIST_RESPONSE     ItemMsgId = 1311
 	ItemMsgId_MSG_WAREHOUSE_STORE             ItemMsgId = 1312 // 背包 → 仓库
@@ -50,6 +52,8 @@ var (
 		1303: "MSG_ITEM_USE_RESPONSE",
 		1304: "MSG_ITEM_MOVE",
 		1305: "MSG_ITEM_MOVE_RESPONSE",
+		1306: "MSG_ITEM_PICKUP",
+		1307: "MSG_ITEM_PICKUP_NOTIFY",
 		1310: "MSG_WAREHOUSE_LIST",
 		1311: "MSG_WAREHOUSE_LIST_RESPONSE",
 		1312: "MSG_WAREHOUSE_STORE",
@@ -65,6 +69,8 @@ var (
 		"MSG_ITEM_USE_RESPONSE":           1303,
 		"MSG_ITEM_MOVE":                   1304,
 		"MSG_ITEM_MOVE_RESPONSE":          1305,
+		"MSG_ITEM_PICKUP":                 1306,
+		"MSG_ITEM_PICKUP_NOTIFY":          1307,
 		"MSG_WAREHOUSE_LIST":              1310,
 		"MSG_WAREHOUSE_LIST_RESPONSE":     1311,
 		"MSG_WAREHOUSE_STORE":             1312,
@@ -498,6 +504,189 @@ func (x *ClientItemMoveResponse) GetError() string {
 	return ""
 }
 
+// 客户端 → GameServer → MapServer：请求拾取玩家附近的掉落物
+type ClientItemPickupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientItemPickupRequest) Reset() {
+	*x = ClientItemPickupRequest{}
+	mi := &file_item_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientItemPickupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientItemPickupRequest) ProtoMessage() {}
+
+func (x *ClientItemPickupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_item_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientItemPickupRequest.ProtoReflect.Descriptor instead.
+func (*ClientItemPickupRequest) Descriptor() ([]byte, []int) {
+	return file_item_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ClientItemPickupRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ClientItemPickupRequest) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+// GameServer → 客户端：拾取结果
+type ClientItemPickupNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"` // 0=拾到；非0=无可拾取/失败
+	ItemId        int32                  `protobuf:"varint,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientItemPickupNotify) Reset() {
+	*x = ClientItemPickupNotify{}
+	mi := &file_item_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientItemPickupNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientItemPickupNotify) ProtoMessage() {}
+
+func (x *ClientItemPickupNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_item_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientItemPickupNotify.ProtoReflect.Descriptor instead.
+func (*ClientItemPickupNotify) Descriptor() ([]byte, []int) {
+	return file_item_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ClientItemPickupNotify) GetResult() int32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
+func (x *ClientItemPickupNotify) GetItemId() int32 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *ClientItemPickupNotify) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *ClientItemPickupNotify) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// MapServer → GameServer（跨服 push，crossserver 506）：授权把物品发给玩家背包
+type ItemGrantNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	ItemId        int32                  `protobuf:"varint,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Count         int32                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ItemGrantNotify) Reset() {
+	*x = ItemGrantNotify{}
+	mi := &file_item_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ItemGrantNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ItemGrantNotify) ProtoMessage() {}
+
+func (x *ItemGrantNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_item_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ItemGrantNotify.ProtoReflect.Descriptor instead.
+func (*ItemGrantNotify) Descriptor() ([]byte, []int) {
+	return file_item_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ItemGrantNotify) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ItemGrantNotify) GetItemId() int32 {
+	if x != nil {
+		return x.ItemId
+	}
+	return 0
+}
+
+func (x *ItemGrantNotify) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
 type ClientWarehouseListRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
@@ -507,7 +696,7 @@ type ClientWarehouseListRequest struct {
 
 func (x *ClientWarehouseListRequest) Reset() {
 	*x = ClientWarehouseListRequest{}
-	mi := &file_item_proto_msgTypes[7]
+	mi := &file_item_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -519,7 +708,7 @@ func (x *ClientWarehouseListRequest) String() string {
 func (*ClientWarehouseListRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[7]
+	mi := &file_item_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -532,7 +721,7 @@ func (x *ClientWarehouseListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseListRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseListRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{7}
+	return file_item_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ClientWarehouseListRequest) GetPlayerId() int64 {
@@ -552,7 +741,7 @@ type ClientWarehouseListResponse struct {
 
 func (x *ClientWarehouseListResponse) Reset() {
 	*x = ClientWarehouseListResponse{}
-	mi := &file_item_proto_msgTypes[8]
+	mi := &file_item_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -564,7 +753,7 @@ func (x *ClientWarehouseListResponse) String() string {
 func (*ClientWarehouseListResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[8]
+	mi := &file_item_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -577,7 +766,7 @@ func (x *ClientWarehouseListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseListResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseListResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{8}
+	return file_item_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ClientWarehouseListResponse) GetResult() int32 {
@@ -605,7 +794,7 @@ type ClientWarehouseStoreRequest struct {
 
 func (x *ClientWarehouseStoreRequest) Reset() {
 	*x = ClientWarehouseStoreRequest{}
-	mi := &file_item_proto_msgTypes[9]
+	mi := &file_item_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +806,7 @@ func (x *ClientWarehouseStoreRequest) String() string {
 func (*ClientWarehouseStoreRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[9]
+	mi := &file_item_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +819,7 @@ func (x *ClientWarehouseStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseStoreRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseStoreRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{9}
+	return file_item_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ClientWarehouseStoreRequest) GetPlayerId() int64 {
@@ -665,7 +854,7 @@ type ClientWarehouseStoreResponse struct {
 
 func (x *ClientWarehouseStoreResponse) Reset() {
 	*x = ClientWarehouseStoreResponse{}
-	mi := &file_item_proto_msgTypes[10]
+	mi := &file_item_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -677,7 +866,7 @@ func (x *ClientWarehouseStoreResponse) String() string {
 func (*ClientWarehouseStoreResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseStoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[10]
+	mi := &file_item_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -690,7 +879,7 @@ func (x *ClientWarehouseStoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseStoreResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseStoreResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{10}
+	return file_item_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClientWarehouseStoreResponse) GetResult() int32 {
@@ -725,7 +914,7 @@ type ClientWarehouseRetrieveRequest struct {
 
 func (x *ClientWarehouseRetrieveRequest) Reset() {
 	*x = ClientWarehouseRetrieveRequest{}
-	mi := &file_item_proto_msgTypes[11]
+	mi := &file_item_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +926,7 @@ func (x *ClientWarehouseRetrieveRequest) String() string {
 func (*ClientWarehouseRetrieveRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseRetrieveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[11]
+	mi := &file_item_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +939,7 @@ func (x *ClientWarehouseRetrieveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseRetrieveRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseRetrieveRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{11}
+	return file_item_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ClientWarehouseRetrieveRequest) GetPlayerId() int64 {
@@ -785,7 +974,7 @@ type ClientWarehouseRetrieveResponse struct {
 
 func (x *ClientWarehouseRetrieveResponse) Reset() {
 	*x = ClientWarehouseRetrieveResponse{}
-	mi := &file_item_proto_msgTypes[12]
+	mi := &file_item_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -797,7 +986,7 @@ func (x *ClientWarehouseRetrieveResponse) String() string {
 func (*ClientWarehouseRetrieveResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseRetrieveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[12]
+	mi := &file_item_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -810,7 +999,7 @@ func (x *ClientWarehouseRetrieveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseRetrieveResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseRetrieveResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{12}
+	return file_item_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ClientWarehouseRetrieveResponse) GetResult() int32 {
@@ -864,7 +1053,19 @@ const file_item_proto_rawDesc = "" +
 	"\ato_slot\x18\x03 \x01(\x05R\x06toSlot\"F\n" +
 	"\x16ClientItemMoveResponse\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"9\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"M\n" +
+	"\x17ClientItemPickupRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
+	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\"u\n" +
+	"\x16ClientItemPickupNotify\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\x05R\x06itemId\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"]\n" +
+	"\x0fItemGrantNotify\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\x05R\x06itemId\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\"9\n" +
 	"\x1aClientWarehouseListRequest\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"_\n" +
 	"\x1bClientWarehouseListResponse\x12\x16\n" +
@@ -885,7 +1086,7 @@ const file_item_proto_rawDesc = "" +
 	"\x1fClientWarehouseRetrieveResponse\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x19\n" +
 	"\bbag_slot\x18\x02 \x01(\x05R\abagSlot\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error*\xed\x02\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error*\xa0\x03\n" +
 	"\tItemMsgId\x12\x14\n" +
 	"\x10MSG_ITEM_INVALID\x10\x00\x12\x12\n" +
 	"\rMSG_ITEM_LIST\x10\x94\n" +
@@ -899,6 +1100,10 @@ const file_item_proto_rawDesc = "" +
 	"\rMSG_ITEM_MOVE\x10\x98\n" +
 	"\x12\x1b\n" +
 	"\x16MSG_ITEM_MOVE_RESPONSE\x10\x99\n" +
+	"\x12\x14\n" +
+	"\x0fMSG_ITEM_PICKUP\x10\x9a\n" +
+	"\x12\x1b\n" +
+	"\x16MSG_ITEM_PICKUP_NOTIFY\x10\x9b\n" +
 	"\x12\x17\n" +
 	"\x12MSG_WAREHOUSE_LIST\x10\x9e\n" +
 	"\x12 \n" +
@@ -926,7 +1131,7 @@ func file_item_proto_rawDescGZIP() []byte {
 }
 
 var file_item_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_item_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_item_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_item_proto_goTypes = []any{
 	(ItemMsgId)(0),                          // 0: protocol.ItemMsgId
 	(*ItemSlot)(nil),                        // 1: protocol.ItemSlot
@@ -936,12 +1141,15 @@ var file_item_proto_goTypes = []any{
 	(*ClientItemUseResponse)(nil),           // 5: protocol.ClientItemUseResponse
 	(*ClientItemMoveRequest)(nil),           // 6: protocol.ClientItemMoveRequest
 	(*ClientItemMoveResponse)(nil),          // 7: protocol.ClientItemMoveResponse
-	(*ClientWarehouseListRequest)(nil),      // 8: protocol.ClientWarehouseListRequest
-	(*ClientWarehouseListResponse)(nil),     // 9: protocol.ClientWarehouseListResponse
-	(*ClientWarehouseStoreRequest)(nil),     // 10: protocol.ClientWarehouseStoreRequest
-	(*ClientWarehouseStoreResponse)(nil),    // 11: protocol.ClientWarehouseStoreResponse
-	(*ClientWarehouseRetrieveRequest)(nil),  // 12: protocol.ClientWarehouseRetrieveRequest
-	(*ClientWarehouseRetrieveResponse)(nil), // 13: protocol.ClientWarehouseRetrieveResponse
+	(*ClientItemPickupRequest)(nil),         // 8: protocol.ClientItemPickupRequest
+	(*ClientItemPickupNotify)(nil),          // 9: protocol.ClientItemPickupNotify
+	(*ItemGrantNotify)(nil),                 // 10: protocol.ItemGrantNotify
+	(*ClientWarehouseListRequest)(nil),      // 11: protocol.ClientWarehouseListRequest
+	(*ClientWarehouseListResponse)(nil),     // 12: protocol.ClientWarehouseListResponse
+	(*ClientWarehouseStoreRequest)(nil),     // 13: protocol.ClientWarehouseStoreRequest
+	(*ClientWarehouseStoreResponse)(nil),    // 14: protocol.ClientWarehouseStoreResponse
+	(*ClientWarehouseRetrieveRequest)(nil),  // 15: protocol.ClientWarehouseRetrieveRequest
+	(*ClientWarehouseRetrieveResponse)(nil), // 16: protocol.ClientWarehouseRetrieveResponse
 }
 var file_item_proto_depIdxs = []int32{
 	1, // 0: protocol.ClientItemListResponse.items:type_name -> protocol.ItemSlot
@@ -964,7 +1172,7 @@ func file_item_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_item_proto_rawDesc), len(file_item_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   13,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

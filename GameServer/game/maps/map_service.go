@@ -720,6 +720,29 @@ func (ms *MapService) Attack(playerID id.PlayerIdType, mapID id.MapIdType, targe
 	return ms.HandlePlayerAttack(playerID, mapID, targetID)
 }
 
+// Pickup 实现 player.MapOperator 接口：把就近拾取请求转发给 MapServer（fire，不阻塞）。
+// 物品权威在地图侧——是否拾到由 MapServer 判定，拾到后经 ItemGrant(506) 异步回推到背包，不在此等待。
+func (ms *MapService) Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error {
+	req := &protocol.ClientItemPickupRequest{PlayerId: int64(playerID), MapId: int32(mapID)}
+	reqData, err := proto.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal pickup request: %w", err)
+	}
+	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeGame, int32(ms.config.Server.ServerID))
+	return ms.sendMapMessage(mapID, int(protocol.InternalMsgId_MSG_INTERNAL_MAP_PICKUP_REQUEST), reqData, playerID, meta)
+}
+
+// HandleItemGrant 处理 MapServer 拾取授权回推(crossserver 506)：把物品发进该玩家背包并推客户端。
+// 经 PlayerManager 路由到玩家 Actor（背包权威在玩家侧）。
+func (ms *MapService) HandleItemGrant(playerID int64, itemID, count int32) {
+	if ms.playerManager == nil {
+		return
+	}
+	pid := id.PlayerIdType(playerID)
+	req := &player.ItemGrantRequest{ItemID: itemID, Count: count}
+	_ = ms.playerManager.RouteMessage(pid, player.NewPlayerMessage(pid, player.SourceMapServer, player.MsgItemGrant, req))
+}
+
 // BattleReward 战斗奖励
 type BattleReward struct {
 	PlayerID  id.PlayerIdType

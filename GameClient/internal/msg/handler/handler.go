@@ -120,6 +120,15 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 			}
 			fmt.Printf("[AOI] 实体buff%s: entity=%d buff=%d 剩余=%dms\n", op, n.EntityId, n.BuffId, n.RemainingMs)
 		}
+	case uint32(protocol.ItemMsgId_MSG_ITEM_PICKUP_NOTIFY):
+		var n protocol.ClientItemPickupNotify
+		if proto.Unmarshal(data, &n) == nil {
+			if n.Result == 0 {
+				fmt.Printf("[拾取] 成功: item=%d x%d 已入背包\n", n.ItemId, n.Count)
+			} else {
+				fmt.Printf("[拾取] 失败: %s\n", n.Error)
+			}
+		}
 	default:
 		fmt.Printf("Received message: ProtoId=%d, DataSize=%d\n", protoId, len(data))
 	}

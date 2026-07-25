@@ -133,6 +133,12 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 		return
 	}
 
+	// 7.5 就近拾取掉落物（ZMMO_TEST_LOOT=1 时服务端在进图点旁种一件；趁玩家还在进图点、掉落物在拾取半径内）
+	time.Sleep(600 * time.Millisecond) // 等进图落地 + 掉落种子生成
+	fmt.Println("7.5 拾取附近掉落物...")
+	_ = c.SendItemPickup(playerID, 1001)
+	time.Sleep(800 * time.Millisecond)
+
 	// 10. 移动
 	fmt.Println("8. 移动...")
 	if err := c.SendMapMove(playerID, 1001, 100.0, 100.0, 0.0); err != nil {

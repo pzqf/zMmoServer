@@ -20,4 +20,5 @@ const (
 	MsgInternalAOIAttr  uint32 = 503
 	MsgInternalAOIDeath uint32 = 504
 	MsgInternalAOIBuff  uint32 = 505 // 视野内实体 buff 增删（EntityBuffNotify）
+	MsgInternalItemGrant uint32 = 506 // 拾取授权：MapServer 判定拾取后通知 GameServer 发物品入背包（ItemGrantNotify）
 )

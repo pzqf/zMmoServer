@@ -2,6 +2,7 @@ package maps
 
 import (
 	"fmt"
+	"os"
 	"sync/atomic"
 	"time"
 
@@ -171,7 +172,26 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 		return fmt.Errorf("map not found: %d", mapID)
 	}
 
-	return m.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z)
+	if err := m.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z); err != nil {
+		return err
+	}
+	// 测试用掉落种子：map 1001 无怪、无真实掉落，故用 ZMMO_TEST_LOOT 在玩家落点旁放一件可拾取物，
+	// 供拾取闭环 E2E。生产路径掉落来自 combat 击杀（见 handleMonsterDeath）。
+	if os.Getenv("ZMMO_TEST_LOOT") == "1" {
+		m.DropTestLoot(x, y, z)
+	}
+	return nil
+}
+
+// HandlePlayerPickup 处理玩家就近拾取（GameServer → MapServer）。地图侧权威判定并移除掉落物，
+// 返回拾到的 itemID/count；上层据此把 grant 推回 GameServer 落背包。
+func (mm *MapManager) HandlePlayerPickup(playerID, mapID int64) (int32, int32, bool) {
+	m := mm.GetMap(id.MapIdType(mapID))
+	if m == nil {
+		return 0, 0, false
+	}
+	r := m.PickupNearest(id.PlayerIdType(playerID))
+	return r.ItemID, r.Count, r.OK
 }
 
 // HandlePlayerLeaveMap 处理玩家离开地图

@@ -91,6 +91,10 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleAOIDeath(msg)
 	case MsgAOIBuff:
 		p.handleAOIBuff(msg)
+	case MsgNetItemPickup:
+		p.handleNetItemPickup(msg)
+	case MsgItemGrant:
+		p.handleItemGrant(msg)
 	default:
 		zLog.Warn("Unknown message type",
 			zap.Int64("player_id", int64(p.GetPlayerID())),
