@@ -113,6 +113,37 @@ func TestTradeManager_DoubleConfirmSingleFire(t *testing.T) {
 	}
 }
 
+// TestTradeManager_SetGoldResetsConfirm 改价重置确认（T2）：一方确认后另一方改价，双方确认必须清零，
+// 防"确认后偷改价"在旧值上成交。同时验证重复设同值不打回确认（避免应价震荡）。
+func TestTradeManager_SetGoldResetsConfirm(t *testing.T) {
+	tm := NewTradeManager()
+	a, b := id.PlayerIdType(1), id.PlayerIdType(2)
+	if _, err := tm.Start(a, b); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	_, _ = tm.SetGold(a, 100)
+	_, _ = tm.SetGold(b, 30)
+
+	// a 先确认；此时 b 改价 → 必须把 a 的确认也清零（防在旧值上成交）
+	_, _, _ = tm.Confirm(a)
+	s, _ := tm.SetGold(b, 50)
+	if s.ConfirmA || s.ConfirmB {
+		t.Fatalf("改价后双方确认应清零, got A=%v B=%v", s.ConfirmA, s.ConfirmB)
+	}
+
+	// a 重新确认；重复设同值不应打回已有确认（避免应价震荡）
+	_, _, _ = tm.Confirm(a)
+	s2, _ := tm.SetGold(b, 50)
+	if !s2.ConfirmA {
+		t.Fatalf("重复设同值不应清零已有确认")
+	}
+
+	// 值已稳定，双方确认 → 成交
+	if _, both, _ := tm.Confirm(b); !both {
+		t.Fatalf("值稳定后双方确认应成交")
+	}
+}
+
 // TestTradeManager_ConcurrentNoRace 并发发起/报价/确认/取消,-race 下应零竞争。
 func TestTradeManager_ConcurrentNoRace(t *testing.T) {
 	tm := NewTradeManager()

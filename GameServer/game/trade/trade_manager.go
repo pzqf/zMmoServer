@@ -5,8 +5,8 @@
 // 真正的原子金币交换由上层 handler 在双方确认后执行（金币本身是 atomic CAS，交换带回滚）。
 // 会话仅存于本 GameServer；跨服交易需 Global 层，未做。
 //
-// 最小闭环取舍：设置报价**不**重置确认（真实交易通常会重置以防最后一刻改价），以便事件驱动的
-// 客户端应价器能稳定收敛。
+// 交易安全：设置报价在**值实际变化时重置双方确认**（防最后一刻偷改价被在旧值上成交，T2）；只在值真正
+// 改变时重置，事件驱动的客户端应价器仍能稳定收敛（值稳定后确认单调累积）。
 package trade
 
 import (
@@ -55,6 +55,8 @@ func (tm *TradeManager) Start(a, b id.PlayerIdType) (*Session, error) {
 }
 
 // SetGold 设置某方报价（>=0）。返回会话快照。
+// 报价实际变化时**重置双方确认**（T2，标准交易安全）：防"一方确认后另一方偷改价"被在旧值上成交。
+// 只在值真正改变时重置，避免冗余设价把确认打回、造成事件驱动应价来回震荡；值稳定后确认单调累积、正常收敛。
 func (tm *TradeManager) SetGold(by id.PlayerIdType, gold int64) (*Session, error) {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
@@ -65,10 +67,19 @@ func (tm *TradeManager) SetGold(by id.PlayerIdType, gold int64) (*Session, error
 	if !ok {
 		return nil, fmt.Errorf("player %d not trading", by)
 	}
+	if s.completing {
+		return nil, fmt.Errorf("trade is completing")
+	}
 	if by == s.A {
-		s.GoldA = gold
+		if s.GoldA != gold {
+			s.GoldA = gold
+			s.ConfirmA, s.ConfirmB = false, false
+		}
 	} else {
-		s.GoldB = gold
+		if s.GoldB != gold {
+			s.GoldB = gold
+			s.ConfirmA, s.ConfirmB = false, false
+		}
 	}
 	return snapshot(s), nil
 }
