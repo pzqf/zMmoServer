@@ -1,6 +1,7 @@
 package maps
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -52,6 +53,11 @@ type MapInstance struct {
 	CreatedAt         time.Time
 	autoReapWhenEmpty bool      // 空置自动回收（分线/战场/跨服=true；副本=false）
 	emptySince        time.Time // 变空的时刻（零值=当前非空 / 尚未开始计时）
+	// reserved 在途分配额度（②：分线 M1 TOCTOU / M2 空层回收竞态）：已被 AllocateLayer 选中/新建、
+	// 但玩家尚未 AddPlayer 完成的名额。计入 cap 判定（GetPlayerCount+reserved，防并发进图击穿
+	// softCap/hardCap），且视为"非空"（reserved>0 不被 ReapEmpty 回收，防玩家被加进已销毁的死图）。
+	// 由 instMu 保护；玩家 AddPlayer 完成（成功计入 count / 或失败）后由 ReleaseLayerReservation 归还。
+	reserved int
 }
 
 // CreateInstance 通用实例地图创建：分配派生 mapID、建独立 *Map、套 AOI 通知器、登记。
@@ -114,8 +120,8 @@ func (mm *MapManager) ReapEmpty(grace time.Duration) int {
 		if !inst.autoReapWhenEmpty {
 			continue
 		}
-		if inst.Map.GetPlayerCount() > 0 {
-			inst.emptySince = time.Time{} // 非空，清空计时
+		if inst.Map.GetPlayerCount() > 0 || inst.reserved > 0 {
+			inst.emptySince = time.Time{} // 非空（含在途预留），清空计时
 			continue
 		}
 		if inst.emptySince.IsZero() {
@@ -160,4 +166,61 @@ func (mm *MapManager) GetInstancesByLogical(logicalMapID id.MapIdType, kind Inst
 		}
 	}
 	return out
+}
+
+// reserveExistingLayer 在既有 layer 中按 cap（计入在途预留）选一层并占用 1 个在途名额（reserved++）：
+// 亲和层优先(effective < hardCap)，否则 effective 人数最少且 < softCap 的层；选中层同时清 emptySince。
+// effective = GetPlayerCount + reserved。返回 (nil,0,false) 表示无满足 cap 的既有层，调用方应开新层。
+// 全程持 instMu 原子，使"读人数→选中→reserved++"相对 ReleaseLayerReservation/ReapEmpty 一致（②M1）。
+func (mm *MapManager) reserveExistingLayer(logicalMapID, affinity id.MapIdType, softCap, hardCap int) (*Map, id.MapIdType, bool) {
+	mm.instMu.Lock()
+	defer mm.instMu.Unlock()
+
+	if affinity != 0 {
+		if inst, ok := mm.instances[affinity]; ok && inst.Kind == InstanceKindLayer && inst.LogicalMapID == logicalMapID {
+			if inst.Map.GetPlayerCount()+inst.reserved < hardCap {
+				inst.reserved++
+				inst.emptySince = time.Time{}
+				return inst.Map, inst.MapID, true
+			}
+		}
+	}
+
+	var best *MapInstance
+	bestCount := math.MaxInt
+	for _, inst := range mm.instances {
+		if inst.Kind != InstanceKindLayer || inst.LogicalMapID != logicalMapID {
+			continue
+		}
+		eff := inst.Map.GetPlayerCount() + inst.reserved
+		if eff < softCap && eff < bestCount {
+			best = inst
+			bestCount = eff
+		}
+	}
+	if best != nil {
+		best.reserved++
+		best.emptySince = time.Time{}
+		return best.Map, best.MapID, true
+	}
+	return nil, 0, false
+}
+
+// reserveInstance 对刚创建的实例占用 1 个在途名额（新层从 reserved=1 起）：使"新建层→玩家 AddPlayer"
+// 窗口内该层被视为非空、不被 ReapEmpty 回收、也不被并发分配当空层挤入（②M2）。
+func (mm *MapManager) reserveInstance(mapID id.MapIdType) {
+	mm.instMu.Lock()
+	defer mm.instMu.Unlock()
+	if inst, ok := mm.instances[mapID]; ok {
+		inst.reserved++
+	}
+}
+
+// ReleaseLayerReservation 玩家 AddPlayer 完成（成功计入 count / 或失败）后归还 1 个在途名额。幂等（reserved 不减到负）。
+func (mm *MapManager) ReleaseLayerReservation(mapID id.MapIdType) {
+	mm.instMu.Lock()
+	defer mm.instMu.Unlock()
+	if inst, ok := mm.instances[mapID]; ok && inst.reserved > 0 {
+		inst.reserved--
+	}
 }

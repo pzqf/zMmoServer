@@ -180,6 +180,9 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 			return fmt.Errorf("allocate layer for map %d failed", mapID)
 		}
 		m, actualMapID = layerMap, layerMapID
+		// AllocateLayer 已为该层占了 1 个在途预留名额；无论下面 AddPlayer 成败都要归还，
+		// 否则该层 reserved 永不归零（cap 被永久占用、永不被 ReapEmpty 回收）。
+		defer mm.ReleaseLayerReservation(layerMapID)
 	} else {
 		m = mm.GetMap(id.MapIdType(mapID))
 	}

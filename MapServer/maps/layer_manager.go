@@ -102,32 +102,18 @@ func (lm *LayerManager) AllocateLayer(logicalMapID, affinityLayerMapID id.MapIdT
 		return nil, 0, false
 	}
 
-	layers := lm.mm.GetInstancesByLogical(logicalMapID, InstanceKindLayer)
-
-	// 1. 亲和：affinity 层存在且未到 hardCap。
-	if affinityLayerMapID != 0 {
-		for _, inst := range layers {
-			if inst.MapID == affinityLayerMapID && inst.Map.GetPlayerCount() < cfg.HardCap {
-				return inst.Map, inst.MapID, true
-			}
-		}
+	// 1&2. 在既有层里按 cap（计入在途预留，防并发进图击穿 softCap/hardCap = M1 TOCTOU）选一层：
+	//      亲和优先 → 否则 effective 人数最少且 < softCap。选中即占 1 个在途名额（reserved++）。
+	if m, layerMapID, ok := lm.mm.reserveExistingLayer(logicalMapID, affinityLayerMapID, cfg.SoftCap, cfg.HardCap); ok {
+		return m, layerMapID, true
 	}
 
-	// 2. 最少人数且 < softCap。
-	var best *MapInstance
-	bestCount := int(^uint(0) >> 1) // maxint
-	for _, inst := range layers {
-		c := inst.Map.GetPlayerCount()
-		if c < cfg.SoftCap && c < bestCount {
-			best = inst
-			bestCount = c
-		}
-	}
-	if best != nil {
-		return best.Map, best.MapID, true
-	}
-
-	// 3. 无可用层 → 开新层。
+	// 3. 无可用层 → 开新层，并即刻预留 1 个在途名额：使"新建层→玩家 AddPlayer"窗口内该层被视为非空、
+	//    不被 ReapEmpty 回收、也不被并发分配当空层挤入（M2 空层回收竞态）。
 	m, layerMapID := lm.mm.CreateInstance(InstanceKindLayer, logicalMapID, cfg.MapConfigID, cfg.Name, cfg.Width, cfg.Height)
+	lm.mm.reserveInstance(layerMapID)
 	return m, layerMapID, true
 }
+
+// 调用方（HandlePlayerEnterMap）在 AddPlayer 完成后必须 ReleaseLayerReservation(layerMapID) 归还名额，
+// 无论成功或失败——否则该层 reserved 永不归零、cap 被永久占用、且永不被 ReapEmpty 回收。
