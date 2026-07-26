@@ -3,6 +3,8 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -48,6 +50,24 @@ type PlayerService struct {
 	isRunning     bool
 	saveChan      chan id.PlayerIdType
 	stopChan      chan struct{}
+	// syncProvider 由上层（LoginService）注册：周期存盘前把所有在线玩家 actor 的实时进度
+	// 推进 online 缓存。services 层不能反向依赖 game/player（会循环 import），故用回调注入（F-5）。
+	syncProvider func()
+}
+
+// SetSyncProvider 注册"存盘前 actor→online 同步"回调（F-5）。不注册则 saveLoop 退化为写登录快照。
+func (ps *PlayerService) SetSyncProvider(fn func()) {
+	ps.syncProvider = fn
+}
+
+// resolveSaveInterval 周期存盘间隔：默认 30s，可经 ZMMO_SAVE_INTERVAL（秒）调优/测试。下限 1s。
+func resolveSaveInterval() time.Duration {
+	if v := os.Getenv("ZMMO_SAVE_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Second
 }
 
 func NewPlayerService(playerDAO *dao.PlayerDAO, dbConnector connector.DBConnector) *PlayerService {
@@ -62,7 +82,7 @@ func NewPlayerService(playerDAO *dao.PlayerDAO, dbConnector connector.DBConnecto
 		connector:     dbConnector,
 		snowflake:     snowflake,
 		onlinePlayers: make(map[id.PlayerIdType]*OnlinePlayer),
-		saveInterval:  30 * time.Second,
+		saveInterval:  resolveSaveInterval(),
 		saveChan:      make(chan id.PlayerIdType, 1000),
 		stopChan:      make(chan struct{}),
 	}
@@ -360,6 +380,12 @@ func (ps *PlayerService) saveLoop() {
 			}
 			ps.onlineMu.RUnlock()
 		case <-ticker.C:
+			// 存盘前先把在线 actor 的实时进度（战斗/交易/邮件带来的金币/经验增益）推进 online 缓存，
+			// 否则落库的是登录快照 → 崩溃丢整场会话增益。须在取 onlineMu.RLock 前调用：
+			// syncProvider 内部经 SyncOnlinePlayerData 取 onlineMu 写锁，在 RLock 下调用会自锁（F-5）。
+			if ps.syncProvider != nil {
+				ps.syncProvider()
+			}
 			ps.onlineMu.RLock()
 			for _, p := range ps.onlinePlayers {
 				if time.Since(p.LastSaveTime) >= ps.saveInterval {

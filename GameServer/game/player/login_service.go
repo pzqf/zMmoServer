@@ -20,10 +20,22 @@ type LoginService struct {
 }
 
 func NewLoginService(playerManager *PlayerManager, playerService *playerservice.PlayerService, sessionManager *session.SessionManager) *LoginService {
-	return &LoginService{
+	ls := &LoginService{
 		playerManager:  playerManager,
 		playerService:  playerService,
 		sessionManager: sessionManager,
+	}
+	// 注册"周期存盘前 actor→online 同步"回调（F-5）：让 saveLoop 落库实时进度而非登录快照，
+	// 崩溃至多丢一个存盘周期（30s）的增益，而非整场会话。
+	playerService.SetSyncProvider(ls.syncAllOnline)
+	return ls
+}
+
+// syncAllOnline 把所有在线玩家 actor 的最新进度推进 PlayerService 的 online 缓存（供周期存盘前调用）。
+// 只读 actor 的原子属性 + 写 online 缓存（各自加锁），与登出路径的 syncPlayerDataToService 同源、安全。
+func (ls *LoginService) syncAllOnline() {
+	for _, p := range ls.playerManager.GetAllPlayers() {
+		ls.syncPlayerDataToService(p)
 	}
 }
 
