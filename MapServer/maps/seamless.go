@@ -5,7 +5,6 @@ import (
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
-	"github.com/pzqf/zMmoServer/MapServer/common"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
 	"go.uber.org/zap"
 )
@@ -59,31 +58,42 @@ func (mm *MapManager) HandleSeamlessHandoff(playerID int64, fromMapID, toMapID i
 		return false, fmt.Errorf("seamless handoff: map not found (from=%d to=%d)", fromMapID, toMapID)
 	}
 
-	// 快照实时态（无缝迁移不重置：血量不满血、等级保留、位置由新坐标承接）。
-	var hp, level int32 = -1, -1
-	if obj := from.GetObject(id.ObjectIdType(playerID)); obj != nil {
-		if p, ok := obj.(*object.Player); ok {
-			hp, level = p.GetHealth(), p.GetLevel()
-		}
-	}
+	// 无缝交接必须尊重 MAP-2 单写者边界：对 *object.Player 字段的读/写都放进各自地图的 actor
+	// goroutine（Map.Do 同步执行），绝不在网络 goroutine 上裸读写玩家字段——否则与目标图 tick
+	// 并发改同一对象=数据竞争（-race 可抓）。顺序上"先加入目标图、成功后再摘源图"：AddPlayer
+	// 失败则源图玩家原样保留、不丢失（回滚安全）。
 
-	from.RemovePlayer(id.PlayerIdType(playerID))
+	// 1) 在源图 actor 上读实时态快照（血量/等级；无缝迁移不重置）。
+	var hp, level int32 = -1, -1
+	from.Do(func() {
+		if obj := from.GetObject(id.ObjectIdType(playerID)); obj != nil {
+			if p, ok := obj.(*object.Player); ok {
+				hp, level = p.GetHealth(), p.GetLevel()
+			}
+		}
+	})
+
+	// 2) 先加入目标图（新坐标由 AddPlayer 承接）；失败即返回，源图未动、玩家不丢失。
 	if err := to.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z); err != nil {
 		return false, fmt.Errorf("seamless handoff: add to target: %w", err)
 	}
 
-	// 恢复实时态到新图对象（位置已由 AddPlayer 承接）。
-	if obj := to.GetObject(id.ObjectIdType(playerID)); obj != nil {
-		if p, ok := obj.(*object.Player); ok {
-			if level > 0 {
-				p.SetLevel(level)
+	// 3) 在目标图 actor 上恢复实时态（位置已由 AddPlayer 承接，仅恢复血量/等级）。
+	to.Do(func() {
+		if obj := to.GetObject(id.ObjectIdType(playerID)); obj != nil {
+			if p, ok := obj.(*object.Player); ok {
+				if level > 0 {
+					p.SetLevel(level)
+				}
+				if hp >= 0 {
+					p.SetHealth(hp)
+				}
 			}
-			if hp >= 0 {
-				p.SetHealth(hp)
-			}
-			p.SetPosition(common.Vector3{X: x, Y: y, Z: z})
 		}
-	}
+	})
+
+	// 4) 从源图摘除（此后玩家只在目标图）。
+	from.RemovePlayer(id.PlayerIdType(playerID))
 
 	mm.setPlayerMap(playerID, id.MapIdType(toMapID))
 	zLog.Info("Seamless handoff",

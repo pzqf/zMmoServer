@@ -1,7 +1,10 @@
 package maps
 
 import (
+	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zMmoServer/MapServer/maps/object"
@@ -98,5 +101,90 @@ func TestSeamless_LinkIsBidirectional(t *testing.T) {
 	}
 	if mm.IsSeamlessNeighbor(1, 3) {
 		t.Fatalf("未登记不应为无缝邻居")
+	}
+}
+
+// TestSeamless_ConcurrentHandoff_Race 并发无缝交接的数据竞争守护（配合 go test -race）。
+// 多个玩家在网络 goroutine 上并发交接 from→to，同时两图各自的 tick（postTick）持续在其 actor
+// goroutine 上更新对象。修复前 HandleSeamlessHandoff 在网络 goroutine 裸读/写 *object.Player 字段
+// （GetHealth/SetLevel…），与目标图 tick 并发改同一对象 → -race 必报；修复后读写都经 Map.Do 收敛到
+// 各自地图 actor，-race 应干净。断言用 level（tick 不改）+ 人数；hp 恢复的正确性由非并发用例覆盖。
+func TestSeamless_ConcurrentHandoff_Race(t *testing.T) {
+	mm := NewMapManager()
+	from := mm.CreateMap(id.MapIdType(4001), 1, "A", 1000, 1000)
+	to := mm.CreateMap(id.MapIdType(4002), 1, "B", 1000, 1000)
+	if from == nil || to == nil {
+		t.Fatalf("建图失败")
+	}
+	mm.RegisterSeamlessLink(id.MapIdType(4001), id.MapIdType(4002))
+
+	const n = 20
+	for i := 1; i <= n; i++ {
+		if err := from.AddPlayer(id.PlayerIdType(i), id.ObjectIdType(i), 900, 0, 100); err != nil {
+			t.Fatalf("AddPlayer: %v", err)
+		}
+		if p, ok := from.GetObject(id.ObjectIdType(i)).(*object.Player); ok {
+			p.SetLevel(int32(i))
+			p.SetHealth(int32(i * 2))
+		}
+	}
+
+	// 背景帧更新：持续对两图投递 tick，制造与交接的并发（-race 观测点）。
+	stop := make(chan struct{})
+	var ticker sync.WaitGroup
+	ticker.Add(1)
+	go func() {
+		defer ticker.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				from.postTick(10 * time.Millisecond)
+				to.postTick(10 * time.Millisecond)
+				time.Sleep(time.Millisecond)
+			}
+		}
+	}()
+
+	// 并发交接：每个玩家一个 goroutine（各不同 playerID）。
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for i := 1; i <= n; i++ {
+		wg.Add(1)
+		go func(pid int) {
+			defer wg.Done()
+			handed, err := mm.HandleSeamlessHandoff(int64(pid), 4001, 4002, 10, 0, 100)
+			if err != nil {
+				errs <- fmt.Errorf("player %d: %w", pid, err)
+				return
+			}
+			if !handed {
+				errs <- fmt.Errorf("player %d: 应无缝交接", pid)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(stop)
+	ticker.Wait()
+	close(errs)
+	for e := range errs {
+		t.Fatal(e)
+	}
+
+	if from.GetPlayerCount() != 0 {
+		t.Fatalf("源图应清空, got %d", from.GetPlayerCount())
+	}
+	if to.GetPlayerCount() != n {
+		t.Fatalf("目标图应有 %d 人, got %d", n, to.GetPlayerCount())
+	}
+	for i := 1; i <= n; i++ {
+		p, ok := to.GetObject(id.ObjectIdType(i)).(*object.Player)
+		if !ok {
+			t.Fatalf("player %d 应在目标图", i)
+		}
+		if p.GetLevel() != int32(i) {
+			t.Fatalf("player %d 等级应保留 %d, got %d", i, i, p.GetLevel())
+		}
 	}
 }
