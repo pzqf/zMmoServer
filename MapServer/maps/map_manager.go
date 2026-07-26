@@ -30,6 +30,11 @@ type MapManager struct {
 	layerMgr    *LayerManager
 	playerMapMu sync.Mutex
 	playerMap   map[int64]id.MapIdType
+
+	// 无缝地图交接（建议①）：seamlessLinks[A][B]=true 表示 A、B 是同一连续世界里相邻的无缝分区。
+	// 只有登记了无缝链路的图对才走无缝交接；否则跨图=普通 enter/leave（有 loading）。见 seamless.go。
+	seamlessMu    sync.Mutex
+	seamlessLinks map[id.MapIdType]map[id.MapIdType]bool
 }
 
 // SetAOINotifier 注入 AOI 回程通知器，后续所创建的地图都会套用。
@@ -49,6 +54,7 @@ func NewMapManager() *MapManager {
 		nextInstanceMapID: 100000,
 		instances:         make(map[id.MapIdType]*MapInstance),
 		playerMap:         make(map[int64]id.MapIdType),
+		seamlessLinks:     make(map[id.MapIdType]map[id.MapIdType]bool),
 	}
 }
 

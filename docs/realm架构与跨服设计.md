@@ -61,10 +61,23 @@
 
 ## 4. 重定向建议（把单个 realm 做深）
 
-### 建议 ①｜补无缝地图交接（最高价值的单服增强）
+### 建议 ①｜补无缝地图交接（最高价值的单服增强）—— **服务端机制已落地**
 **现状**：MapServer 已 1:N，但地图切换大概率是离散的 enter/leave（进图/离图），跨图不平滑。
-**目标**：玩家跨区界 → GameServer 协调，把其在旧 map 的实时态（位置/血量/战斗态）**平滑迁移**到新 map，客户端不断线、无二次登录。
-**落点**：在 GameServer 的 `MapServerManager`（`mapID→serverID` 路由）之上加一层"地图交接事务"——旧 map `LeaveMap`(带状态快照) → 新 map `EnterMap`(恢复快照) → 切换玩家的 map 归属与 AOI。参考本项目已有的跨图请求链（`internal.proto` 400 段地图请求/响应）。
+**目标**：玩家跨区界 → 把其在旧 map 的实时态（位置/血量/等级）**平滑迁移**到新 map，客户端不断线、无二次登录。
+**★关键约束（定）**：**只有设计成无缝的图对才走无缝流程**；非无缝（跨大陆/进副本/进城）跨图 → 回落普通
+enter/leave（有 loading）。无缝性是地图（对）的属性，靠登记无缝链路决定。
+
+**已落地（服务端机制，`seamless.go`）**：
+- `MapManager.RegisterSeamlessLink(a,b)`（双向）登记相邻无缝分区；`IsSeamlessNeighbor(from,to)` 判定。
+- `HandleSeamlessHandoff(playerID, from, to, x,y,z) (handed bool, err)`：
+  - **to 非 from 的无缝邻居 → 返回 `handed=false`**，调用方改走普通 enter/leave（即"非无缝不走无缝流程"）。
+  - 是无缝邻居 → MapServer 内部交接：快照实时态(血量/等级/位置)→从 from 摘除→加入 to 新坐标→恢复实时态→
+    更新 `playerMap`（②-b 的实际所在图）。不重登、位置连续。
+- 测试 `seamless_test`（邻居交接带状态迁移 HP=37/Lv5/新坐标 / 非邻居 handed=false 回落 / 链路双向）绿。
+
+**剩余（触发与客户端，非本机制）**：① 移动到区界的**边界检测**触发（现由直接 API 驱动，接 move 边检即成自动）；
+② 客户端**平滑过场**（无 loading 表现）——客户端侧。无缝邻居通常同在一台 MapServer，故交接是 MapServer 内部
+操作、无需跨 GameServer 路由变更；跨机无缝分区才需要跨服迁移（走 §5 的 MigrationManager 雏形）。
 **价值**：让单个 realm 的"世界感"上台阶，是最"魔兽味"的改进。
 
 ### 建议 ②｜热点图动态分线（Layering）
