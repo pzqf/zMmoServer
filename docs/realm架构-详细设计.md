@@ -97,8 +97,18 @@ MapInstance {
 - **回收幂等**：`Destroy` 对已销毁实例是 no-op。
 - **归属清理**：实例销毁时，其内玩家要被踢回主城/安全点（不能悬空指向已销毁 map）。
 
-### 与跨服的接口
-§5.1 跨服临时实例 = `Kind=CrossServer` 的 `MapInstance`，`Binding=跨服会话`；创建/销毁复用同一 `InstanceManager`，只是玩家来自多个服、结果走事件回流（见 §5 与 ④）。
+### 与跨服的接口（§5.1 跨服临时实例）
+跨服临时实例 = `Kind=CrossServer` 的实例：玩家来自多个服、结果走事件回流。**已落地**：
+- `MapManager.CreateCrossServerMap` 改为经 ③ `CreateInstance(InstanceKindCrossServer)` 建图 → 于是跨服图是
+  **可追踪、空置自动回收**的实例（打完人走即由 `ReapEmpty` 销毁）。测试 `crossserver_instance_test`
+  （跨服实例=CrossServer 种类/派生 mapID/有人不回收/空置回收）绿。
+- **结果回流复用 ④**：跨服玩家的战斗/结算持久变更由 `AttrGrant`(508) 按玩家归属
+  （net 层 `PlayerGameServerManager`，进图时记 origin）**回流到各自家服**落库——跨服实例只产事件、不碰持久资产。
+  ④ 的真机 E2E 已证单玩家 reward→其家服；多归属服只是对每个玩家各走一次同一路径。
+
+**剩余缺口（非本层）**：把不同服的客户端**物理路由**进同一台 MapServer 的这个实例（server B 的玩家进 server A 的
+实例），属**跨服匹配 + 网关跨服路由**的职责（`cross_server_entry`/`MigrationManager` 是雏形），不是实例层的事。
+实例层（生命周期 + 结果回流）已备好，等匹配把人送进来即可。
 
 ### 分步任务
 1. 抽 `MapInstance` + 把 `dungeonLifecycleMgr` 泛化为 `InstanceManager`（dungeon 作为一个 Kind，保持现有行为）。

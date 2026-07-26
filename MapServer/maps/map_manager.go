@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -438,16 +437,16 @@ func (mm *MapManager) DestroyDungeonMap(instanceID id.InstanceIdType) error {
 	return nil
 }
 
+// CreateCrossServerMap 建一张跨服临时实例地图（realm §5.1）。经 ③ 的通用实例路径登记为
+// InstanceKindCrossServer——于是它享有统一实例生命周期：空置由 ReapEmpty 自动回收（打完人走即销毁）。
+// 跨服玩家来自多个归属服，其战斗/结算的**持久变更**由 ④ 的 AttrGrant 按玩家归属(PlayerGameServerManager)
+// 回流到各自的家服落库（跨服实例只产事件、不碰持久资产）。
 func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width, height float32, mode MapMode, serverGroupID int32) *Map {
-	crossMapID := id.MapIdType(atomic.AddInt64(&mm.nextInstanceMapID, 1))
-
-	crossMap := NewMap(crossMapID, mapConfigID, name, width, height)
-	crossMap.SetMapMode(mode)
+	crossMap, crossMapID := mm.CreateInstance(InstanceKindCrossServer, id.MapIdType(mapConfigID), mapConfigID, name, width, height)
+	crossMap.SetMapMode(mode) // 覆盖 CreateInstance 默认的 SingleServer
 	crossMap.SetServerGroupID(serverGroupID)
 
-	mm.maps.Store(crossMapID, crossMap)
-
-	zLog.Info("Cross-server map created",
+	zLog.Info("Cross-server map created (tracked instance)",
 		zap.Int32("map_config_id", mapConfigID),
 		zap.Int32("map_id", int32(crossMapID)),
 		zap.Int("mode", int(mode)),
