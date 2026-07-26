@@ -25,6 +25,12 @@ type MapManager struct {
 	// 通用实例地图登记表（建议③）：key=派生 mapID。见 instance_manager.go。
 	instMu    sync.Mutex
 	instances map[id.MapIdType]*MapInstance
+
+	// 热点图动态分线（建议②-b）：layerMgr=分配器（nil=未启用）；playerMap 记每个玩家实际所在 mapID
+	// （分线玩家在派生层图，普通玩家在逻辑图），供 op 从"客户端传的逻辑 mapID"解析到真实地图。见 layer_manager.go。
+	layerMgr    *LayerManager
+	playerMapMu sync.Mutex
+	playerMap   map[int64]id.MapIdType
 }
 
 // SetAOINotifier 注入 AOI 回程通知器，后续所创建的地图都会套用。
@@ -43,6 +49,7 @@ func NewMapManager() *MapManager {
 		maps:              zMap.NewTypedMap[id.MapIdType, *Map](),
 		nextInstanceMapID: 100000,
 		instances:         make(map[id.MapIdType]*MapInstance),
+		playerMap:         make(map[int64]id.MapIdType),
 	}
 }
 
@@ -173,7 +180,18 @@ func (mm *MapManager) UpdateAllMapsEvents() {
 
 // HandlePlayerEnterMap 处理玩家进入地图
 func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z float32) error {
-	m := mm.GetMap(id.MapIdType(mapID))
+	var m *Map
+	actualMapID := id.MapIdType(mapID)
+	// 可分线逻辑图：经分配器选/建一层，玩家实际进的是派生层图（对客户端/GameServer 透明，②-b）。
+	if mm.layerMgr != nil && mm.layerMgr.IsLayerable(id.MapIdType(mapID)) {
+		layerMap, layerMapID, ok := mm.layerMgr.AllocateLayer(id.MapIdType(mapID), 0) // 亲和=0（组队同层待接组队系统）
+		if !ok {
+			return fmt.Errorf("allocate layer for map %d failed", mapID)
+		}
+		m, actualMapID = layerMap, layerMapID
+	} else {
+		m = mm.GetMap(id.MapIdType(mapID))
+	}
 	if m == nil {
 		return fmt.Errorf("map not found: %d", mapID)
 	}
@@ -181,6 +199,7 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 	if err := m.AddPlayer(id.PlayerIdType(playerID), id.ObjectIdType(playerID), x, y, z); err != nil {
 		return err
 	}
+	mm.setPlayerMap(playerID, actualMapID) // 记玩家实际所在地图，供后续 op resolve
 	// 测试用掉落种子：map 1001 无怪、无真实掉落，故用 ZMMO_TEST_LOOT 在玩家落点旁放一件可拾取物，
 	// 供拾取闭环 E2E。生产路径掉落来自 combat 击杀（见 handleMonsterDeath）。
 	if os.Getenv("ZMMO_TEST_LOOT") == "1" {
@@ -192,7 +211,7 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 // HandlePlayerPickup 处理玩家就近拾取（GameServer → MapServer）。地图侧权威判定并移除掉落物，
 // 返回拾到的 itemID/count；上层据此把 grant 推回 GameServer 落背包。
 func (mm *MapManager) HandlePlayerPickup(playerID, mapID int64) (int32, int32, bool) {
-	m := mm.GetMap(id.MapIdType(mapID))
+	m := mm.resolveMap(playerID, mapID)
 	if m == nil {
 		return 0, 0, false
 	}
@@ -202,18 +221,19 @@ func (mm *MapManager) HandlePlayerPickup(playerID, mapID int64) (int32, int32, b
 
 // HandlePlayerLeaveMap 处理玩家离开地图
 func (mm *MapManager) HandlePlayerLeaveMap(playerID int64, mapID int64) error {
-	m := mm.GetMap(id.MapIdType(mapID))
+	m := mm.resolveMap(playerID, mapID)
 	if m == nil {
 		return fmt.Errorf("map not found: %d", mapID)
 	}
 
 	m.RemovePlayer(id.PlayerIdType(playerID))
+	mm.clearPlayerMap(playerID) // 玩家离图，清实际地图记录（②-b）
 	return nil
 }
 
 // HandlePlayerMove 处理玩家移动
 func (mm *MapManager) HandlePlayerMove(playerID, objectID, mapID int64, x, y, z float32) error {
-	m := mm.GetMap(id.MapIdType(mapID))
+	m := mm.resolveMap(playerID, mapID)
 	if m == nil {
 		return fmt.Errorf("map not found: %d", mapID)
 	}
@@ -223,7 +243,7 @@ func (mm *MapManager) HandlePlayerMove(playerID, objectID, mapID int64, x, y, z 
 
 // HandlePlayerAttack 处理玩家攻击
 func (mm *MapManager) HandlePlayerAttack(playerID, objectID, mapID, targetID int64) (int64, int64, error) {
-	m := mm.GetMap(id.MapIdType(mapID))
+	m := mm.resolveMap(playerID, mapID)
 	if m == nil {
 		return 0, 0, fmt.Errorf("map not found: %d", mapID)
 	}

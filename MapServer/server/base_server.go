@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -339,6 +341,20 @@ func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
 			newMap.SetMinLevel(mapCfg.MinLevel)
 			newMap.SetMaxLevel(mapCfg.MaxLevel)
 			createdCount++
+
+			// 分线测试夹具（env ZMMO_TEST_LAYER=<mapID>）：把该逻辑图标为可分线、softCap=1，
+			// 供"两客户端进同图分到不同层"的 E2E。生产应由 mapconfig 决定 layerable + soft/hardCap。
+			if os.Getenv("ZMMO_TEST_LAYER") == strconv.Itoa(int(mapCfg.MapID)) {
+				bs.mapManager.EnableLayering().RegisterLayerable(mapID, maps.LayerConfig{
+					MapConfigID: mapCfg.MapID,
+					Name:        mapCfg.Name,
+					Width:       float32(mapCfg.Width),
+					Height:      float32(mapCfg.Height),
+					SoftCap:     1,
+					HardCap:     2,
+				})
+				zLog.Info("Test layerable map registered (ZMMO_TEST_LAYER)", zap.Int32("map_id", mapCfg.MapID))
+			}
 		}
 	}
 

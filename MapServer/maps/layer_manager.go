@@ -40,6 +40,45 @@ func NewLayerManager(mm *MapManager) *LayerManager {
 	return &LayerManager{mm: mm, cfg: make(map[id.MapIdType]LayerConfig)}
 }
 
+// —— MapManager 侧的分线接线（②-b）——
+
+// EnableLayering 启用分线（惰性创建分配器）。幂等。返回分配器供注册可分线图。
+func (mm *MapManager) EnableLayering() *LayerManager {
+	if mm.layerMgr == nil {
+		mm.layerMgr = NewLayerManager(mm)
+	}
+	return mm.layerMgr
+}
+
+// Layering 返回分线分配器（未启用则 nil）。
+func (mm *MapManager) Layering() *LayerManager {
+	return mm.layerMgr
+}
+
+// resolveMap 把"客户端传的逻辑 mapID"解析到玩家实际所在地图：分线玩家在派生层图，普通玩家在逻辑图。
+// 进图后各 op（移动/攻击/拾取/离开）都经它定位，使分线对 GameServer 路由透明（仍按逻辑 mapID 路由到本 MapServer）。
+func (mm *MapManager) resolveMap(playerID int64, mapID int64) *Map {
+	mm.playerMapMu.Lock()
+	actual, ok := mm.playerMap[playerID]
+	mm.playerMapMu.Unlock()
+	if ok {
+		return mm.GetMap(actual)
+	}
+	return mm.GetMap(id.MapIdType(mapID))
+}
+
+func (mm *MapManager) setPlayerMap(playerID int64, mapID id.MapIdType) {
+	mm.playerMapMu.Lock()
+	mm.playerMap[playerID] = mapID
+	mm.playerMapMu.Unlock()
+}
+
+func (mm *MapManager) clearPlayerMap(playerID int64) {
+	mm.playerMapMu.Lock()
+	delete(mm.playerMap, playerID)
+	mm.playerMapMu.Unlock()
+}
+
 // RegisterLayerable 声明某逻辑地图可分线及其参数。未注册的逻辑地图 = 不可分线（走普通单图）。
 func (lm *LayerManager) RegisterLayerable(logicalMapID id.MapIdType, cfg LayerConfig) {
 	lm.mu.Lock()
