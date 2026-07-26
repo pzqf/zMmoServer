@@ -210,3 +210,27 @@ func (tm *TaskManager) GetTasksByStatus(status TaskStatus) []*Task {
 func (tm *TaskManager) Count() int64 {
 	return tm.tasks.Len()
 }
+
+// GetAllTasks 返回全部任务（任意状态）的快照切片，供持久化落库用（对应 BuffManager.GetAllBuffs）。
+func (tm *TaskManager) GetAllTasks() []*Task {
+	var result []*Task
+	tm.tasks.Range(func(id int64, task *Task) bool {
+		result = append(result, task)
+		return true
+	})
+	return result
+}
+
+// RestoreTask 直接以给定状态载入一条任务（跳过 AcceptTask 的 NotAccepted→InProgress 流程），
+// 供登录时从 DB 还原任务原状态用。超容量或重复则忽略。
+func (tm *TaskManager) RestoreTask(task *Task) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	if int32(tm.tasks.Len()) >= tm.maxCount {
+		return
+	}
+	if _, ok := tm.tasks.Load(task.TaskID); ok {
+		return
+	}
+	tm.tasks.Store(task.TaskID, task)
+}

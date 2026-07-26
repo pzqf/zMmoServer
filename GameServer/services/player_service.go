@@ -1,6 +1,7 @@
 package service
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -114,6 +115,28 @@ type PersistSkill struct {
 	Exp     int64
 }
 
+// PersistBuff 一条 buff 持久化记录。RemainingMS 为登出时的剩余毫秒（永久 buff 记 -1）。
+type PersistBuff struct {
+	BuffID      int32
+	Name        string
+	Type        int32
+	Value       float32
+	Property    string
+	IsPermanent bool
+	RemainingMS int64
+}
+
+// PersistTask 一条任务持久化记录。条件/奖励切片由上层序列化为 JSON（保持 service 层不依赖 game 类型）。
+type PersistTask struct {
+	TaskID         int64
+	ConfigID       int32
+	Name           string
+	Type           int32
+	Status         int32
+	ConditionsJSON string
+	RewardsJSON    string
+}
+
 func (ps *PlayerService) LoadPlayerItems(playerID int64) ([]PersistItem, error) {
 	if ps.connector == nil {
 		return nil, nil
@@ -209,6 +232,120 @@ func (ps *PlayerService) ensureAuxSchema() {
 	if err != nil {
 		zLog.Warn("ensure player_warehouse table failed", zap.Error(err))
 	}
+	// buff 持久化表（F-8）：现成 player_buff 表列名与 Buff 结构失配（见 F-1），故用自持有 aux 表。
+	if _, err := ps.connector.ExecSync(`CREATE TABLE IF NOT EXISTS player_buffs_kv (
+		id BIGINT NOT NULL AUTO_INCREMENT,
+		player_id BIGINT NOT NULL,
+		buff_id INT NOT NULL,
+		name VARCHAR(64) NOT NULL DEFAULT '',
+		type INT NOT NULL DEFAULT 0,
+		value FLOAT NOT NULL DEFAULT 0,
+		property VARCHAR(64) NOT NULL DEFAULT '',
+		is_permanent TINYINT NOT NULL DEFAULT 0,
+		remaining_ms BIGINT NOT NULL DEFAULT 0,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (id),
+		KEY idx_player_id (player_id)
+	)`); err != nil {
+		zLog.Warn("ensure player_buffs_kv table failed", zap.Error(err))
+	}
+	// 任务持久化表（F-8）：条件/奖励以 JSON 存（进度即在条件里）。同上不复用失配的 player_quest 表。
+	if _, err := ps.connector.ExecSync(`CREATE TABLE IF NOT EXISTS player_tasks_kv (
+		id BIGINT NOT NULL AUTO_INCREMENT,
+		player_id BIGINT NOT NULL,
+		task_id BIGINT NOT NULL,
+		config_id INT NOT NULL DEFAULT 0,
+		name VARCHAR(64) NOT NULL DEFAULT '',
+		type INT NOT NULL DEFAULT 0,
+		status INT NOT NULL DEFAULT 0,
+		conditions_json TEXT,
+		rewards_json TEXT,
+		created_at DATETIME NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (id),
+		KEY idx_player_id (player_id)
+	)`); err != nil {
+		zLog.Warn("ensure player_tasks_kv table failed", zap.Error(err))
+	}
+}
+
+func (ps *PlayerService) LoadPlayerBuffs(playerID int64) ([]PersistBuff, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync("SELECT buff_id, name, type, value, property, is_permanent, remaining_ms FROM player_buffs_kv WHERE player_id = ?", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersistBuff
+	for rows.Next() {
+		var b PersistBuff
+		if err := rows.Scan(&b.BuffID, &b.Name, &b.Type, &b.Value, &b.Property, &b.IsPermanent, &b.RemainingMS); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (ps *PlayerService) SavePlayerBuffs(playerID int64, buffs []PersistBuff) error {
+	if ps.connector == nil {
+		return nil
+	}
+	if _, err := ps.connector.ExecSync("DELETE FROM player_buffs_kv WHERE player_id = ?", playerID); err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, b := range buffs {
+		if _, err := ps.connector.ExecSync(
+			"INSERT INTO player_buffs_kv (player_id, buff_id, name, type, value, property, is_permanent, remaining_ms, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			playerID, b.BuffID, b.Name, b.Type, b.Value, b.Property, b.IsPermanent, b.RemainingMS, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ps *PlayerService) LoadPlayerTasks(playerID int64) ([]PersistTask, error) {
+	if ps.connector == nil {
+		return nil, nil
+	}
+	rows, err := ps.connector.QuerySync("SELECT task_id, config_id, name, type, status, conditions_json, rewards_json FROM player_tasks_kv WHERE player_id = ?", playerID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []PersistTask
+	for rows.Next() {
+		var t PersistTask
+		var cond, rew sql.NullString
+		if err := rows.Scan(&t.TaskID, &t.ConfigID, &t.Name, &t.Type, &t.Status, &cond, &rew); err != nil {
+			return nil, err
+		}
+		t.ConditionsJSON, t.RewardsJSON = cond.String, rew.String
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (ps *PlayerService) SavePlayerTasks(playerID int64, tasks []PersistTask) error {
+	if ps.connector == nil {
+		return nil
+	}
+	if _, err := ps.connector.ExecSync("DELETE FROM player_tasks_kv WHERE player_id = ?", playerID); err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, t := range tasks {
+		if _, err := ps.connector.ExecSync(
+			"INSERT INTO player_tasks_kv (player_id, task_id, config_id, name, type, status, conditions_json, rewards_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			playerID, t.TaskID, t.ConfigID, t.Name, t.Type, t.Status, t.ConditionsJSON, t.RewardsJSON, now, now); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ps *PlayerService) LoadPlayerWarehouse(playerID int64) ([]PersistItem, error) {

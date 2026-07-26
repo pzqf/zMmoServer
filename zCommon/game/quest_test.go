@@ -13,6 +13,29 @@ func TestNewTaskManager(t *testing.T) {
 	assert.Equal(t, int64(0), tm.Count())
 }
 
+func TestTaskManagerGetAllTasks(t *testing.T) {
+	tm := NewTaskManager(20)
+	_ = tm.AcceptTask(NewTask(1, 1001, "A", TaskTypeMain))
+	_ = tm.AcceptTask(NewTask(2, 1002, "B", TaskTypeMain))
+	all := tm.GetAllTasks()
+	assert.Len(t, all, 2)
+}
+
+func TestTaskManagerRestoreTask(t *testing.T) {
+	tm := NewTaskManager(20)
+	// RestoreTask 保留给定状态（不像 AcceptTask 强制 InProgress）
+	task := NewTask(7, 1007, "Restored", TaskTypeMain)
+	task.Status = TaskStatusCompleted
+	tm.RestoreTask(task)
+	got, ok := tm.GetTask(7)
+	assert.True(t, ok)
+	assert.Equal(t, TaskStatusCompleted, got.Status)
+	// 重复 restore 同 ID 忽略
+	dup := NewTask(7, 1007, "Dup", TaskTypeMain)
+	tm.RestoreTask(dup)
+	assert.Equal(t, int64(1), tm.Count())
+}
+
 func TestTaskManagerAcceptTask(t *testing.T) {
 	tm := NewTaskManager(20)
 	task := NewTask(1, 1001, "Kill Monsters", TaskTypeMain)
