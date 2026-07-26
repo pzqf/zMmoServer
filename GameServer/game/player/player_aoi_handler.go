@@ -65,13 +65,10 @@ func (p *Player) handleAOIMove(msg *PlayerMessage) {
 		return
 	}
 
+	// OldPos 不再承载：MapServer 分层 AOI 的 move 事件只回传当前(新)坐标，客户端只用 NewPos；
+	// 原 OldPos 全链路无写入点、恒 (0,0,0)，故移除承载避免"看着有其实恒 0"的隐形字段。
 	notify := &protocol.EntityMoveNotify{
 		EntityId: req.TargetID,
-		OldPos: &protocol.Position{
-			X: req.OldPosX,
-			Y: req.OldPosY,
-			Z: req.OldPosZ,
-		},
 		NewPos: &protocol.Position{
 			X: req.PosX,
 			Y: req.PosY,

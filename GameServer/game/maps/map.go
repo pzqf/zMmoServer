@@ -4,113 +4,46 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zCommon/aoi"
+	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
 	"github.com/pzqf/zMmoServer/GameServer/game/event"
-	"github.com/pzqf/zCommon/common/id"
 	"go.uber.org/zap"
 )
 
-// Region 地图区域
-type Region struct {
-	mu       sync.RWMutex
-	regionID id.RegionIdType
-	objects  map[id.ObjectIdType]common.IGameObject
-}
-
-// NewRegion 创建新区域
-func NewRegion(regionID id.RegionIdType) *Region {
-	return &Region{
-		regionID: regionID,
-		objects:  make(map[id.ObjectIdType]common.IGameObject),
-	}
-}
-
-// AddObject 添加游戏对象到区域
-func (r *Region) AddObject(object common.IGameObject) {
-	if object == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.objects[object.GetID()] = object
-}
-
-// RemoveObject 从区域移除游戏对象
-func (r *Region) RemoveObject(objectID id.ObjectIdType) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.objects, objectID)
-}
-
-// GetObjects 获取区域内所有对象
-func (r *Region) GetObjects() []common.IGameObject {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	objects := make([]common.IGameObject, 0, len(r.objects))
-	for _, obj := range r.objects {
-		objects = append(objects, obj)
-	}
-	return objects
-}
-
-// GetObjectCount 获取区域内对象数量
-func (r *Region) GetObjectCount() int {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return len(r.objects)
-}
-
-const defaultGridSize = 50.0
-
-// Map 游戏地图
+// Map GameServer 侧的游戏地图。
+//
+// 职责边界（②-b 后）：GameServer 的 Map 只是**逻辑图内的对象注册表 + 玩家集**——
+// 供进出图登记、在场校验、玩家计数与 EventPlayerEnterMap/LeaveMap 广播。
+//   - 客户端视野（AOI enter/leave/move）由 **MapServer 的分层 AOI 单一权威**驱动，
+//     经 crossserver 500-505 → map_service.HandleAOINotify → 推客户端。
+//   - 因此 GameServer **不再自建 AOI/分区（grid AOI + Region 网格）**：原来那两套网格记账
+//     写而不读（listener 恒 nil、范围查询走 objects 暴力遍历）、且按逻辑图ID键值无法感知
+//     ②-b 分线，已随 ②-b 修复一并移除。范围查询统一走 objects 遍历（本图对象量级小）。
 type Map struct {
-	mu           sync.RWMutex
-	mapID        id.MapIdType
-	mapConfigID  int32
-	name         string
-	width        float32
-	height       float32
-	regionSize   float32
-	objects      map[id.ObjectIdType]common.IGameObject
-	regions      map[id.RegionIdType]*Region
-	players      map[id.PlayerIdType]bool
-	aoiManager   *aoi.GridManager
-	createdAt    time.Time
+	mu          sync.RWMutex
+	mapID       id.MapIdType
+	mapConfigID int32
+	name        string
+	width       float32
+	height      float32
+	objects     map[id.ObjectIdType]common.IGameObject
+	players     map[id.PlayerIdType]bool
+	createdAt   time.Time
 }
 
 // NewMap 创建新地图
 func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height float32) *Map {
-	m := &Map{
-		mapID:        mapID,
-		mapConfigID:  mapConfigID,
-		name:         name,
-		width:        width,
-		height:       height,
-		regionSize:   50,
-		objects:      make(map[id.ObjectIdType]common.IGameObject),
-		regions:      make(map[id.RegionIdType]*Region),
-		players:      make(map[id.PlayerIdType]bool),
-		aoiManager:   aoi.NewGridManager(float64(width), float64(height), defaultGridSize, defaultGridSize),
-		createdAt:    time.Now(),
+	return &Map{
+		mapID:       mapID,
+		mapConfigID: mapConfigID,
+		name:        name,
+		width:       width,
+		height:      height,
+		objects:     make(map[id.ObjectIdType]common.IGameObject),
+		players:     make(map[id.PlayerIdType]bool),
+		createdAt:   time.Now(),
 	}
-	// 客户端视野(enter/leave/move)由 MapServer 的分层 AOI 作为单一权威驱动：
-	// MapServer 每个分线(layer)各自的网格 AOI → crossserver 500-505 → GameServer.HandleAOINotify → 推客户端。
-	// GameServer 侧不再自建面向客户端的 AOI（原 handleAOIEvent+subscribeAOIEvents 已移除）：它按逻辑图ID(如1001)
-	// 键值、无法感知 ②-b 分线，会把不同 layer 的玩家算作同格互相串视野（已实测复现）。aoiManager 仅保留网格记账，
-	// 无 listener 故不产生任何客户端事件。
-	return m
-}
-
-// posToCoord 将 Vector3 转换为 AOI 坐标
-func (m *Map) posToCoord(pos common.Vector3) aoi.Coord {
-	return aoi.Coord{X: float64(pos.X), Y: float64(pos.Y)}
-}
-
-// GetAOIManager 获取 AOI 管理器
-func (m *Map) GetAOIManager() *aoi.GridManager {
-	return m.aoiManager
 }
 
 // GetID 获取地图ID
@@ -138,16 +71,6 @@ func (m *Map) GetCreatedAt() time.Time {
 	return m.createdAt
 }
 
-// getRegionID 根据坐标计算区域ID
-func (m *Map) getRegionID(pos common.Vector3) id.RegionIdType {
-	if m.regionSize <= 0 {
-		return 0
-	}
-	xRegion := uint64(pos.X / m.regionSize)
-	yRegion := uint64(pos.Y / m.regionSize)
-	return id.RegionIdType(xRegion*1000000 + yRegion)
-}
-
 // AddObject 添加游戏对象到地图
 func (m *Map) AddObject(object common.IGameObject) {
 	if object == nil {
@@ -159,21 +82,11 @@ func (m *Map) AddObject(object common.IGameObject) {
 
 	objectID := object.GetID()
 	m.objects[objectID] = object
-
-	regionID := m.getRegionID(object.GetPosition())
-	if _, exists := m.regions[regionID]; !exists {
-		m.regions[regionID] = NewRegion(regionID)
-	}
-	m.regions[regionID].AddObject(object)
-
 	object.SetMap(m)
-
-	m.aoiManager.AddEntity(int64(objectID), m.posToCoord(object.GetPosition()))
 
 	zLog.Debug("Object added to map",
 		zap.Int64("object_id", int64(objectID)),
-		zap.Int32("map_id", int32(m.mapID)),
-		zap.Int32("region_id", int32(regionID)))
+		zap.Int32("map_id", int32(m.mapID)))
 }
 
 // RemoveObject 从地图移除游戏对象
@@ -187,14 +100,6 @@ func (m *Map) RemoveObject(objectID id.ObjectIdType) {
 	}
 
 	delete(m.objects, objectID)
-
-	m.aoiManager.RemoveEntity(int64(objectID), m.posToCoord(object.GetPosition()))
-
-	regionID := m.getRegionID(object.GetPosition())
-	if region, ok := m.regions[regionID]; ok {
-		region.RemoveObject(objectID)
-	}
-
 	object.SetMap(nil)
 
 	zLog.Debug("Object removed from map",
@@ -202,56 +107,15 @@ func (m *Map) RemoveObject(objectID id.ObjectIdType) {
 		zap.Int32("map_id", int32(m.mapID)))
 }
 
-// MoveObject 移动游戏对象
+// MoveObject 移动游戏对象（GameServer 侧仅更新对象坐标；AOI/视野由 MapServer 权威处理）
 func (m *Map) MoveObject(object common.IGameObject, targetPos common.Vector3) error {
-	oldPos := object.GetPosition()
-	oldRegionID := m.getRegionID(oldPos)
-	newRegionID := m.getRegionID(targetPos)
-
-	if oldRegionID == newRegionID {
-		object.SetPosition(targetPos)
-		m.aoiManager.MoveEntity(int64(object.GetID()), m.posToCoord(oldPos), m.posToCoord(targetPos))
-		return nil
-	}
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if region, exists := m.regions[oldRegionID]; exists {
-		region.RemoveObject(object.GetID())
-	}
-
-	if _, exists := m.regions[newRegionID]; !exists {
-		m.regions[newRegionID] = NewRegion(newRegionID)
-	}
-	m.regions[newRegionID].AddObject(object)
-
 	object.SetPosition(targetPos)
-	m.aoiManager.MoveEntity(int64(object.GetID()), m.posToCoord(oldPos), m.posToCoord(targetPos))
-
 	return nil
 }
 
-// TeleportObject 传送游戏对象
+// TeleportObject 传送游戏对象（同 MoveObject，仅更新坐标）
 func (m *Map) TeleportObject(object common.IGameObject, targetPos common.Vector3) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	oldPos := object.GetPosition()
-	oldRegionID := m.getRegionID(oldPos)
-	newRegionID := m.getRegionID(targetPos)
-
-	if region, exists := m.regions[oldRegionID]; exists {
-		region.RemoveObject(object.GetID())
-	}
-
-	if _, exists := m.regions[newRegionID]; !exists {
-		m.regions[newRegionID] = NewRegion(newRegionID)
-	}
-	m.regions[newRegionID].AddObject(object)
-
 	object.SetPosition(targetPos)
-
 	return nil
 }
 
@@ -317,16 +181,7 @@ func (m *Map) AddPlayer(playerID id.PlayerIdType, object common.IGameObject) {
 
 	m.players[playerID] = true
 	m.objects[object.GetID()] = object
-
-	regionID := m.getRegionID(object.GetPosition())
-	if _, exists := m.regions[regionID]; !exists {
-		m.regions[regionID] = NewRegion(regionID)
-	}
-	m.regions[regionID].AddObject(object)
-
 	object.SetMap(m)
-
-	m.aoiManager.AddEntity(int64(playerID), m.posToCoord(object.GetPosition()))
 
 	event.Publish(event.NewEvent(event.EventPlayerEnterMap, m, &event.PlayerMapEventData{
 		PlayerID: playerID,
@@ -349,18 +204,10 @@ func (m *Map) RemovePlayer(playerID id.PlayerIdType) {
 	delete(m.players, playerID)
 
 	for _, obj := range m.objects {
-		if obj.GetType() == common.GameObjectTypePlayer {
-			if obj.GetID() == id.ObjectIdType(playerID) {
-				m.aoiManager.RemoveEntity(int64(playerID), m.posToCoord(obj.GetPosition()))
-
-				regionID := m.getRegionID(obj.GetPosition())
-				if region, ok := m.regions[regionID]; ok {
-					region.RemoveObject(obj.GetID())
-				}
-				delete(m.objects, obj.GetID())
-				obj.SetMap(nil)
-				break
-			}
+		if obj.GetType() == common.GameObjectTypePlayer && obj.GetID() == id.ObjectIdType(playerID) {
+			delete(m.objects, obj.GetID())
+			obj.SetMap(nil)
+			break
 		}
 	}
 
@@ -408,4 +255,3 @@ func (m *Map) Update(deltaTime float64) {
 		}
 	}
 }
-

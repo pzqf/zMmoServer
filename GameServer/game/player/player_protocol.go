@@ -234,9 +234,6 @@ type AOIViewRequest struct {
 	PosX      float32
 	PosY      float32
 	PosZ      float32
-	OldPosX   float32
-	OldPosY   float32
-	OldPosZ   float32
 }
 
 type BaseResponse struct {

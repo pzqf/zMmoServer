@@ -672,33 +672,6 @@ func (ms *MapService) sendMapAttackRequest(playerID id.PlayerIdType, objectID id
 	}
 }
 
-// SendMapEnterResponse 发送进入地图响应
-func (ms *MapService) SendMapEnterResponse(conn interface{}, playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
-	// 创建地图进入响应
-	resp := &protocol.ClientMapEnterResponse{
-		Result: 0, // 成功
-		MapId:  int32(mapID),
-		Pos: &protocol.Position{
-			X: pos.X,
-			Y: pos.Y,
-			Z: pos.Z,
-		},
-	}
-
-	// 序列化响应
-	respData, err := proto.Marshal(resp)
-	if err != nil {
-		return err
-	}
-
-	// 发送响应到客户端
-	// 注意：这里需要根据实际的连接类型实现发送逻辑
-	// 目前留作接口，后续根据具体连接类型实现
-	_ = respData
-	_ = conn
-	return nil
-}
-
 // EnterMap 实现 player.MapOperator 接口
 func (ms *MapService) EnterMap(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error {
 	return ms.HandlePlayerEnterMap(playerID, mapID, pos)
