@@ -1,10 +1,7 @@
 package player
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
@@ -200,89 +197,7 @@ func (ls *LoginService) CreatePlayer(accountID id.AccountIdType, name string, se
 	return ls.playerService.CreatePlayer(accountID, name, sex, age)
 }
 
-// GenerateReconnectToken 生成断线重连 Token
-func (ls *LoginService) GenerateReconnectToken(playerID id.PlayerIdType) (string, error) {
-	tokenBytes := make([]byte, 16)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return "", fmt.Errorf("generate reconnect token: %w", err)
-	}
-	token := hex.EncodeToString(tokenBytes)
-
-	sess, exists := ls.sessionManager.GetSessionByPlayer(playerID)
-	if !exists {
-		return "", fmt.Errorf("session not found for player: %d", playerID)
-	}
-
-	sess.ReconnectToken = token
-	sess.ReconnectExpire = time.Now().Add(5 * time.Minute).Unix()
-
-	zLog.Info("Reconnect token generated",
-		zap.Int64("player_id", int64(playerID)),
-		zap.String("token", token))
-
-	return token, nil
-}
-
-// Reconnect 断线重连
-func (ls *LoginService) Reconnect(newSessionID string, playerID id.PlayerIdType, reconnectToken string) error {
-	oldSess, exists := ls.sessionManager.GetSessionByPlayer(playerID)
-	if !exists {
-		return fmt.Errorf("player session not found: %d", playerID)
-	}
-
-	if oldSess.ReconnectToken != reconnectToken {
-		return fmt.Errorf("invalid reconnect token")
-	}
-
-	if time.Now().Unix() > oldSess.ReconnectExpire {
-		return fmt.Errorf("reconnect token expired")
-	}
-
-	if !ls.playerManager.HasPlayer(playerID) {
-		return fmt.Errorf("player not online: %d", playerID)
-	}
-
-	ls.sessionManager.BindPlayer(newSessionID, playerID)
-	ls.sessionManager.UpdateSessionStatus(newSessionID, session.SessionStatusInGame)
-
-	p, err := ls.playerManager.GetPlayer(playerID)
-	if err != nil {
-		return fmt.Errorf("get player failed: %w", err)
-	}
-
-	// GS-2：把 Player Actor 的 sessionID 更新为新会话——否则重连后所有 AOI 视野/服务端推送
-	// 仍用旧的（已死）sessionID 发送（player_aoi_handler 用 p.sessionID），全部丢失。
-	// 与原始登录路径一致（见 Login 里的 SetSessionInfo）。
-	if ls.playerManager.clientSender != nil {
-		p.SetSessionInfo(newSessionID, ls.playerManager.clientSender)
-	}
-
-	if err := ls.playerManager.ResumePlayer(playerID); err != nil {
-		zLog.Warn("Failed to resume player lifecycle", zap.Error(err))
-	}
-
-	zLog.Info("Player reconnected successfully",
-		zap.Int64("player_id", int64(playerID)),
-		zap.String("new_session_id", newSessionID),
-		zap.Int32("current_map", int32(p.GetCurrentMapID())))
-
-	return nil
-}
-
-// OnDisconnect 玩家断线处理（不立即登出，保留 Actor 等待重连）
-func (ls *LoginService) OnDisconnect(playerID id.PlayerIdType) error {
-	if !ls.playerManager.HasPlayer(playerID) {
-		return nil
-	}
-
-	if err := ls.playerManager.SuspendPlayer(playerID); err != nil {
-		zLog.Warn("Failed to suspend player lifecycle", zap.Error(err))
-	}
-
-	_, _ = ls.GenerateReconnectToken(playerID)
-
-	zLog.Info("Player disconnected, waiting for reconnect",
-		zap.Int64("player_id", int64(playerID)))
-
-	return nil
-}
+// 注：玩家级断线重连（Reconnect/GenerateReconnectToken/OnDisconnect + 会话 ReconnectToken/Expire +
+// PlayerManager.Suspend/ResumePlayer）曾作为脚手架存在，但全仓 0 调用者、从未接任何客户端消息，且
+// 「挂起等重连」缺回收器会永久泄漏 actor。非正常掉线现由网关 OnClose→补发 LEAVE_GAME→完整登出收口
+// （见 F-4），故该套死代码已整体删除，消除「接线即爆」隐患。将来若要做真重连，重新按需实现即可。

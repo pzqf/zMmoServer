@@ -62,14 +62,7 @@ func NewPlayerManager() *PlayerManager {
 			zLog.Info("Lifecycle: player activated", zap.Int64("player_id", obj.GetObjectID()))
 			return nil
 		},
-		OnSuspend: func(obj lifecycle.Object) error {
-			zLog.Info("Lifecycle: player suspending", zap.Int64("player_id", obj.GetObjectID()))
-			return nil
-		},
-		OnResume: func(obj lifecycle.Object) error {
-			zLog.Info("Lifecycle: player resuming", zap.Int64("player_id", obj.GetObjectID()))
-			return nil
-		},
+		// OnSuspend/OnResume 已随玩家级重连死代码删除（挂起/恢复状态无人触发，见 login_service 说明）。
 		OnDestroy: func(obj lifecycle.Object) error {
 			zLog.Info("Lifecycle: player destroying", zap.Int64("player_id", obj.GetObjectID()))
 			return nil
@@ -184,19 +177,6 @@ func (pm *PlayerManager) RemovePlayer(playerID id.PlayerIdType) error {
 	return nil
 }
 
-func (pm *PlayerManager) SuspendPlayer(playerID id.PlayerIdType) error {
-	if _, ok := pm.players.Load(playerID); !ok {
-		return ErrPlayerNotFound
-	}
-	return pm.lifecycleMgr.Suspend(int64(playerID))
-}
-
-func (pm *PlayerManager) ResumePlayer(playerID id.PlayerIdType) error {
-	if _, ok := pm.players.Load(playerID); !ok {
-		return ErrPlayerNotFound
-	}
-	return pm.lifecycleMgr.Resume(int64(playerID))
-}
 
 func (pm *PlayerManager) GetPlayerState(playerID id.PlayerIdType) (lifecycle.ObjectState, error) {
 	obj, ok := pm.lifecycleMgr.Get(int64(playerID))

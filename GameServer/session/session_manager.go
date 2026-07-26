@@ -38,9 +38,6 @@ type Session struct {
 	LastActiveTime int64
 	HeartbeatCount int64
 
-	ReconnectToken  string
-	ReconnectExpire int64
-
 	IP       string
 	IPRegion string
 	IsSecure bool
