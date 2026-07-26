@@ -148,3 +148,16 @@ func (mm *MapManager) InstanceCount() int {
 	defer mm.instMu.Unlock()
 	return len(mm.instances)
 }
+
+// GetInstancesByLogical 返回某逻辑地图下、指定种类的所有存活实例快照（供分线分配器选层，建议②）。
+func (mm *MapManager) GetInstancesByLogical(logicalMapID id.MapIdType, kind InstanceKind) []*MapInstance {
+	mm.instMu.Lock()
+	defer mm.instMu.Unlock()
+	var out []*MapInstance
+	for _, inst := range mm.instances {
+		if inst.LogicalMapID == logicalMapID && inst.Kind == kind {
+			out = append(out, inst)
+		}
+	}
+	return out
+}
