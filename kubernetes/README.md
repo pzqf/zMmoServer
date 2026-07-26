@@ -2,6 +2,14 @@
 
 本目录包含zMmoServer的Kubernetes部署配置文件。
 
+> ⚠️ **重要：这些清单是「示意 / 参考」性质，不能直接 `kubectl apply` 上线。** 它们与当前运行时模型存在已知不一致，直接部署会**静默失败**：
+>
+> - **ServerID 注入不匹配**：`game/game-statefulset.yaml` 用 `SERVER_ID="$(POD_NAME)"`（如 `game-server-0`），但代码把 ServerID 当 **6 位数字**（GroupID+ServerIndex，`id.ParseServerIDInt`）解析——pod 名非数字，起服解析即失败。`gateway` 同理。
+> - **Gateway 多副本 vs 1:1 配对**：`gateway/gateway-deployment.yaml` 是 `replicas: 2` + HPA(2–10)，但 **Gateway↔GameServer 目前严格 1:1**（按单一 ServerID 配对）。多副本会都指向同一个 GameServer、共用同一 ServerID → 冲突。多 GameServer 负载均衡尚未实现（见根 `README.md` 待办）。
+> - **Helm**：下方「部署步骤」提到 Helm 3.0+，但仓库内**没有 Helm chart**，实际只有原生 YAML（`kubectl apply -f`）。
+>
+> 当前真机跑法仍是**本地手动起 4 个进程**（见根 `README.md` 快速开始）。要真正上 K8s，需先补齐：编排层注入**数字化 ServerID**、多 GameServer 负载均衡、以及（如需要）Helm 化——这些属部署工程，尚未做。下面的清单可作为编写正式部署时的骨架参考。
+
 ## 目录结构
 
 - `gateway/` - GatewayServer的Kubernetes配置
