@@ -93,6 +93,8 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleNetItemPickup(msg)
 	case MsgItemGrant:
 		p.handleItemGrant(msg)
+	case MsgExpGrant:
+		p.handleExpGrant(msg)
 	case MsgChatNotify:
 		p.handleChatNotify(msg)
 	case MsgTeamUpdate:

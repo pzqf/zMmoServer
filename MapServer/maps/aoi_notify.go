@@ -10,6 +10,8 @@ import (
 type AOINotifier interface {
 	// NotifyAOI 推送一条视野事件。eventType 为 crossserver.MsgInternalAOIEnter/Leave/Move。
 	NotifyAOI(watcherPlayerID int64, mapID int32, eventType uint32, targetID int64, pos common.Vector3)
+	// NotifyExpGrant 把战斗获得的经验回写给持有该玩家的 GameServer 持久化 actor（crossserver 507，F-2）。
+	NotifyExpGrant(playerID int64, exp int64)
 }
 
 // SetAOINotifier 注入 AOI 回程通知器。

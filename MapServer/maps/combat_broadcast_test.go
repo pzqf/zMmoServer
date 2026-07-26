@@ -13,8 +13,21 @@ import (
 // recordingAOINotifier 记录所有 NotifyAOI 事件，用于断言状态变更广播（业务④ 场景同步增强）。
 // 加锁：NotifyAOI 由地图 actor goroutine 同步调用，测试主 goroutine 读取，-race 下需同步。
 type recordingAOINotifier struct {
-	mu     sync.Mutex
-	events []recordedAOIEvt
+	mu       sync.Mutex
+	events   []recordedAOIEvt
+	expGrant int64 // 累计 NotifyExpGrant 的经验（F-2）
+}
+
+func (r *recordingAOINotifier) NotifyExpGrant(playerID int64, exp int64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.expGrant += exp
+}
+
+func (r *recordingAOINotifier) totalExpGrant() int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.expGrant
 }
 
 type recordedAOIEvt struct {
@@ -96,6 +109,12 @@ func TestCombatBroadcast_AttrAndDeath(t *testing.T) {
 	deathCount := rec.countByType(crossserver.MsgInternalAOIDeath)
 	if deathCount == 0 {
 		t.Fatalf("未收到死亡广播")
+	}
+
+	// F-2：击杀怪后应向持有该玩家的 GameServer 回写经验（NotifyExpGrant→crossserver 507）。
+	m.Do(func() {}) // 栅栏：确保击杀 actor 任务（含经验回写）已完成再读
+	if got := rec.totalExpGrant(); got <= 0 {
+		t.Fatalf("击杀怪后未回写经验(NotifyExpGrant)，expGrant=%d", got)
 	}
 
 	// 末次血量广播：watcher 应为攻击者玩家（非对象 ID），HP 载荷应满足 0<=cur<=max。

@@ -71,6 +71,29 @@ func (p *Player) handleItemGrant(msg *PlayerMessage) {
 	p.pushToClient(int32(protocol.ItemMsgId_MSG_ITEM_PICKUP_NOTIFY), data)
 }
 
+// handleExpGrant 把 MapServer 战斗回写的经验加到持久化 actor（修 F-2）。在 actor 单写者 goroutine 内执行，
+// 升级公式 expToNext=1000*level 与 MapServer 战斗对象一致（object.Player.LevelUp）。经验/等级随登出/周期存盘落库。
+func (p *Player) handleExpGrant(msg *PlayerMessage) {
+	req, ok := msg.Data.(*ExpGrantRequest)
+	if !ok || req.Exp == 0 {
+		return
+	}
+	a := p.GetAttrs()
+	if a == nil {
+		return
+	}
+	a.AddExp(req.Exp)
+	for {
+		level := a.GetLevel()
+		need := int64(1000) * int64(level)
+		if need <= 0 || a.GetExp() < need {
+			break
+		}
+		a.SetExp(a.GetExp() - need)
+		a.SetLevel(level + 1)
+	}
+}
+
 func (p *Player) handleNetItemList(msg *PlayerMessage) {
 	p.replyItem(msg, protocol.ItemMsgId_MSG_ITEM_LIST_RESPONSE, &protocol.ClientItemListResponse{
 		Result: 0,

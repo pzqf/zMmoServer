@@ -102,7 +102,11 @@ func (m *Map) handleMonsterDeath(monster *object.Monster, killer common.IGameObj
 		if exp <= 0 {
 			exp = int64(monster.GetLevel() * 5)
 		}
-		player.AddExperience(exp)
+		player.AddExperience(exp) // MapServer 战斗对象本地经验（战斗态显示用）
+		// 回写给 GameServer 持久化 actor（修 F-2）：此前战斗经验只加在地图对象、跨登录全丢。
+		if m.aoiNotifier != nil {
+			m.aoiNotifier.NotifyExpGrant(int64(player.GetPlayerID()), exp)
+		}
 
 		zLog.Debug("Exp awarded",
 			zap.Int64("player_id", int64(player.GetPlayerID())),

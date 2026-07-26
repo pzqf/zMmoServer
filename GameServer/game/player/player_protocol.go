@@ -79,6 +79,7 @@ const (
 	MsgChatNotify   MessageType = 17008 // 聊天广播（推送给接收者客户端）
 	MsgTeamUpdate   MessageType = 17009 // 队伍花名册变更（推送给成员客户端）
 	MsgTradeUpdate  MessageType = 17010 // 交易状态变更（推送给交易双方客户端）
+	MsgExpGrant     MessageType = 17011 // MapServer 战斗经验回写（加到持久化 actor，F-2）
 )
 
 // TeamUpdateData 一条队伍花名册变更的载荷（已 marshal 好的 ClientTeamUpdateNotify 字节，
@@ -96,6 +97,11 @@ type TradeUpdateData struct {
 type ItemGrantRequest struct {
 	ItemID int32
 	Count  int32
+}
+
+// ExpGrantRequest MapServer 战斗经验回写载荷（经 PlayerManager 路由到玩家 Actor 加经验，F-2）。
+type ExpGrantRequest struct {
+	Exp int64
 }
 
 // ChatNotifyData 一条聊天广播的载荷（经 PlayerManager.BroadcastMessage 扇出到每个玩家 Actor 后推客户端）。

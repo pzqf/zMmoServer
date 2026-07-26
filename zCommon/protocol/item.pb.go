@@ -687,6 +687,60 @@ func (x *ItemGrantNotify) GetCount() int32 {
 	return 0
 }
 
+// MapServer → GameServer（跨服 push，crossserver 507）：把战斗获得的经验回写给持有该玩家的
+// GameServer（持久化权威 actor）。修 F-2：此前战斗经验只加在 MapServer 对象上、跨登录全丢。
+type ExpGrantNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Exp           int64                  `protobuf:"varint,2,opt,name=exp,proto3" json:"exp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExpGrantNotify) Reset() {
+	*x = ExpGrantNotify{}
+	mi := &file_item_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExpGrantNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExpGrantNotify) ProtoMessage() {}
+
+func (x *ExpGrantNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_item_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExpGrantNotify.ProtoReflect.Descriptor instead.
+func (*ExpGrantNotify) Descriptor() ([]byte, []int) {
+	return file_item_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ExpGrantNotify) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ExpGrantNotify) GetExp() int64 {
+	if x != nil {
+		return x.Exp
+	}
+	return 0
+}
+
 type ClientWarehouseListRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
@@ -696,7 +750,7 @@ type ClientWarehouseListRequest struct {
 
 func (x *ClientWarehouseListRequest) Reset() {
 	*x = ClientWarehouseListRequest{}
-	mi := &file_item_proto_msgTypes[10]
+	mi := &file_item_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -708,7 +762,7 @@ func (x *ClientWarehouseListRequest) String() string {
 func (*ClientWarehouseListRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseListRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[10]
+	mi := &file_item_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -721,7 +775,7 @@ func (x *ClientWarehouseListRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseListRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseListRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{10}
+	return file_item_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ClientWarehouseListRequest) GetPlayerId() int64 {
@@ -741,7 +795,7 @@ type ClientWarehouseListResponse struct {
 
 func (x *ClientWarehouseListResponse) Reset() {
 	*x = ClientWarehouseListResponse{}
-	mi := &file_item_proto_msgTypes[11]
+	mi := &file_item_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -753,7 +807,7 @@ func (x *ClientWarehouseListResponse) String() string {
 func (*ClientWarehouseListResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseListResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[11]
+	mi := &file_item_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -766,7 +820,7 @@ func (x *ClientWarehouseListResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseListResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseListResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{11}
+	return file_item_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ClientWarehouseListResponse) GetResult() int32 {
@@ -794,7 +848,7 @@ type ClientWarehouseStoreRequest struct {
 
 func (x *ClientWarehouseStoreRequest) Reset() {
 	*x = ClientWarehouseStoreRequest{}
-	mi := &file_item_proto_msgTypes[12]
+	mi := &file_item_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -806,7 +860,7 @@ func (x *ClientWarehouseStoreRequest) String() string {
 func (*ClientWarehouseStoreRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[12]
+	mi := &file_item_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -819,7 +873,7 @@ func (x *ClientWarehouseStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseStoreRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseStoreRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{12}
+	return file_item_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClientWarehouseStoreRequest) GetPlayerId() int64 {
@@ -854,7 +908,7 @@ type ClientWarehouseStoreResponse struct {
 
 func (x *ClientWarehouseStoreResponse) Reset() {
 	*x = ClientWarehouseStoreResponse{}
-	mi := &file_item_proto_msgTypes[13]
+	mi := &file_item_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +920,7 @@ func (x *ClientWarehouseStoreResponse) String() string {
 func (*ClientWarehouseStoreResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseStoreResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[13]
+	mi := &file_item_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +933,7 @@ func (x *ClientWarehouseStoreResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseStoreResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseStoreResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{13}
+	return file_item_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ClientWarehouseStoreResponse) GetResult() int32 {
@@ -914,7 +968,7 @@ type ClientWarehouseRetrieveRequest struct {
 
 func (x *ClientWarehouseRetrieveRequest) Reset() {
 	*x = ClientWarehouseRetrieveRequest{}
-	mi := &file_item_proto_msgTypes[14]
+	mi := &file_item_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +980,7 @@ func (x *ClientWarehouseRetrieveRequest) String() string {
 func (*ClientWarehouseRetrieveRequest) ProtoMessage() {}
 
 func (x *ClientWarehouseRetrieveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[14]
+	mi := &file_item_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +993,7 @@ func (x *ClientWarehouseRetrieveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseRetrieveRequest.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseRetrieveRequest) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{14}
+	return file_item_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ClientWarehouseRetrieveRequest) GetPlayerId() int64 {
@@ -974,7 +1028,7 @@ type ClientWarehouseRetrieveResponse struct {
 
 func (x *ClientWarehouseRetrieveResponse) Reset() {
 	*x = ClientWarehouseRetrieveResponse{}
-	mi := &file_item_proto_msgTypes[15]
+	mi := &file_item_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -986,7 +1040,7 @@ func (x *ClientWarehouseRetrieveResponse) String() string {
 func (*ClientWarehouseRetrieveResponse) ProtoMessage() {}
 
 func (x *ClientWarehouseRetrieveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_item_proto_msgTypes[15]
+	mi := &file_item_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -999,7 +1053,7 @@ func (x *ClientWarehouseRetrieveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientWarehouseRetrieveResponse.ProtoReflect.Descriptor instead.
 func (*ClientWarehouseRetrieveResponse) Descriptor() ([]byte, []int) {
-	return file_item_proto_rawDescGZIP(), []int{15}
+	return file_item_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ClientWarehouseRetrieveResponse) GetResult() int32 {
@@ -1065,7 +1119,10 @@ const file_item_proto_rawDesc = "" +
 	"\x0fItemGrantNotify\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\x05R\x06itemId\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x05R\x05count\"9\n" +
+	"\x05count\x18\x03 \x01(\x05R\x05count\"?\n" +
+	"\x0eExpGrantNotify\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x10\n" +
+	"\x03exp\x18\x02 \x01(\x03R\x03exp\"9\n" +
 	"\x1aClientWarehouseListRequest\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\"_\n" +
 	"\x1bClientWarehouseListResponse\x12\x16\n" +
@@ -1131,7 +1188,7 @@ func file_item_proto_rawDescGZIP() []byte {
 }
 
 var file_item_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_item_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_item_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_item_proto_goTypes = []any{
 	(ItemMsgId)(0),                          // 0: protocol.ItemMsgId
 	(*ItemSlot)(nil),                        // 1: protocol.ItemSlot
@@ -1144,12 +1201,13 @@ var file_item_proto_goTypes = []any{
 	(*ClientItemPickupRequest)(nil),         // 8: protocol.ClientItemPickupRequest
 	(*ClientItemPickupNotify)(nil),          // 9: protocol.ClientItemPickupNotify
 	(*ItemGrantNotify)(nil),                 // 10: protocol.ItemGrantNotify
-	(*ClientWarehouseListRequest)(nil),      // 11: protocol.ClientWarehouseListRequest
-	(*ClientWarehouseListResponse)(nil),     // 12: protocol.ClientWarehouseListResponse
-	(*ClientWarehouseStoreRequest)(nil),     // 13: protocol.ClientWarehouseStoreRequest
-	(*ClientWarehouseStoreResponse)(nil),    // 14: protocol.ClientWarehouseStoreResponse
-	(*ClientWarehouseRetrieveRequest)(nil),  // 15: protocol.ClientWarehouseRetrieveRequest
-	(*ClientWarehouseRetrieveResponse)(nil), // 16: protocol.ClientWarehouseRetrieveResponse
+	(*ExpGrantNotify)(nil),                  // 11: protocol.ExpGrantNotify
+	(*ClientWarehouseListRequest)(nil),      // 12: protocol.ClientWarehouseListRequest
+	(*ClientWarehouseListResponse)(nil),     // 13: protocol.ClientWarehouseListResponse
+	(*ClientWarehouseStoreRequest)(nil),     // 14: protocol.ClientWarehouseStoreRequest
+	(*ClientWarehouseStoreResponse)(nil),    // 15: protocol.ClientWarehouseStoreResponse
+	(*ClientWarehouseRetrieveRequest)(nil),  // 16: protocol.ClientWarehouseRetrieveRequest
+	(*ClientWarehouseRetrieveResponse)(nil), // 17: protocol.ClientWarehouseRetrieveResponse
 }
 var file_item_proto_depIdxs = []int32{
 	1, // 0: protocol.ClientItemListResponse.items:type_name -> protocol.ItemSlot
@@ -1172,7 +1230,7 @@ func file_item_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_item_proto_rawDesc), len(file_item_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

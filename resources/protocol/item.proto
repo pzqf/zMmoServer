@@ -88,6 +88,13 @@ message ItemGrantNotify {
   int32 count = 3;
 }
 
+// MapServer → GameServer（跨服 push，crossserver 507）：把战斗获得的经验回写给持有该玩家的
+// GameServer（持久化权威 actor）。修 F-2：此前战斗经验只加在 MapServer 对象上、跨登录全丢。
+message ExpGrantNotify {
+  int64 player_id = 1;
+  int64 exp = 2;
+}
+
 // —— 仓库 ——
 
 message ClientWarehouseListRequest {
