@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 
+	"github.com/pzqf/zCommon/netutil"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"github.com/pzqf/zMmoServer/GatewayServer/client/auth"
@@ -133,6 +134,12 @@ func (s *Service) Init(ctx context.Context) {
 // Start 启动客户端服务
 func (s *Service) Start() error {
 	zLog.Info("Starting client service...")
+
+	// 端口占用探测（主动拨号，规避 Windows SO_REUSEADDR 静默双绑；占用则记占用方 PID/进程名 + fail-fast）。
+	if err := netutil.EnsurePortFree(s.config.Server.ListenAddr); err != nil {
+		zLog.Error("客户端监听端口被占用，拒绝启动", zap.String("listen_addr", s.config.Server.ListenAddr), zap.Error(err))
+		return err
+	}
 
 	// 尝试监听端口，检查是否可用
 	ln, err := net.Listen("tcp", s.config.Server.ListenAddr)

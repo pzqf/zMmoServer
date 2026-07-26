@@ -10,6 +10,7 @@ import (
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/consistency"
 	"github.com/pzqf/zCommon/crossserver"
+	"github.com/pzqf/zCommon/netutil"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
@@ -70,6 +71,12 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	}
 
 	zLog.Info("Starting TCP service...", zap.String("addr", ts.config.Server.ListenAddr))
+
+	// 端口占用探测（主动拨号，规避 Windows SO_REUSEADDR 静默双绑；占用则记占用方 PID/进程名 + fail-fast）。
+	if err := netutil.EnsurePortFree(ts.config.Server.ListenAddr); err != nil {
+		zLog.Error("TCP 监听端口被占用，拒绝启动", zap.String("addr", ts.config.Server.ListenAddr), zap.Error(err))
+		return err
+	}
 
 	// 创建zNet.TcpServer配置
 	tcpConfig := &zNet.TcpConfig{

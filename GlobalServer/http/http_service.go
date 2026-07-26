@@ -11,6 +11,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/pzqf/zCommon/netutil"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zService"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
@@ -145,6 +146,14 @@ func (s *HttpService) Start() error {
 
 	s.SetState(zService.ServiceStateRunning)
 	zLog.Info("Starting Echo HTTP service...", zap.String("listen_address", s.httpCfg.ListenAddress))
+
+	// 端口占用探测（主动拨号）：Windows 下 net.Listen 带 SO_REUSEADDR，端口被占用时仍会"成功"、
+	// 静默双绑、连接被先前监听者劫持（本项目曾遇 UnrealEditor 抢占 8888 致注册全超时）。占用则记
+	// 占用方(PID/进程名) + fail-fast，方便日后查日志定位。
+	if err := netutil.EnsurePortFree(s.httpCfg.ListenAddress); err != nil {
+		zLog.Error("HTTP 监听端口被占用，拒绝启动", zap.String("listen_address", s.httpCfg.ListenAddress), zap.Error(err))
+		return err
+	}
 
 	// 尝试启动服务器，检查端口是否可用
 	ln, err := net.Listen("tcp", s.httpCfg.ListenAddress)
