@@ -162,6 +162,11 @@ func (s *Service) SetGameServerProxy(gameServerProxy proxy.GameServerProxy) {
 		s.authHandler.SetGameServerProxy(gameServerProxy)
 	}
 
+	// 让连接层在客户端掉线时能通知 GameServer 收尾（F-4）。
+	if s.clientHandler != nil {
+		s.clientHandler.SetGameNotifier(gameServerProxy)
+	}
+
 	zLog.Info("GameServer proxy set successfully")
 }
 

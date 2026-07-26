@@ -1,6 +1,7 @@
 package connection
 
 import (
+	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zNet"
 	"go.uber.org/zap"
@@ -10,6 +11,7 @@ import (
 type ClientHandler struct {
 	connMgr         *ClientConnMgr
 	securityManager SecurityManagerInterface
+	gameNotifier    GameServerNotifier
 }
 
 // SecurityManagerInterface 安全管理器接口
@@ -19,12 +21,22 @@ type SecurityManagerInterface interface {
 	RemoveConnection(ip string)
 }
 
+// GameServerNotifier 向 GameServer 发消息的能力（由 game_server_proxy 实现）。用接口避免 connection 反向 import proxy。
+type GameServerNotifier interface {
+	SendToGameServer(sessionID zNet.SessionIdType, protoId int32, data []byte) error
+}
+
 // NewClientHandler 创建客户端处理器
 func NewClientHandler(connMgr *ClientConnMgr, securityManager SecurityManagerInterface) *ClientHandler {
 	return &ClientHandler{
 		connMgr:         connMgr,
 		securityManager: securityManager,
 	}
+}
+
+// SetGameNotifier 注入 GameServer 通知能力（客户端断线时用来通知 GameServer 收尾，F-4）。
+func (ch *ClientHandler) SetGameNotifier(n GameServerNotifier) {
+	ch.gameNotifier = n
 }
 
 // OnConnect 客户端连接回调
@@ -67,6 +79,18 @@ func (ch *ClientHandler) OnClose(session zNet.Session) {
 	zLog.Info("Client disconnected",
 		zap.Uint64("client_id", uint64(clientID)),
 		zap.String("client_ip", clientIP))
+
+	// 非正常掉线收尾（F-4）：客户端 TCP 断开但没发 LEAVE_GAME 时，主动替它向 GameServer 补一条
+	// LEAVE_GAME（PlayerId=0，GS 侧按本会话 SessionId 反查玩家）。GS 的 LeaveGame 会执行
+	// RunOfflineHooks（清交易/组队悬挂）+ 存盘 + 摘除 actor，避免掉线导致会话悬挂与 actor 泄漏。
+	// 优雅登出已先发过 LEAVE_GAME → 此处补发时玩家已摘除，GS 侧幂等 no-op。
+	// （注：玩家级重连 Reconnect 当前未接任何客户端消息=死代码，故走完整登出而非挂起等重连。）
+	if ch.gameNotifier != nil {
+		if err := ch.gameNotifier.SendToGameServer(clientID, int32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME), nil); err != nil {
+			zLog.Warn("Notify GameServer on client disconnect failed",
+				zap.Uint64("client_id", uint64(clientID)), zap.Error(err))
+		}
+	}
 
 	// 移除连接计数（用真实 IP）
 	ch.securityManager.RemoveConnection(clientIP)
