@@ -606,90 +606,10 @@ func (ps *PlayerService) UpdatePlayerPosition(playerID id.PlayerIdType, mapID in
 	ps.onlineMu.RUnlock()
 }
 
-func (ps *PlayerService) UpdatePlayerGold(playerID id.PlayerIdType, goldDelta int64) error {
-	ps.onlineMu.RLock()
-	p, ok := ps.onlinePlayers[playerID]
-	ps.onlineMu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("player not online")
-	}
-
-	p.mu.Lock()
-	p.Gold += goldDelta
-	if p.Gold < 0 {
-		p.Gold = 0
-	}
-	p.mu.Unlock()
-
-	select {
-	case ps.saveChan <- playerID:
-	default:
-	}
-
-	return nil
-}
-
-func (ps *PlayerService) UpdatePlayerDiamond(playerID id.PlayerIdType, diamondDelta int64) error {
-	ps.onlineMu.RLock()
-	p, ok := ps.onlinePlayers[playerID]
-	ps.onlineMu.RUnlock()
-
-	if !ok {
-		return fmt.Errorf("player not online")
-	}
-
-	p.mu.Lock()
-	p.Diamond += diamondDelta
-	if p.Diamond < 0 {
-		p.Diamond = 0
-	}
-	p.mu.Unlock()
-
-	select {
-	case ps.saveChan <- playerID:
-	default:
-	}
-
-	return nil
-}
-
-func (ps *PlayerService) UpdatePlayerExp(playerID id.PlayerIdType, expDelta int64) (newLevel int, levelUp bool) {
-	ps.onlineMu.RLock()
-	p, ok := ps.onlinePlayers[playerID]
-	ps.onlineMu.RUnlock()
-
-	if !ok {
-		return 0, false
-	}
-
-	p.mu.Lock()
-	p.Exp += expDelta
-	oldLevel := p.Level
-	newLevel = p.Level
-
-	expForNextLevel := int64(newLevel * 100)
-	for p.Exp >= expForNextLevel && expForNextLevel > 0 {
-		newLevel++
-		expForNextLevel = int64(newLevel * 100)
-	}
-
-	if newLevel > oldLevel {
-		p.Level = newLevel
-		levelUp = true
-		zLog.Info("Player leveled up", zap.Int64("player_id", int64(playerID)), zap.Int("old_level", oldLevel), zap.Int("new_level", newLevel))
-	}
-	p.mu.Unlock()
-
-	if levelUp {
-		select {
-		case ps.saveChan <- playerID:
-		default:
-		}
-	}
-
-	return newLevel, levelUp
-}
+// 注：曾有 UpdatePlayerGold/Diamond/Exp 三个方法直接改 OnlinePlayer 缓存并触发存盘，但全仓 0 调用者；
+// 且金币/经验的权威在 Player actor（AddGold/AddExp 走 actor），这三个方法一旦启用即与 actor 形成双写：
+// 缓存被它们改后，下次 syncPlayerDataToService 又用 actor 值覆盖回来 → 静默丢增益。属"接线即爆"的陷阱，
+// 已删除以消除歧义（F-11）。经济数值统一走 actor 侧 API。
 
 // SyncOnlinePlayerData 同步在线玩家数据（从 Actor 层同步到 Service 层）
 func (ps *PlayerService) SyncOnlinePlayerData(playerID id.PlayerIdType, level int, exp, gold, diamond int64) {

@@ -1,5 +1,14 @@
 package di
 
+// ⚠️ 接线警告（审查 F-1）：本工厂装配的若干 DAO/Repository 是**未接线的脚手架**——当前没有任何服务
+// import db/di 或 db/repository，运行时零调用。且其中 PlayerItem/PlayerSkill/PlayerBuff/PlayerQuest/
+// Auction 这几个 DAO 的 SQL 列名与线上真实表**不一致**（例：player_items 真实表仅 player_id/item_id/
+// count/position/is_equipped，而 DAO/model 还写 item_config_id/level/quality/slot_index/bind_type/
+// expire_time/attrs 等不存在的列）。直接启用会在 INSERT/UPDATE 时报 "Unknown column" 而非静默失败。
+// 现状：GameServer 的背包/技能持久化走 services.PlayerService 的原生 SQL（已对齐真实表），刻意绕开这些 DAO。
+// 若要真正启用此 DI/Repository 栈：必须先对齐 DAO SQL 与共享 model 到真实表结构（model 被 MapServer/
+// auction 复用，改动需跨模块评估），不可直接接线。详见 docs/架构隐患审查.md F-1。
+
 import (
 	"github.com/pzqf/zEngine/zInject"
 	"github.com/pzqf/zCommon/db/connector"

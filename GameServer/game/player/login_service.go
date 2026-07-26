@@ -79,6 +79,9 @@ func (ls *LoginService) EnterGame(sessionID string, playerID id.PlayerIdType) er
 		a.SetExp(info.Exp)
 		a.SetGold(info.Gold)
 		a.SetDiamond(info.Diamond)
+		// VipLevel 与金币同型：漏载入则 actor 恒 0，一旦将来有 actor 侧 vip 写者，登出 sync 会把 0
+		// 覆盖回缓存再落库（与曾发生的金币清零同因）。此处补齐，防潜伏零值覆盖（F-10）。
+		a.SetVipLevel(int32(info.VipLevel))
 	}
 	// 从 DB 载入背包/技能到 actor（在 AddPlayer 前，actor 尚未处理消息 → 无并发）。
 	loadPlayerAssets(ls.playerService, p, playerID)

@@ -1,8 +1,6 @@
 package player
 
 import (
-	"fmt"
-
 	"github.com/pzqf/zCommon/game"
 	"github.com/pzqf/zEngine/zLog"
 	"go.uber.org/zap"
@@ -403,33 +401,15 @@ func (p *Player) handleCompleteQuest(msg *PlayerMessage) {
 }
 
 func (p *Player) handleEquipItem(msg *PlayerMessage) {
-	req, ok := msg.Data.(*EquipRequest)
-	if !ok {
+	// 失败安全护栏（F-7）：equipment 目前既不载入也不落库、无 DB 表。原逻辑会把物品从背包移入 equipment，
+	// 一旦登出/重登该物品在背包和装备两处都不存在 = 永久销毁。当前 MsgEquipItem 无客户端接线（潜伏），
+	// 但为防"接线即销毁"，在补齐 equipment 持久化（载入+落库+DB 表）前一律拒绝装备、绝不动背包。
+	// 恢复时删除此护栏、还原下方被注释的原实现即可。
+	if _, ok := msg.Data.(*EquipRequest); !ok {
 		p.sendErrorResponse(msg, "invalid request data")
 		return
 	}
-
-	item, ok := p.inventory.GetItem(req.Slot)
-	if !ok {
-		p.sendErrorResponse(msg, fmt.Sprintf("item not found in slot %d", req.Slot))
-		return
-	}
-
-	old, _ := p.equipment.Equip(game.EquipSlot(req.EquipSlot), item)
-	if old != nil {
-		p.inventory.AddItem(old)
-	}
-
-	p.inventory.RemoveItem(req.Slot, item.GetCount())
-
-	p.syncEquipStats()
-
-	if msg.Callback != nil {
-		msg.Callback <- &EquipResponse{
-			BaseResponse: BaseResponse{Success: true},
-			EquipSlot:    req.EquipSlot,
-		}
-	}
+	p.sendErrorResponse(msg, "装备系统尚未接入持久化，暂不可用")
 }
 
 func (p *Player) handleUnequipItem(msg *PlayerMessage) {
