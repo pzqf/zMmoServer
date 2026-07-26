@@ -238,6 +238,10 @@ func (bs *BaseServer) startGameLoop() {
 	defer ticker.Stop()
 
 	lastTime := time.Now()
+	var reapAccum time.Duration // 实例地图空置回收节流：累计到 reapInterval 才扫一次
+
+	const reapInterval = 5 * time.Second   // 每 5s 扫一次空置实例
+	const reapGrace = 30 * time.Second     // 实例空置满 30s 才回收
 
 	for {
 		select {
@@ -252,6 +256,14 @@ func (bs *BaseServer) startGameLoop() {
 			// （那样会与网络分发 goroutine 并发改动同一批对象 → 数据竞争），改为向每张
 			// 地图各自的 goroutine 投递一帧,由该 goroutine 串行执行 AI/Buff/玩家/技能/事件更新。
 			bs.mapManager.PostTickAll(deltaTime)
+
+			// 空置实例地图回收（分线/战场/跨服）：与 PostTickAll 同 goroutine 串行，避免销毁地图
+			// 与 tick 投递并发。副本不在此列（由显式销毁/自身生命周期管）。建议③。
+			reapAccum += deltaTime
+			if reapAccum >= reapInterval {
+				reapAccum = 0
+				bs.mapManager.ReapEmpty(reapGrace)
+			}
 		}
 	}
 }

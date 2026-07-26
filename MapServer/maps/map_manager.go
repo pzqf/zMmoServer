@@ -3,6 +3,7 @@ package maps
 import (
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -18,8 +19,12 @@ import (
 type MapManager struct {
 	maps                *zMap.TypedMap[id.MapIdType, *Map]
 	dungeonLifecycleMgr *dungeon.DungeonLifecycleManager
-	nextDungeonMapID    int64
+	nextInstanceMapID   int64 // 实例地图（副本/分线/战场/跨服）派生 mapID 的自增源，从 100000 起
 	aoiNotifier         AOINotifier
+
+	// 通用实例地图登记表（建议③）：key=派生 mapID。见 instance_manager.go。
+	instMu    sync.Mutex
+	instances map[id.MapIdType]*MapInstance
 }
 
 // SetAOINotifier 注入 AOI 回程通知器，后续所创建的地图都会套用。
@@ -35,8 +40,9 @@ func (mm *MapManager) SetAOINotifier(n AOINotifier) {
 // NewMapManager 创建新的地图管理器
 func NewMapManager() *MapManager {
 	return &MapManager{
-		maps:             zMap.NewTypedMap[id.MapIdType, *Map](),
-		nextDungeonMapID: 100000,
+		maps:              zMap.NewTypedMap[id.MapIdType, *Map](),
+		nextInstanceMapID: 100000,
+		instances:         make(map[id.MapIdType]*MapInstance),
 	}
 }
 
@@ -360,13 +366,10 @@ func (mm *MapManager) GetAllMapIDs() []int32 {
 }
 
 func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.PlayerIdType) (*Map, *dungeon.DungeonInstance, error) {
-	dungeonMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
-
-	dungeonMap := NewMap(dungeonMapID, int32(dungeonID), fmt.Sprintf("Dungeon_%d", dungeonID), 500, 500)
+	// 地图级生命周期统一走通用实例路径（建议③）；副本的玩法生命周期仍由 dungeonLifecycleMgr 管。
+	dungeonMap, dungeonMapID := mm.CreateInstance(InstanceKindDungeon, id.MapIdType(dungeonID), int32(dungeonID),
+		fmt.Sprintf("Dungeon_%d", dungeonID), 500, 500)
 	dungeonMap.SetIsDungeon(true)
-	dungeonMap.SetMapMode(MapModeSingleServer)
-
-	mm.maps.Store(dungeonMapID, dungeonMap)
 
 	if mm.dungeonLifecycleMgr == nil {
 		dm := dungeon.NewDungeonManager()
@@ -375,7 +378,7 @@ func (mm *MapManager) CreateDungeonMap(dungeonID id.DungeonIdType, players []id.
 
 	instance, err := mm.dungeonLifecycleMgr.CreateAndStartDungeon(dungeonID, players, dungeonMapID)
 	if err != nil {
-		mm.maps.Delete(dungeonMapID)
+		mm.DestroyInstance(dungeonMapID)
 		return nil, nil, fmt.Errorf("create dungeon lifecycle: %w", err)
 	}
 
@@ -406,11 +409,7 @@ func (mm *MapManager) DestroyDungeonMap(instanceID id.InstanceIdType) error {
 		return fmt.Errorf("destroy dungeon: %w", err)
 	}
 
-	m, exists := mm.maps.Load(mapID)
-	if exists {
-		m.Cleanup()
-		mm.maps.Delete(mapID)
-	}
+	mm.DestroyInstance(mapID) // 统一走通用实例销毁（Cleanup + 摘除 + 注销）
 
 	zLog.Info("Dungeon map destroyed",
 		zap.Int32("map_id", int32(mapID)),
@@ -420,7 +419,7 @@ func (mm *MapManager) DestroyDungeonMap(instanceID id.InstanceIdType) error {
 }
 
 func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width, height float32, mode MapMode, serverGroupID int32) *Map {
-	crossMapID := id.MapIdType(atomic.AddInt64(&mm.nextDungeonMapID, 1))
+	crossMapID := id.MapIdType(atomic.AddInt64(&mm.nextInstanceMapID, 1))
 
 	crossMap := NewMap(crossMapID, mapConfigID, name, width, height)
 	crossMap.SetMapMode(mode)
