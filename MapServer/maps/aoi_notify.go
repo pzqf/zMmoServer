@@ -1,6 +1,7 @@
 package maps
 
 import (
+	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zMmoServer/MapServer/common"
 )
 
@@ -10,8 +11,9 @@ import (
 type AOINotifier interface {
 	// NotifyAOI 推送一条视野事件。eventType 为 crossserver.MsgInternalAOIEnter/Leave/Move。
 	NotifyAOI(watcherPlayerID int64, mapID int32, eventType uint32, targetID int64, pos common.Vector3)
-	// NotifyExpGrant 把战斗获得的经验回写给持有该玩家的 GameServer 持久化 actor（crossserver 507，F-2）。
-	NotifyExpGrant(playerID int64, exp int64)
+	// NotifyAttrGrant 把战斗/结算产生的持久变更（经验/金币…）统一回写给持有该玩家的 GameServer 持久化
+	// actor（crossserver 508，realm 建议④，泛化取代原 507 单一经验回写）。
+	NotifyAttrGrant(playerID int64, changes []crossserver.AttrChange)
 }
 
 // SetAOINotifier 注入 AOI 回程通知器。

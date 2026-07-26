@@ -172,10 +172,11 @@ func (ts *TCPService) notifyItemGrant(playerID int64, itemID, count int32) {
 	}
 }
 
-// NotifyExpGrant 把战斗获得的经验回写给持有该玩家的 GameServer 持久化 actor（crossserver.MsgInternalExpGrant=507，
-// 修 F-2）。与 notifyItemGrant 同构：每次调用取唯一 requestID，GameServer 侧幂等去重防同一次重复投递被累加两次。
-func (ts *TCPService) NotifyExpGrant(playerID int64, exp int64) {
-	if ts.playerGameServerManager == nil || exp == 0 {
+// NotifyAttrGrant 把战斗/结算产生的持久变更（经验/金币…）统一回写给持有该玩家的 GameServer 持久化 actor
+// （crossserver.MsgInternalAttrGrant=508，realm 建议④，泛化取代原 507 单一经验回写）。与 notifyItemGrant 同构：
+// 每次调用取唯一 requestID，GameServer 侧幂等去重，防同一次结算重复投递被累加两次。
+func (ts *TCPService) NotifyAttrGrant(playerID int64, changes []crossserver.AttrChange) {
+	if ts.playerGameServerManager == nil || len(changes) == 0 {
 		return
 	}
 	serverID, ok := ts.playerGameServerManager.GetGameServerID(id.PlayerIdType(playerID))
@@ -186,24 +187,34 @@ func (ts *TCPService) NotifyExpGrant(playerID int64, exp int64) {
 	if !ok {
 		return
 	}
-	innerData, err := proto.Marshal(&protocol.ExpGrantNotify{
-		PlayerId: playerID,
-		Exp:      exp,
-	})
-	if err != nil {
-		zLog.Error("Failed to marshal ExpGrantNotify", zap.Error(err))
+	pbChanges := make([]*protocol.AttrChange, 0, len(changes))
+	for _, c := range changes {
+		if c.Delta == 0 {
+			continue
+		}
+		pbChanges = append(pbChanges, &protocol.AttrChange{Kind: c.Kind, Id: c.ID, Delta: c.Delta})
+	}
+	if len(pbChanges) == 0 {
 		return
 	}
-	base := crossserver.BuildBaseMessage(crossserver.MsgInternalExpGrant, uint64(playerID),
+	innerData, err := proto.Marshal(&protocol.AttrGrantNotify{
+		PlayerId: playerID,
+		Changes:  pbChanges,
+	})
+	if err != nil {
+		zLog.Error("Failed to marshal AttrGrantNotify", zap.Error(err))
+		return
+	}
+	base := crossserver.BuildBaseMessage(crossserver.MsgInternalAttrGrant, uint64(playerID),
 		uint32(ts.config.Server.ServerID), 0, innerData)
 	meta := crossserver.NewRequestMeta(crossserver.ServiceTypeMap, int32(ts.config.Server.ServerID))
 	enveloped, err := crossserver.PackMessage(meta, crossserver.ServiceTypeMap, crossserver.ServiceTypeGame,
 		uint32(ts.config.Server.ServerID), serverID, base)
 	if err != nil {
-		zLog.Error("Failed to pack ExpGrantNotify", zap.Error(err))
+		zLog.Error("Failed to pack AttrGrantNotify", zap.Error(err))
 		return
 	}
-	if err := session.Send(zNet.ProtoIdType(crossserver.MsgInternalExpGrant), enveloped); err != nil {
-		zLog.Warn("Failed to send ExpGrantNotify to GameServer", zap.Error(err))
+	if err := session.Send(zNet.ProtoIdType(crossserver.MsgInternalAttrGrant), enveloped); err != nil {
+		zLog.Warn("Failed to send AttrGrantNotify to GameServer", zap.Error(err))
 	}
 }

@@ -2,6 +2,7 @@ package player
 
 import (
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/game"
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zLog"
@@ -71,26 +72,43 @@ func (p *Player) handleItemGrant(msg *PlayerMessage) {
 	p.pushToClient(int32(protocol.ItemMsgId_MSG_ITEM_PICKUP_NOTIFY), data)
 }
 
-// handleExpGrant 把 MapServer 战斗回写的经验加到持久化 actor（修 F-2）。在 actor 单写者 goroutine 内执行，
-// 升级公式 expToNext=1000*level 与 MapServer 战斗对象一致（object.Player.LevelUp）。经验/等级随登出/周期存盘落库。
-func (p *Player) handleExpGrant(msg *PlayerMessage) {
-	req, ok := msg.Data.(*ExpGrantRequest)
-	if !ok || req.Exp == 0 {
+// handleAttrGrant 把 MapServer 战斗/结算回写的持久变更（经验/金币/钻石）加到持久化 actor（realm ④，泛化 F-2）。
+// 在 actor 单写者 goroutine 内执行——attrs 原子、AddGold/ReduceGold 有 CAS，无并发问题。持久变更随登出/周期存盘落库。
+func (p *Player) handleAttrGrant(msg *PlayerMessage) {
+	req, ok := msg.Data.(*AttrGrantRequest)
+	if !ok || len(req.Changes) == 0 {
 		return
 	}
 	a := p.GetAttrs()
 	if a == nil {
 		return
 	}
-	a.AddExp(req.Exp)
-	for {
-		level := a.GetLevel()
-		need := int64(1000) * int64(level)
-		if need <= 0 || a.GetExp() < need {
-			break
+	for _, c := range req.Changes {
+		switch c.Kind {
+		case crossserver.AttrKindExp:
+			if c.Delta <= 0 {
+				continue
+			}
+			a.AddExp(c.Delta)
+			// 升级公式 expToNext=1000*level，与 MapServer 战斗对象一致（object.Player.LevelUp）。
+			for {
+				level := a.GetLevel()
+				need := int64(1000) * int64(level)
+				if need <= 0 || a.GetExp() < need {
+					break
+				}
+				a.SetExp(a.GetExp() - need)
+				a.SetLevel(level + 1)
+			}
+		case crossserver.AttrKindGold:
+			if c.Delta >= 0 {
+				p.AddGold(c.Delta)
+			} else {
+				p.ReduceGold(-c.Delta) // 结算类通常为正；负仅防御，不足由 CAS 拒绝
+			}
+		case crossserver.AttrKindDiamond:
+			a.SetDiamond(a.GetDiamond() + c.Delta)
 		}
-		a.SetExp(a.GetExp() - need)
-		a.SetLevel(level + 1)
 	}
 }
 

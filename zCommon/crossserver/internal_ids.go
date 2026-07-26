@@ -21,5 +21,21 @@ const (
 	MsgInternalAOIDeath uint32 = 504
 	MsgInternalAOIBuff  uint32 = 505 // 视野内实体 buff 增删（EntityBuffNotify）
 	MsgInternalItemGrant uint32 = 506 // 拾取授权：MapServer 判定拾取后通知 GameServer 发物品入背包（ItemGrantNotify）
-	MsgInternalExpGrant  uint32 = 507 // 战斗经验回写：MapServer 战斗给经验后通知 GameServer 把经验加到持久化 actor（ExpGrantNotify，F-2）
+	MsgInternalAttrGrant uint32 = 508 // 战斗/结算属性回写：MapServer 把经验/金币等**持久变更**统一经一条幂等消息回写到
+	// GameServer 持久化 actor（AttrGrantNotify，realm 建议④，泛化并取代原 507 ExpGrant）。507 已退役、号不复用。
 )
+
+// AttrKind AttrGrantNotify 里单条变更的种类（MapServer→GameServer 双方须一致）。realm 建议④。
+const (
+	AttrKindExp     int32 = 1 // 经验（Delta=经验值；actor 侧 AddExp + 升级）
+	AttrKindGold    int32 = 2 // 金币（Delta 可正可负；不足由 actor 侧 CAS 拒绝）
+	AttrKindDiamond int32 = 3 // 钻石
+)
+
+// AttrChange 一条持久属性变更（回写载荷元素）。定义在 crossserver 作中立类型，供 MapServer(产生侧)与
+// GameServer(应用侧)共用，避免 maps↔net 互相 import。Kind 见 AttrKind*。
+type AttrChange struct {
+	Kind  int32
+	ID    int32
+	Delta int64
+}

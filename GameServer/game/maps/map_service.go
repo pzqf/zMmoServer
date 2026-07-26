@@ -748,19 +748,23 @@ func (ms *MapService) HandleItemGrant(requestID uint64, playerID int64, itemID, 
 	_ = ms.playerManager.RouteMessage(pid, player.NewPlayerMessage(pid, player.SourceMapServer, player.MsgItemGrant, req))
 }
 
-// HandleExpGrant 处理 MapServer 战斗经验回写（crossserver 507，F-2）：把经验加到持久化 actor（经验/等级权威在玩家侧）。
-// requestID 幂等去重（对齐 506/407），防同一次经验重复投递被累加两次。
-func (ms *MapService) HandleExpGrant(requestID uint64, playerID int64, exp int64) {
-	if ms.playerManager == nil {
+// HandleAttrGrant 处理 MapServer 战斗/结算属性回写（crossserver 508，realm ④）：把经验/金币等持久变更加到
+// 持久化 actor（持久权威在玩家侧）。requestID 幂等去重（对齐 506/407），防同一次结算重复投递被累加两次。
+func (ms *MapService) HandleAttrGrant(requestID uint64, playerID int64, changes []*protocol.AttrChange) {
+	if ms.playerManager == nil || len(changes) == 0 {
 		return
 	}
 	if ms.inbox != nil && requestID != 0 && !ms.inbox.TryAccept(requestID) {
-		zLog.Warn("Duplicate exp grant ignored", zap.Uint64("request_id", requestID), zap.Int64("player_id", playerID))
+		zLog.Warn("Duplicate attr grant ignored", zap.Uint64("request_id", requestID), zap.Int64("player_id", playerID))
 		return
 	}
 	pid := id.PlayerIdType(playerID)
-	req := &player.ExpGrantRequest{Exp: exp}
-	_ = ms.playerManager.RouteMessage(pid, player.NewPlayerMessage(pid, player.SourceMapServer, player.MsgExpGrant, req))
+	items := make([]player.AttrChange, 0, len(changes))
+	for _, c := range changes {
+		items = append(items, player.AttrChange{Kind: c.Kind, ID: c.Id, Delta: c.Delta})
+	}
+	req := &player.AttrGrantRequest{Changes: items}
+	_ = ms.playerManager.RouteMessage(pid, player.NewPlayerMessage(pid, player.SourceMapServer, player.MsgAttrGrant, req))
 }
 
 // BattleReward 战斗奖励

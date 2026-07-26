@@ -88,11 +88,18 @@ message ItemGrantNotify {
   int32 count = 3;
 }
 
-// MapServer → GameServer（跨服 push，crossserver 507）：把战斗获得的经验回写给持有该玩家的
-// GameServer（持久化权威 actor）。修 F-2：此前战斗经验只加在 MapServer 对象上、跨登录全丢。
-message ExpGrantNotify {
+// MapServer → GameServer（跨服 push，crossserver 508，realm 建议④）：把战斗/结算产生的**持久变更**
+// （经验/金币/钻石…）统一经一条幂等消息回写给持有该玩家的 GameServer（持久化权威 actor）。
+// 泛化并取代原 507 ExpGrantNotify（F-2 的单一经验回写是它的特例）。kind 见 crossserver.AttrKind*。
+message AttrChange {
+  int32 kind = 1;  // crossserver.AttrKindExp/Gold/Diamond
+  int32 id = 2;    // 预留（如币种/子类型），当前 0
+  int64 delta = 3; // 变更量（可负）
+}
+
+message AttrGrantNotify {
   int64 player_id = 1;
-  int64 exp = 2;
+  repeated AttrChange changes = 2;
 }
 
 // —— 仓库 ——

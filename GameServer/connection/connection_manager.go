@@ -42,9 +42,9 @@ type MapResponseHandler interface {
 	// HandleItemGrant 处理 MapServer 拾取授权回推（crossserver.MsgInternalItemGrant）：把物品发进玩家背包。
 	// requestID 用于幂等去重（对齐 attack 407 的 inbox.TryAccept），防重复投递重复发物品。
 	HandleItemGrant(requestID uint64, playerID int64, itemID, count int32)
-	// HandleExpGrant 处理 MapServer 战斗经验回写（crossserver.MsgInternalExpGrant，F-2）：把经验加到持久化 actor。
-	// requestID 幂等去重，防同一次经验重复投递被累加两次。
-	HandleExpGrant(requestID uint64, playerID int64, exp int64)
+	// HandleAttrGrant 处理 MapServer 战斗/结算属性回写（crossserver.MsgInternalAttrGrant，realm ④）：把经验/金币等
+	// 持久变更加到持久化 actor。requestID 幂等去重，防同一次结算重复投递被累加两次。泛化取代原 507 ExpGrant。
+	HandleAttrGrant(requestID uint64, playerID int64, changes []*protocol.AttrChange)
 }
 
 type ConnectionManager struct {
@@ -228,8 +228,8 @@ func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet 
 		cm.handleAOINotify(baseMsg)
 	case crossserver.MsgInternalItemGrant:
 		cm.handleItemGrant(meta, baseMsg)
-	case crossserver.MsgInternalExpGrant:
-		cm.handleExpGrant(meta, baseMsg)
+	case crossserver.MsgInternalAttrGrant:
+		cm.handleAttrGrant(meta, baseMsg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
 	}
@@ -324,17 +324,17 @@ func (cm *ConnectionManager) handleItemGrant(meta crossserver.Meta, baseMsg *pro
 	cm.mapResponseHandler.HandleItemGrant(meta.RequestID, n.PlayerId, n.ItemId, n.Count)
 }
 
-// handleExpGrant 解 MapServer 战斗经验回写（crossserver.MsgInternalExpGrant，F-2），加到持久化 actor。
-func (cm *ConnectionManager) handleExpGrant(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+// handleAttrGrant 解 MapServer 战斗/结算属性回写（crossserver.MsgInternalAttrGrant，realm ④），加到持久化 actor。
+func (cm *ConnectionManager) handleAttrGrant(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
 	if cm.mapResponseHandler == nil {
 		return
 	}
-	var n protocol.ExpGrantNotify
+	var n protocol.AttrGrantNotify
 	if err := proto.Unmarshal(baseMsg.Data, &n); err != nil {
-		zLog.Error("Failed to unmarshal ExpGrantNotify", zap.Error(err))
+		zLog.Error("Failed to unmarshal AttrGrantNotify", zap.Error(err))
 		return
 	}
-	cm.mapResponseHandler.HandleExpGrant(meta.RequestID, n.PlayerId, n.Exp)
+	cm.mapResponseHandler.HandleAttrGrant(meta.RequestID, n.PlayerId, n.Changes)
 }
 
 func (cm *ConnectionManager) handleMapEnterResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
