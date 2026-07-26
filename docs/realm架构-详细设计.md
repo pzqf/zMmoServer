@@ -52,6 +52,9 @@
   - **推荐**：层分配器放 **MapServer 侧**（它掌握各层实时人数）。GameServer 按 `logicalMapID` 路由到该 MapServer，MapServer 内部分配层并把最终 `layerMapID` 回传给 GameServer（玩家的当前 map 归属记 `layerMapID`）。
   - AOI/广播本就 per-`*Map`，无需改——分到不同层的玩家自然互不可见。
 
+  > ⚠ **实现补正（②-b，已修）**：上面"AOI 本就 per-Map 无需改"只对 **MapServer** 成立。实际 **GameServer 曾另藏一套自建客户端 AOI**（`game/maps/map.go`），按 **`logicalMapID`（如 1001）** 键值、**不感知分线**——它才是驱动客户端 `MSG_MAP_ENTER_VIEW` 的源头，导致**不同层玩家互相串视野**（战斗走 MapServer 按层隔离故不漏，呈"能看见打不到"的割裂）。
+  > **已按单一权威修复**：删除 GameServer 自建客户端 AOI，客户端视野统一由 **MapServer 分层 AOI** 经 `crossserver 500-505 → map_service.HandleAOINotify` 推送（该路径本就覆盖 enter/leave/move/attr/death/buff 全 6 类）。GameServer 侧仅留网格记账、无 listener 故不产生客户端事件。真机双客户端验：同图 A 见 B / 分层 A 不见 B（0 视野行）/ 且消除了原本每事件重复投递。提交 `aa97ebf`。
+
 ### 边界与坑
 - **同队/好友要能同层**：分配策略必须支持"亲和"，否则组队进热图被拆散。至少支持"跟随队长层"。
 - **跨层可见性**：世界聊天（本服扇出）**跨层可见**是对的（世界频道是"本服世界"）；但 AOI/喊话/附近只在本层。要想清楚每种广播的作用域（全服 / 本层 / AOI）。
@@ -63,7 +66,7 @@
 2. `LayerSet` + 层分配器（MapServer 侧），进图路由改为"选层"。
 3. 空层延迟回收（复用 `Cleanup`）。
 4. 亲和分配（跟随队长层）。
-5. 验证：确定性单测（模拟 N 人进图→断言层数按 cap 增长、每层 ≤ hardCap、空层回收）；真机多客户端进同一热图→分到不同层、AOI 互不可见、组队同层。
+5. 验证：确定性单测（模拟 N 人进图→断言层数按 cap 增长、每层 ≤ hardCap、空层回收）；真机多客户端进同一热图→分到不同层、AOI 互不可见、组队同层。✅ 已真机验收：双客户端同图 A 见 B、分层 A 不见 B（客户端 `[AOI]` 视野观测，见 ②-b 实现补正）。
 
 ---
 
