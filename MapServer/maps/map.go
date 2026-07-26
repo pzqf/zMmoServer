@@ -193,10 +193,6 @@ func (m *Map) GetHeight() float32 {
 	return m.height
 }
 
-func (m *Map) GetAOIManager() *aoi.GridManager {
-	return m.aoiManager
-}
-
 func (m *Map) SetMaxPlayers(maxPlayers int32) {}
 
 func (m *Map) SetDescription(description string) {}
@@ -357,14 +353,6 @@ func (m *Map) GetObjectsInRange(position common.Vector3, radius float32) []commo
 
 func (m *Map) GetPlayersInRange(position common.Vector3, radius float32) []common.IGameObject {
 	return m.getObjectsInRangeByType(position, radius, common.GameObjectTypePlayer)
-}
-
-func (m *Map) GetMonstersInRange(position common.Vector3, radius float32) []common.IGameObject {
-	return m.getObjectsInRangeByType(position, radius, common.GameObjectTypeMonster)
-}
-
-func (m *Map) GetNPCsInRange(position common.Vector3, radius float32) []common.IGameObject {
-	return m.getObjectsInRangeByType(position, radius, common.GameObjectTypeNPC)
 }
 
 func (m *Map) getObjectsInRangeByType(position common.Vector3, radius float32, objType common.GameObjectType) []common.IGameObject {

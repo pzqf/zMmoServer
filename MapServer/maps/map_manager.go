@@ -169,20 +169,6 @@ func (mm *MapManager) GetMap(mapID id.MapIdType) *Map {
 	return m
 }
 
-// UpdateAllMapsEvents 更新所有地图的事件
-func (mm *MapManager) UpdateAllMapsEvents() {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		// 处理地图事件
-		m.UpdateEvents()
-	}
-}
-
 // HandlePlayerEnterMap 处理玩家进入地图
 func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z float32) error {
 	var m *Map
@@ -256,91 +242,18 @@ func (mm *MapManager) HandlePlayerAttack(playerID, objectID, mapID, targetID int
 	return m.AttackTarget(id.PlayerIdType(playerID), id.ObjectIdType(objectID), id.ObjectIdType(targetID))
 }
 
-// UpdateAllMapsSkills 更新所有地图的技能
-func (mm *MapManager) UpdateAllMapsSkills() {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		m.UpdateSkills()
-	}
-}
-
 // PostTickAll 向每张地图的单写者 goroutine 投递一帧更新（MAP-2）。
 // 取代此前由游戏主循环直接调用各 UpdateAllMaps* 的做法——那样帧更新跑在主循环 goroutine 上，
 // 与网络分发 goroutine 并发改动同一批对象，构成数据竞争。改为投递到每张地图各自的 goroutine，
 // 使帧更新与网络命令在该地图内严格串行。队列满则合帧丢弃，见 map_actor.go。
+// 历史教训：旧的 UpdateAllMaps*（已删）在主循环 goroutine 直接跑 AIManager.Update，会与
+// AddObject 形成 m.mu↔am.mu 锁序反转死锁——故绝不能绕过 postTick 从外部 goroutine 直接驱动
+// 地图帧更新；一切帧更新必须经此投递到各地图自己的 actor goroutine。
 func (mm *MapManager) PostTickAll(deltaTime time.Duration) {
 	mm.maps.Range(func(_ id.MapIdType, m *Map) bool {
 		m.postTick(deltaTime)
 		return true
 	})
-}
-
-// ⚠ 以下 UpdateAllMaps{AI,Buffs,Players,Skills,Events} 均为 MAP-2 前的旧路径，现已无任何调用方
-// （游戏主循环只用 PostTickAll）。**切勿把它们重新接回主循环**：它们在主循环 goroutine 上直接跑
-// AIManager.Update，会与 AddObject 形成 m.mu↔am.mu 的锁序反转——目前二者都只在地图 actor
-// goroutine 上串行执行才安全，一旦从主循环并发调用即死锁。保留仅为兼容旧调用签名。
-//
-// UpdateAllMapsAI 更新所有地图的AI（DEAD，勿用，见上）
-func (mm *MapManager) UpdateAllMapsAI(deltaTime time.Duration) {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		if m.aiManager != nil {
-			m.aiManager.Update(deltaTime)
-		}
-	}
-}
-
-// UpdateAllMapsBuffs 更新所有地图的Buff
-func (mm *MapManager) UpdateAllMapsBuffs(deltaTime time.Duration) {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		if m.buffManager != nil {
-			m.buffManager.Update(deltaTime)
-		}
-	}
-}
-
-// UpdateAllMapsPlayers 更新所有地图的玩家状态
-func (mm *MapManager) UpdateAllMapsPlayers() {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		m.UpdatePlayers()
-	}
-}
-
-// UpdateAllMapsDungeons 更新所有地图的副本
-func (mm *MapManager) UpdateAllMapsDungeons(deltaTime time.Duration) {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		maps = append(maps, value)
-		return true
-	})
-
-	for _, m := range maps {
-		if m.dungeonManager != nil {
-			m.dungeonManager.Update(deltaTime)
-		}
-	}
 }
 
 // RemoveMap 移除地图
@@ -485,24 +398,5 @@ func (mm *MapManager) UpdateDungeonLifecycles(deltaTime time.Duration) {
 	}
 }
 
-func (mm *MapManager) GetCrossServerMaps() []*Map {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		if value.IsCrossServer() {
-			maps = append(maps, value)
-		}
-		return true
-	})
-	return maps
-}
-
-func (mm *MapManager) GetDungeonMaps() []*Map {
-	maps := make([]*Map, 0)
-	mm.maps.Range(func(key id.MapIdType, value *Map) bool {
-		if value.IsDungeon() {
-			maps = append(maps, value)
-		}
-		return true
-	})
-	return maps
-}
+// GetCrossServerMaps / GetDungeonMaps（原按 kind 收集的 getter）已删除：全仓零调用者。
+// 需要按 kind 枚举实例时走 InstanceManager.GetInstancesByLogical(kind)（③ 的统一实例视图）。

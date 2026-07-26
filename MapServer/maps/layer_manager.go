@@ -50,11 +50,6 @@ func (mm *MapManager) EnableLayering() *LayerManager {
 	return mm.layerMgr
 }
 
-// Layering 返回分线分配器（未启用则 nil）。
-func (mm *MapManager) Layering() *LayerManager {
-	return mm.layerMgr
-}
-
 // resolveMap 把"客户端传的逻辑 mapID"解析到玩家实际所在地图：分线玩家在派生层图，普通玩家在逻辑图。
 // 进图后各 op（移动/攻击/拾取/离开）都经它定位，使分线对 GameServer 路由透明（仍按逻辑 mapID 路由到本 MapServer）。
 func (mm *MapManager) resolveMap(playerID int64, mapID int64) *Map {
