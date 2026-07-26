@@ -1,9 +1,10 @@
-# Realm 架构 — 落地详细设计（建议 ②③④⑤）
+# Realm 架构 — 落地详细设计（建议 ①②③④⑤）
 
-> 本文是 [realm架构与跨服设计.md](realm架构与跨服设计.md) §4 建议 ②③④⑤ 的**可执行深化**：把方向落成机制、数据结构、协议、
-> 流程与分步任务，并锚定到现有代码。**本文只做设计，不含实现**；每项动手时应再出实现方案并配测试/E2E 背书。
+> 本文是 [realm架构与跨服设计.md](realm架构与跨服设计.md) §4 realm 建议的**可执行深化**：把方向落成机制、数据结构、协议、
+> 流程与分步任务，并锚定到现有代码。原为 ②③④⑤ 的设计，现已随各项落地补入 ① 无缝交接章节与**实现状态总览**（见下）；
+> 各章末的"分步任务/验证"标注了真实落地情况。细节仍以代码 + 测试/E2E 为准。
 >
-> 覆盖：② 热点图动态分线（Layering）｜③ 实例生命周期｜④ 权威分层 + 事件回流｜⑤ 扩展=加服（开新服流程）
+> 覆盖：① 无缝地图交接｜② 热点图动态分线（Layering）｜③ 实例生命周期｜④ 权威分层 + 事件回流｜⑤ 扩展=加服（开新服流程）
 >
 > 关键前提（现状核准）：
 > - `MapManager.maps` 是 `TypedMap[MapIdType, *Map]`，**一个 mapID 一个 `*Map` 实例**；`CreateMap/GetMap/Cleanup` 均按 mapID。
@@ -11,6 +12,57 @@
 > - **实例地图基础设施已存在**：`CreateDungeonMap(dungeonID, players)→(*Map,*DungeonInstance)`、`dungeonLifecycleMgr`、
 >   `DestroyDungeonMap(instanceID)`、派生 `dungeonMapID`、`instance.InstanceID`。③④ 的很多东西是"泛化它"。
 > - 回流通道已成形：crossserver `500-505` AOI/状态广播、`506 ItemGrant`、`507 ExpGrant`。
+
+---
+
+## 实现状态总览
+
+realm 各建议的落地情况（代码位置 + 测试/E2E 背书）。教学骨架以"能跑通的最小闭环 + 真实背书"为完成标准。
+
+| 建议 | 机制 | 主要代码 | 测试/背书 | 状态 |
+|------|------|----------|-----------|------|
+| ① | 无缝地图交接（仅注册的无缝邻居图对才走，否则回落普通 enter/leave） | `maps/seamless.go` | `seamless_test`（含并发交接守护） | ✅ 服务端机制已落地 |
+| ② | 热点图动态分线（softCap/hardCap 分摊 + resolveMap 透明路由 + 在途预留额度） | `maps/layer_manager.go`、`maps/map_manager.go` | `layer_manager_test`/`layer_enter_test`（含并发不击穿 cap） | ✅ 已落地 |
+| ②-b | 客户端视野单一权威（删 GameServer 冗余自建 AOI，改由 MapServer 分层 AOI 经 HandleAOINotify 推） | `GameServer/game/maps/*`、`.../player_aoi_handler.go` | 真机双客户端（同图见 / 分层不见） | ✅ 已修并真机验收 |
+| ③ | 实例生命周期统一（InstanceKind + CreateInstance/DestroyInstance/ReapEmpty，副本/分线/战场/跨服同构） | `maps/instance_manager.go` | `crossserver_instance_test`、`map_cleanup_test` | ✅ 已落地 |
+| ④ | 权威分层 + 事件回流（AttrGrant 508 幂等回流，MapServer 不落库） | `zCommon/crossserver`、GameServer grant 处理 | 真机战斗击杀 → 家服落库 | ✅ 已落地 |
+| ⑤ | 扩展=加服（newrealm 建隔离库 + runbook） | `GameServer/cmd/newrealm` | 真机建 GameDB_000102 两库隔离 | ✅ 已落地 |
+| §5.1 | 跨服临时实例（Kind=CrossServer，依赖 ③④） | `maps/map_manager.go` CreateCrossServerMap | `crossserver_instance_test` | ✅ 实例层已备（物理跨服路由待匹配系统） |
+
+> 并发正确性：① 无缝交接的字段读写经 `Map.Do` 收敛到地图 actor（MAP-2 边界）；② 分线用"在途预留额度"消除
+> AllocateLayer 的 TOCTOU 与空层回收竞态。`-race` 守护由 CI/t1 race runner 承担（本机 Windows 无 gcc 跑不了 -race）。
+
+---
+
+## ① 无缝地图交接（realm 建议①）
+
+> 设计方向与完整机制说明见 [realm架构与跨服设计.md](realm架构与跨服设计.md) §4 建议①；此处记落地要点与代码锚点。
+
+### 目标
+同一块连续大陆切成相邻分区；玩家走过区界时把他**透明交接**给拥有下一分区的 `*Map`，实时态（位置/血量/等级）随身
+带过去、客户端不断线、无 loading——"单服却世界很大"的关键。**纯单服内机制**（无缝邻居通常同在一台 MapServer）。
+
+### ★关键约束（用户定）
+**只有设计成无缝的图对才走无缝流程。** 若目标不是源的无缝邻居（跨大陆/进副本/进城），就**不走无缝交接、回落普通
+enter/leave**（有 loading）。无缝性是地图（对）的属性，靠 `RegisterSeamlessLink` 登记；未登记链路的跨图一律走普通流程。
+
+### 落地（`maps/seamless.go`）
+- `RegisterSeamlessLink(a,b)`（双向）登记相邻无缝分区；`IsSeamlessNeighbor(from,to)` 判定。
+- `HandleSeamlessHandoff(playerID, from, to, x,y,z) (handed, err)`：
+  - to 非 from 的无缝邻居 → 返回 `(false, nil)`：调用方改走普通 enter/leave（"非无缝不走无缝流程"落点）。
+  - 是无缝邻居 → MapServer 内部交接：**在源图 actor 上读实时态快照 → 先加入目标图（成功后再摘源图=回滚安全）
+    → 在目标图 actor 上恢复实时态 → 更新 `playerMap`（②-b 实际所在图记录）**。不重登、位置连续。
+- **MAP-2 边界**：对 `*object.Player` 字段的读/写都经 `Map.Do` 收敛到各自地图的单写者 goroutine，绝不在网络
+  goroutine 上裸读写（否则与目标图 tick 并发改同一对象=数据竞争）。
+
+### 验证
+`seamless_test`：邻居交接带状态迁移（HP=37/Lv5/新坐标）/ 非邻居 `handed=false` 回落 / 链路双向 /
+`TestSeamless_ConcurrentHandoff_Race`（并发交接 + tick 并发的竞争守护，-race 由 CI/t1 跑）。
+
+### 剩余（非本机制）
+- 移动到区界的**边界检测**触发（现由直接 API 驱动，接 move 边检即自动）。
+- 客户端**平滑过场**（无 loading 表现）——客户端侧。
+- 跨机无缝分区需跨服迁移（走 §5 的 MigrationManager 雏形）。
 
 ---
 
@@ -222,5 +274,6 @@ MapInstance {
 - **② 依赖 ③**（层复用实例设施）。
 - **④ 独立**，且 F-2 已起头，可并行推进（泛化 grant + 幂等 + 崩溃安全可选）。
 - **⑤ 独立**，纯运营流程，随时可脚本化。
+- **① 无缝交接依赖 ②**（交接会更新 ② 的 `playerMap` 实际所在图记录）+ 须守 MAP-2 actor 边界；性价比路线上排在 ② 之后（见方向文档 §7）。
 
 > 每项都以"能跑通的最小闭环 + 测试/真机 E2E"为完成标准，不追求生产级完整度——教学骨架的价值是把 realm 架构讲清楚、且每步都有真实背书。
