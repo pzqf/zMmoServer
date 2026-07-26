@@ -2,6 +2,9 @@ package client
 
 import (
 	"fmt"
+	"net"
+	"strconv"
+	"time"
 
 	"github.com/pzqf/zCommon/protocol"
 	"github.com/pzqf/zEngine/zNet"
@@ -33,25 +36,19 @@ func NewClient(globalServerAddr string) *Client {
 }
 
 func (c *Client) Connect() error {
-	// 解析gatewayAddr，提取出地址和端口
-	addr := c.gatewayAddr
-	port := 8080
-	// 简单解析，假设格式为 "address:port"
-	if len(addr) > 0 {
-		for i := len(addr) - 1; i >= 0; i-- {
-			if addr[i] == ':' {
-				portStr := addr[i+1:]
-				addr = addr[:i]
-				if p, err := fmt.Sscanf(portStr, "%d", &port); err == nil && p == 1 {
-					break
-				}
-			}
-		}
+	// 解析 gatewayAddr（"host:port"）——解析失败直接返回 error，不静默回退到错误默认端口。
+	host, portStr, err := net.SplitHostPort(c.gatewayAddr)
+	if err != nil {
+		return fmt.Errorf("invalid gateway address %q: %v", c.gatewayAddr, err)
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid gateway port %q: %v", portStr, err)
 	}
 
 	// 创建TcpClientConfig
 	config := &zNet.TcpClientConfig{
-		ServerAddr:        addr,
+		ServerAddr:        host,
 		ServerPort:        port,
 		HeartbeatDuration: 30,
 		MaxPacketDataSize: 1024 * 1024,
@@ -98,11 +95,8 @@ func (c *Client) Login(account, password string) (*http.AuthResponse, error) {
 		if len(authResp.Servers) > 0 {
 			c.selectedServer = authResp.Servers[0]
 			addr := c.selectedServer.Address
-			if addr == "0.0.0.0" || addr == "" {
-				if c.gatewayAddr != "" {
-					// 保留命令行传入的gateway地址
-				}
-			} else {
+			// addr 无效(0.0.0.0/空)时保留命令行传入的 gatewayAddr，否则采用服务器返回地址。
+			if addr != "0.0.0.0" && addr != "" {
 				c.gatewayAddr = fmt.Sprintf("%s:%d", addr, c.selectedServer.Port)
 			}
 		}
@@ -117,16 +111,6 @@ func (c *Client) Register(account, password, email string) (*http.AuthResponse, 
 
 func (c *Client) GetServerList() (*http.ServerListResponse, error) {
 	return c.httpClient.GetServerList()
-}
-
-func (c *Client) SelectServer(serverID int32, serverList []*protocol.ServerInfo) bool {
-	server, addr := c.httpClient.SelectServer(serverID, serverList)
-	if server != nil {
-		c.selectedServer = server
-		c.gatewayAddr = addr
-		return true
-	}
-	return false
 }
 
 // 消息发送方法
@@ -242,12 +226,30 @@ func (c *Client) GetToken() string {
 	return c.token
 }
 
-// SetToken 设置token
-func (c *Client) SetToken(token string) {
-	c.token = token
+// SetPlayerID 透传当前玩家ID到 sender（消除对隐藏状态的依赖）。
+// -loginPlayerID>0 复用已有角色、跳过创建时，须显式调用它，
+// 否则后续 SendPlayerLogout 读 sender.playerID 仍为 0，会登出玩家 0。
+func (c *Client) SetPlayerID(playerID int64) {
 	if c.messageSender != nil {
-		c.messageSender.SetToken(token)
+		c.messageSender.SetPlayerID(playerID)
 	}
+}
+
+// —— 关键屏障：发送后等对应响应且判 Result（取代盲等 sleep）——
+
+// WaitTokenVerify 等待 token 验证响应，返回其 Result 与是否在超时内到达。
+func (c *Client) WaitTokenVerify(timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitFor(uint32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY_RESPONSE), timeout)
+}
+
+// WaitPlayerLogin 等待进入游戏响应。
+func (c *Client) WaitPlayerLogin(timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitFor(uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), timeout)
+}
+
+// WaitMapEnter 等待进入地图响应。
+func (c *Client) WaitMapEnter(timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitFor(uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), timeout)
 }
 
 // SelectedServer 获取选中的服务器

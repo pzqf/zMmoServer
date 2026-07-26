@@ -97,10 +97,19 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	}
 	fmt.Println("连接成功!")
 
-	// 4. 验证token
+	// 4. 验证token（关键屏障：发送后等 TOKEN_VERIFY_RESPONSE 且判 Result，取代盲等）
 	fmt.Println("4. 验证token...")
 	if err := c.SendTokenVerify(c.GetToken()); err != nil {
-		fmt.Printf("token验证失败: %v\n", err)
+		fmt.Printf("token验证发送失败: %v\n", err)
+		c.Disconnect()
+		return
+	}
+	if result, ok := c.WaitTokenVerify(5 * time.Second); !ok {
+		fmt.Println("token验证超时: 未收到 TOKEN_VERIFY_RESPONSE")
+		c.Disconnect()
+		return
+	} else if result != 0 {
+		fmt.Printf("token验证被拒绝: Result=%d\n", result)
 		c.Disconnect()
 		return
 	}
@@ -110,6 +119,9 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 	var playerID int64
 	if loginPlayerID > 0 {
 		playerID = loginPlayerID
+		// 复用分支跳过创建，须显式把 playerID 透传给 sender，
+		// 否则后续 SendPlayerLogout(读 sender.playerID) 会发出 PlayerId=0，登出玩家 0。
+		c.SetPlayerID(playerID)
 		fmt.Printf("5. 复用已有角色ID: %d（跳过创建）\n", playerID)
 	} else {
 		fmt.Println("5. 创建角色...")
@@ -118,14 +130,9 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 			c.Disconnect()
 			return
 		}
-		// 创建响应异步到达（TCP dispatcher goroutine 回填 createdPlayerID）；轮询等待，避免读到 0。
-		for i := 0; i < 40; i++ {
-			playerID = c.GetCreatedPlayerID()
-			if playerID != 0 {
-				break
-			}
-			time.Sleep(50 * time.Millisecond)
-		}
+		// GetCreatedPlayerID 内部经 WaitForPlayerID 在 channel 上阻塞最多 5s 直到创建响应到达，
+		// 并在拿到非 0 ID 时同步透传给 sender；无需再叠加轮询。
+		playerID = c.GetCreatedPlayerID()
 		if playerID == 0 {
 			fmt.Println("警告: 未获取到创建的角色ID，使用默认值1")
 			playerID = 1
@@ -142,21 +149,36 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 		c.EnableMailAutoClaim(playerID)
 	}
 
-	// 7. 进入游戏
+	// 7. 进入游戏（关键屏障：发送后等 PlayerLoginResponse 且判 Result）
 	fmt.Println("6. 进入游戏...")
 	if err := c.SendPlayerLogin(playerID); err != nil {
-		fmt.Printf("进入游戏失败: %v\n", err)
+		fmt.Printf("进入游戏发送失败: %v\n", err)
+		c.Disconnect()
+		return
+	}
+	if result, ok := c.WaitPlayerLogin(5 * time.Second); !ok {
+		fmt.Println("进入游戏超时: 未收到 PlayerLoginResponse")
+		c.Disconnect()
+		return
+	} else if result != 0 {
+		fmt.Printf("进入游戏被拒绝: Result=%d\n", result)
 		c.Disconnect()
 		return
 	}
 
-	// 8. 等待进入游戏完成
-	time.Sleep(1 * time.Second)
-
-	// 9. 进入地图
+	// 9. 进入地图（关键屏障：发送后等 ClientMapEnterResponse 且判 Result）
 	fmt.Println("7. 进入地图...")
 	if err := c.SendMapEnter(playerID, 1001); err != nil {
-		fmt.Printf("进入地图失败: %v\n", err)
+		fmt.Printf("进入地图发送失败: %v\n", err)
+		c.Disconnect()
+		return
+	}
+	if result, ok := c.WaitMapEnter(5 * time.Second); !ok {
+		fmt.Println("进入地图超时: 未收到 ClientMapEnterResponse")
+		c.Disconnect()
+		return
+	} else if result != 0 {
+		fmt.Printf("进入地图被拒绝: Result=%d\n", result)
 		c.Disconnect()
 		return
 	}

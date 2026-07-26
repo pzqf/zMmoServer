@@ -23,16 +23,6 @@ func NewMessageSender(tcpClient *zNet.TcpClient, token string) *MessageSender {
 	}
 }
 
-// SetTcpClient 设置TcpClient
-func (s *MessageSender) SetTcpClient(tcpClient *zNet.TcpClient) {
-	s.tcpClient = tcpClient
-}
-
-// SetToken 设置token
-func (s *MessageSender) SetToken(token string) {
-	s.token = token
-}
-
 // Send 发送消息
 func (s *MessageSender) Send(msgID uint32, data []byte) error {
 	if s.tcpClient == nil {

@@ -25,6 +25,11 @@ type MessageHandler struct {
 	// 邮件自动领取：收到邮件列表时，对每封未领邮件调用 claim。
 	mailAutoClaim func(mailID int64)
 
+	// 关键屏障响应信号：按 protoId 投递响应 Result（缓冲 1，单发一收）。
+	// 复用 playerIDCh 的 channel 信号范式，让 main 侧的"发送→等响应且判 Result"
+	// 取代盲等 sleep（token 验证 / 进游戏 / 进图三步）。
+	signalChans map[uint32]chan int32
+
 	// AOI 视野集：记当前视野内的实体ID（进入视野+1、离开-1），供观测"我视野里有谁"——
 	// 分线隔离/无缝交接等场景可直接看客户端视野是否含某玩家。
 	viewSet map[int64]bool
@@ -65,6 +70,42 @@ func NewMessageHandler() *MessageHandler {
 	return &MessageHandler{
 		playerIDCh: make(chan int64, 1),
 		viewSet:    make(map[int64]bool),
+		signalChans: map[uint32]chan int32{
+			uint32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY_RESPONSE): make(chan int32, 1),
+			uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE):   make(chan int32, 1),
+			uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):              make(chan int32, 1),
+		},
+	}
+}
+
+// signal 向对应 protoId 的屏障投递响应 Result（非阻塞，缓冲已满则丢弃——单发一收场景无碍）。
+func (h *MessageHandler) signal(protoId uint32, result int32) {
+	h.mu.Lock()
+	ch := h.signalChans[protoId]
+	h.mu.Unlock()
+	if ch == nil {
+		return
+	}
+	select {
+	case ch <- result:
+	default:
+	}
+}
+
+// WaitFor 等待某类响应到达并返回其 Result；超时返回 ok=false。
+// 单发一收：channel 缓冲 1，响应即便早于 WaitFor 到达也已缓冲，不会漏。
+func (h *MessageHandler) WaitFor(protoId uint32, timeout time.Duration) (result int32, ok bool) {
+	h.mu.Lock()
+	ch := h.signalChans[protoId]
+	h.mu.Unlock()
+	if ch == nil {
+		return 0, false
+	}
+	select {
+	case r := <-ch:
+		return r, true
+	case <-time.After(timeout):
+		return 0, false
 	}
 }
 
@@ -303,6 +344,7 @@ func (h *MessageHandler) handleTokenVerifyResponse(data []byte) {
 		return
 	}
 	fmt.Printf("TokenVerifyResponse: Result=%d, ErrorMsg=%s\n", resp.Result, resp.ErrorMsg)
+	h.signal(uint32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY_RESPONSE), resp.Result)
 }
 
 func (h *MessageHandler) handlePlayerLoginResponse(data []byte) {
@@ -312,6 +354,7 @@ func (h *MessageHandler) handlePlayerLoginResponse(data []byte) {
 		return
 	}
 	fmt.Printf("PlayerLoginResponse: Result=%d, ErrorMsg=%s\n", resp.Result, resp.ErrorMsg)
+	h.signal(uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE), resp.Result)
 	if resp.Result == 0 && resp.PlayerInfo != nil {
 		fmt.Printf("Player: ID=%d, Name=%s, Level=%d, Gold=%d\n",
 			resp.PlayerInfo.PlayerId, resp.PlayerInfo.Name, resp.PlayerInfo.Level, resp.PlayerInfo.Gold)
@@ -364,6 +407,7 @@ func (h *MessageHandler) handleMapEnterResponse(data []byte) {
 		return
 	}
 	fmt.Printf("ClientMapEnterResponse: Result=%d, ErrorMsg=%s, MapID=%d\n", resp.Result, resp.ErrorMsg, resp.MapId)
+	h.signal(uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), resp.Result)
 }
 
 func (h *MessageHandler) handleMapMoveResponse(data []byte) {

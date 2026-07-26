@@ -5,8 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zMmoServer/GameClient/internal/client"
-	"github.com/pzqf/zMmoServer/GameClient/internal/utils"
+	"github.com/pzqf/zMmoServer/GameClient/internal/test/common"
 )
 
 // ConcurrencyTestConfig 并发测试参数
@@ -78,46 +77,21 @@ func (t *ConcurrencyTester) runClient(clientID int) {
 		ClientID: clientID,
 		Errors:   make([]error, 0),
 	}
+	// defer 统一存结果（捕获最终值），免去每个 early-return 处重复的加锁写入。
+	defer common.StoreResult(&t.resultsMu, t.results, clientID, &result)
 
-	// 创建客户端
-	c := client.NewClient("")
-	c.SetGatewayAddr(t.config.GatewayAddr)
-
-	// 连接服务器
-	if err := c.Connect(); err != nil {
-		result.ConnectSuccess = false
-		result.Errors = append(result.Errors, err)
-		t.resultsMu.Lock()
-		t.results[clientID] = result
-		t.resultsMu.Unlock()
-		return
-	}
-	result.ConnectSuccess = true
-
-	// 生成token
-	token, err := utils.GenerateToken(int64(clientID+1), fmt.Sprintf("test_account_%d", clientID), "zMmoServerSecretKey")
+	// 共享前奏：连接 + token 验证。
+	c, connected, verified, err := common.ConnectAndVerify(t.config.GatewayAddr, clientID)
+	result.ConnectSuccess = connected
+	result.TokenVerifySuccess = verified
 	if err != nil {
 		result.Errors = append(result.Errors, err)
-		c.Disconnect()
-		t.resultsMu.Lock()
-		t.results[clientID] = result
-		t.resultsMu.Unlock()
+		if c != nil {
+			c.Disconnect()
+		}
 		return
 	}
-
-	// 验证token
-	if err := c.SendTokenVerify(token); err != nil {
-		result.Errors = append(result.Errors, err)
-		c.Disconnect()
-		t.resultsMu.Lock()
-		t.results[clientID] = result
-		t.resultsMu.Unlock()
-		return
-	}
-	result.TokenVerifySuccess = true
-
-	// 等待token验证完成
-	time.Sleep(100 * time.Millisecond)
+	defer c.Disconnect()
 
 	// 发送消息
 	playerID := t.config.PlayerIDStart + int64(clientID)
@@ -158,14 +132,7 @@ func (t *ConcurrencyTester) runClient(clientID int) {
 
 	// 等待消息处理完成
 	time.Sleep(500 * time.Millisecond)
-
-	// 断开连接
-	c.Disconnect()
-
-	// 保存结果
-	t.resultsMu.Lock()
-	t.results[clientID] = result
-	t.resultsMu.Unlock()
+	// 断开连接与结果保存由 defer 统一处理。
 }
 
 // printResults 打印测试结果

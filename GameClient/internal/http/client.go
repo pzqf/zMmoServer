@@ -48,11 +48,6 @@ func NewClient(globalServerAddr string) *Client {
 	}
 }
 
-// getServerAddr 返回完整的地址（地址:端口）
-func getServerAddr(server *protocol.ServerInfo) string {
-	return fmt.Sprintf("%s:%d", server.Address, server.Port)
-}
-
 // Login 登录
 func (c *Client) Login(account, password string) (*AuthResponse, error) {
 	req := LoginRequest{Account: account, Password: password}
@@ -126,14 +121,4 @@ func (c *Client) GetServerList() (*ServerListResponse, error) {
 	}
 
 	return &serverListResp, nil
-}
-
-// SelectServer 选择服务器
-func (c *Client) SelectServer(serverID int32, serverList []*protocol.ServerInfo) (*protocol.ServerInfo, string) {
-	for _, server := range serverList {
-		if server.ServerId == serverID {
-			return server, getServerAddr(server)
-		}
-	}
-	return nil, ""
 }
