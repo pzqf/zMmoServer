@@ -95,48 +95,12 @@ func NewMap(mapID id.MapIdType, mapConfigID int32, name string, width, height fl
 		aoiManager:   aoi.NewGridManager(float64(width), float64(height), defaultGridSize, defaultGridSize),
 		createdAt:    time.Now(),
 	}
-	m.aoiManager.SetListener(m.handleAOIEvent)
+	// 客户端视野(enter/leave/move)由 MapServer 的分层 AOI 作为单一权威驱动：
+	// MapServer 每个分线(layer)各自的网格 AOI → crossserver 500-505 → GameServer.HandleAOINotify → 推客户端。
+	// GameServer 侧不再自建面向客户端的 AOI（原 handleAOIEvent+subscribeAOIEvents 已移除）：它按逻辑图ID(如1001)
+	// 键值、无法感知 ②-b 分线，会把不同 layer 的玩家算作同格互相串视野（已实测复现）。aoiManager 仅保留网格记账，
+	// 无 listener 故不产生任何客户端事件。
 	return m
-}
-
-// handleAOIEvent 处理 AOI 事件
-func (m *Map) handleAOIEvent(evt aoi.AOIEvent) {
-	switch evt.Type {
-	case aoi.AOIEventEnter:
-		event.Publish(event.NewEvent(event.EventAOIEnterView, m, &event.AOIViewEventData{
-			WatcherID: id.PlayerIdType(evt.Watcher),
-			TargetID:  evt.Target,
-			MapID:     m.mapID,
-			PosX:      float32(evt.NewCoord.X),
-			PosY:      float32(evt.NewCoord.Y),
-		}))
-		zLog.Debug("AOI: entity entered view",
-			zap.Int64("watcher", evt.Watcher),
-			zap.Int64("target", evt.Target))
-	case aoi.AOIEventLeave:
-		event.Publish(event.NewEvent(event.EventAOILeaveView, m, &event.AOIViewEventData{
-			WatcherID: id.PlayerIdType(evt.Watcher),
-			TargetID:  evt.Target,
-			MapID:     m.mapID,
-			PosX:      float32(evt.OldCoord.X),
-			PosY:      float32(evt.OldCoord.Y),
-		}))
-		zLog.Debug("AOI: entity left view",
-			zap.Int64("watcher", evt.Watcher),
-			zap.Int64("target", evt.Target))
-	case aoi.AOIEventMove:
-		event.Publish(event.NewEvent(event.EventAOIMove, m, &event.AOIViewEventData{
-			WatcherID: id.PlayerIdType(evt.Target),
-			TargetID:  evt.Target,
-			MapID:     m.mapID,
-			OldPosX:   float32(evt.OldCoord.X),
-			OldPosY:   float32(evt.OldCoord.Y),
-			PosX:      float32(evt.NewCoord.X),
-			PosY:      float32(evt.NewCoord.Y),
-		}))
-		zLog.Debug("AOI: entity moved",
-			zap.Int64("entity", evt.Target))
-	}
 }
 
 // posToCoord 将 Vector3 转换为 AOI 坐标

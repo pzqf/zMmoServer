@@ -12,12 +12,10 @@ import (
 	"github.com/pzqf/zCommon/consistency"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/protocol"
-	"github.com/pzqf/zEngine/zEvent"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/GameServer/config"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
 	"github.com/pzqf/zMmoServer/GameServer/game/common"
-	"github.com/pzqf/zMmoServer/GameServer/game/event"
 	"github.com/pzqf/zMmoServer/GameServer/game/object"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
@@ -144,7 +142,8 @@ func (ms *MapService) Start(ctx context.Context) error {
 	ms.retryCtx, ms.retryCancel = context.WithCancel(ctx)
 	go ms.outboxRetryLoop()
 
-	ms.subscribeAOIEvents()
+	// 客户端 AOI 视野改由 MapServer 分层 AOI 单一权威驱动（见 HandleAOINotify）；
+	// GameServer 自建的本地 AOI 订阅（原 subscribeAOIEvents）已移除，避免冗余 + 跨 layer 串视野。
 
 	zLog.Info("MapService started successfully")
 	return nil
@@ -859,73 +858,6 @@ func (ms *MapService) HandleAOINotify(watcherID, targetID int64, mapID int32, ev
 	}
 }
 
-// subscribeAOIEvents 订阅 AOI 视野事件，将事件转发给 PlayerManager 投递到玩家 Actor
-func (ms *MapService) subscribeAOIEvents() {
-	event.Subscribe(event.EventAOIEnterView, func(evt *zEvent.Event) {
-		data, ok := evt.Data.(*event.AOIViewEventData)
-		if !ok || ms.playerManager == nil {
-			return
-		}
-		msg := player.NewPlayerMessage(
-			data.WatcherID, player.SourceMapServer, player.MsgAOIEnterView,
-			&player.AOIViewRequest{
-				WatcherID: data.WatcherID,
-				TargetID:  data.TargetID,
-				MapID:     data.MapID,
-				PosX:      data.PosX,
-				PosY:      data.PosY,
-			},
-		)
-		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
-			zLog.Debug("Failed to route AOI enter view message",
-				zap.Int64("watcher_id", int64(data.WatcherID)),
-				zap.Error(err))
-		}
-	})
-
-	event.Subscribe(event.EventAOILeaveView, func(evt *zEvent.Event) {
-		data, ok := evt.Data.(*event.AOIViewEventData)
-		if !ok || ms.playerManager == nil {
-			return
-		}
-		msg := player.NewPlayerMessage(
-			data.WatcherID, player.SourceMapServer, player.MsgAOILeaveView,
-			&player.AOIViewRequest{
-				WatcherID: data.WatcherID,
-				TargetID:  data.TargetID,
-				MapID:     data.MapID,
-				PosX:      data.PosX,
-				PosY:      data.PosY,
-			},
-		)
-		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
-			zLog.Debug("Failed to route AOI leave view message",
-				zap.Int64("watcher_id", int64(data.WatcherID)),
-				zap.Error(err))
-		}
-	})
-
-	event.Subscribe(event.EventAOIMove, func(evt *zEvent.Event) {
-		data, ok := evt.Data.(*event.AOIViewEventData)
-		if !ok || ms.playerManager == nil {
-			return
-		}
-		msg := player.NewPlayerMessage(
-			data.WatcherID, player.SourceMapServer, player.MsgAOIMove,
-			&player.AOIViewRequest{
-				WatcherID: data.WatcherID,
-				TargetID:  data.TargetID,
-				MapID:     data.MapID,
-				OldPosX:   data.OldPosX,
-				OldPosY:   data.OldPosY,
-				PosX:      data.PosX,
-				PosY:      data.PosY,
-			},
-		)
-		if err := ms.playerManager.RouteMessage(data.WatcherID, msg); err != nil {
-			zLog.Debug("Failed to route AOI move message",
-				zap.Int64("watcher_id", int64(data.WatcherID)),
-				zap.Error(err))
-		}
-	})
-}
+// 注：GameServer 自建的本地 AOI 订阅（subscribeAOIEvents）已移除。客户端视野事件现由 MapServer
+// 分层 AOI 单一权威经 HandleAOINotify 推送（见上）。移除原因：本地 AOI 按逻辑图ID键值，无法感知
+// ②-b 分线，会跨 layer 串视野（已实测复现）；且与 MapServer AOI 功能等价、纯冗余。

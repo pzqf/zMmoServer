@@ -35,10 +35,8 @@ const (
 	EventPlayerLeaveMap zEvent.EventType = 1041
 	EventPlayerMove     zEvent.EventType = 1042
 
-	// AOI 视野事件
-	EventAOIEnterView zEvent.EventType = 1043
-	EventAOILeaveView zEvent.EventType = 1044
-	EventAOIMove      zEvent.EventType = 1045
+	// 注：AOI 视野事件(1043-1045)与 AOIViewEventData 已移除——客户端视野由 MapServer 分层 AOI 单一权威驱动，
+	// GameServer 不再自建面向客户端的本地 AOI（详见 game/maps/map_service.go HandleAOINotify）。
 
 	// 社交相关事件
 	EventPlayerJoinGuild  zEvent.EventType = 1050
@@ -151,19 +149,6 @@ type PlayerMapEventData struct {
 	PosX     float32
 	PosY     float32
 	PosZ     float32
-}
-
-// AOIViewEventData AOI 视野事件数据
-type AOIViewEventData struct {
-	WatcherID id.PlayerIdType
-	TargetID  int64
-	MapID     id.MapIdType
-	PosX      float32
-	PosY      float32
-	PosZ      float32
-	OldPosX   float32
-	OldPosY   float32
-	OldPosZ   float32
 }
 
 // PlayerGuildEventData 玩家公会事件数据
