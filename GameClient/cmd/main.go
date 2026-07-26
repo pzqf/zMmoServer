@@ -118,7 +118,14 @@ func runFullTest(globalServer, gatewayServer, account, password, playerName stri
 			c.Disconnect()
 			return
 		}
-		playerID = c.GetCreatedPlayerID()
+		// 创建响应异步到达（TCP dispatcher goroutine 回填 createdPlayerID）；轮询等待，避免读到 0。
+		for i := 0; i < 40; i++ {
+			playerID = c.GetCreatedPlayerID()
+			if playerID != 0 {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
 		if playerID == 0 {
 			fmt.Println("警告: 未获取到创建的角色ID，使用默认值1")
 			playerID = 1

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -23,6 +24,34 @@ type MessageHandler struct {
 
 	// 邮件自动领取：收到邮件列表时，对每封未领邮件调用 claim。
 	mailAutoClaim func(mailID int64)
+
+	// AOI 视野集：记当前视野内的实体ID（进入视野+1、离开-1），供观测"我视野里有谁"——
+	// 分线隔离/无缝交接等场景可直接看客户端视野是否含某玩家。
+	viewSet map[int64]bool
+}
+
+func (h *MessageHandler) viewAdd(entityID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.viewSet[entityID] = true
+}
+
+func (h *MessageHandler) viewDel(entityID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.viewSet, entityID)
+}
+
+// viewList 返回当前视野内实体ID（升序，稳定输出）。
+func (h *MessageHandler) viewList() []int64 {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	out := make([]int64, 0, len(h.viewSet))
+	for id := range h.viewSet {
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 // EnableMailAutoClaim 开启邮件自动领取：收到邮件列表后逐封领取未领邮件。
@@ -35,6 +64,7 @@ func (h *MessageHandler) EnableMailAutoClaim(claim func(mailID int64)) {
 func NewMessageHandler() *MessageHandler {
 	return &MessageHandler{
 		playerIDCh: make(chan int64, 1),
+		viewSet:    make(map[int64]bool),
 	}
 }
 
@@ -126,6 +156,31 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		var r protocol.ClientSkillCastResponse
 		if proto.Unmarshal(data, &r) == nil {
 			fmt.Printf("SkillCastResponse: Result=%d, SkillID=%d, Err=%s\n", r.Result, r.SkillId, r.Error)
+		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTER_VIEW):
+		var n protocol.EntityEnterViewNotify
+		if proto.Unmarshal(data, &n) == nil {
+			h.viewAdd(n.EntityId)
+			var x, y, z float32
+			if n.Pos != nil {
+				x, y, z = n.Pos.X, n.Pos.Y, n.Pos.Z
+			}
+			fmt.Printf("[AOI] 实体进入视野: entity=%d pos=(%.0f,%.0f,%.0f) 当前视野=%v\n", n.EntityId, x, y, z, h.viewList())
+		}
+	case uint32(protocol.MapMsgId_MSG_MAP_LEAVE_VIEW):
+		var n protocol.EntityLeaveViewNotify
+		if proto.Unmarshal(data, &n) == nil {
+			h.viewDel(n.EntityId)
+			fmt.Printf("[AOI] 实体离开视野: entity=%d 当前视野=%v\n", n.EntityId, h.viewList())
+		}
+	case uint32(protocol.MapMsgId_MSG_MAP_ENTITY_MOVE):
+		var n protocol.EntityMoveNotify
+		if proto.Unmarshal(data, &n) == nil {
+			var x, y, z float32
+			if n.NewPos != nil {
+				x, y, z = n.NewPos.X, n.NewPos.Y, n.NewPos.Z
+			}
+			fmt.Printf("[AOI] 实体移动: entity=%d ->(%.0f,%.0f,%.0f)\n", n.EntityId, x, y, z)
 		}
 	case uint32(protocol.MapMsgId_MSG_MAP_ENTITY_ATTR):
 		var n protocol.EntityAttrNotify
