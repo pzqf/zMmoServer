@@ -62,7 +62,6 @@ Outbox/Inbox 一致性、服务发现、优雅生命周期——做成了**可�
 | 存储 | MySQL、Redis |
 | 序列化 | Protocol Buffers |
 | 监控 | Prometheus |
-| 部署 | Kubernetes |
 
 ## 目录结构
 
@@ -75,7 +74,6 @@ zMmoServer/
 ├── GameClient/      # Go 版测试客户端（无需 Unity，驱动端到端 E2E）
 ├── zCommon/         # 共享库：crossserver（跨服）/ aoi / consistency / discovery / db / net …
 ├── resources/       # 配置表(Excel) / 地图(JSON) / proto
-├── kubernetes/      # K8s 部署
 └── docs/            # 文档（见下方导航）
 ```
 
@@ -113,7 +111,6 @@ powershell -ExecutionPolicy Bypass -File scripts/ci-check.ps1
 | [docs/通信模式设计方案.md](docs/通信模式设计方案.md) | 服务间通信模式与消息流 | 想理解请求如何跨服流转 |
 | [docs/规范.md](docs/规范.md) | 目录结构 / 命名 / 配置表规范 | 往仓库加代码/配置 |
 | [docs/游戏设计.md](docs/游戏设计.md) | 游戏背景与玩法设计（业务参考） | 关心玩法示例 |
-| [docs/K8s部署方案.md](docs/K8s部署方案.md) | Kubernetes 集群部署 | 要部署到集群 |
 | [docs/开发约定与工作流.md](docs/开发约定与工作流.md) | 开发方法与验证纪律（贡献前必读） | 准备贡献代码 |
 
 跨工具（AI/编辑器/人）统一入口见 [`AGENTS.md`](AGENTS.md)。
