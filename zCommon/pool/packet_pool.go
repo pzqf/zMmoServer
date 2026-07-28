@@ -2,9 +2,7 @@ package pool
 
 import (
 	"sync"
-	"time"
 
-	"github.com/pzqf/zCommon/gameevent"
 	"github.com/pzqf/zEngine/zNet"
 )
 
@@ -78,35 +76,6 @@ func AcquireByteSlice16K() *[]byte {
 func ReleaseByteSlice16K(b *[]byte) {
 	*b = (*b)[:0]
 	byteSlicePool16K.Put(b)
-}
-
-var eventPool = sync.Pool{
-	New: func() interface{} {
-		return &gameevent.Event{}
-	},
-}
-
-func AcquireEvent() *gameevent.Event {
-	return eventPool.Get().(*gameevent.Event)
-}
-
-func ReleaseEvent(e *gameevent.Event) {
-	e.ID = 0
-	e.Name = ""
-	e.Source = nil
-	e.Data = nil
-	e.Canceled = false
-	eventPool.Put(e)
-}
-
-func AcquireEventWith(id gameevent.EventID, name string, source interface{}, data interface{}) *gameevent.Event {
-	e := AcquireEvent()
-	e.ID = id
-	e.Name = name
-	e.Timestamp = time.Now()
-	e.Source = source
-	e.Data = data
-	return e
 }
 
 type TypedPool[T any] struct {
