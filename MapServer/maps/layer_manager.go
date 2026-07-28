@@ -95,24 +95,20 @@ func (lm *LayerManager) IsLayerable(logicalMapID id.MapIdType) bool {
 // 全程持锁串行化同一 LayerManager 的分配，避免并发进图重复开层。
 func (lm *LayerManager) AllocateLayer(logicalMapID, affinityLayerMapID id.MapIdType) (*Map, id.MapIdType, bool) {
 	lm.mu.Lock()
-	defer lm.mu.Unlock()
-
 	cfg, ok := lm.cfg[logicalMapID]
+	lm.mu.Unlock()
 	if !ok {
 		return nil, 0, false
 	}
 
-	// 1&2. 在既有层里按 cap（计入在途预留，防并发进图击穿 softCap/hardCap = M1 TOCTOU）选一层：
-	//      亲和优先 → 否则 effective 人数最少且 < softCap。选中即占 1 个在途名额（reserved++）。
-	if m, layerMapID, ok := lm.mm.reserveExistingLayer(logicalMapID, affinityLayerMapID, cfg.SoftCap, cfg.HardCap); ok {
-		return m, layerMapID, true
-	}
-
-	// 3. 无可用层 → 开新层，并即刻预留 1 个在途名额：使"新建层→玩家 AddPlayer"窗口内该层被视为非空、
-	//    不被 ReapEmpty 回收、也不被并发分配当空层挤入（M2 空层回收竞态）。
-	m, layerMapID := lm.mm.CreateInstance(InstanceKindLayer, logicalMapID, cfg.MapConfigID, cfg.Name, cfg.Width, cfg.Height)
-	lm.mm.reserveInstance(layerMapID)
-	return m, layerMapID, true
+	// 选/建一层复用通用实例池的 Acquire：亲和优先 → effective(玩家数+在途预留)最少且 <softCap →
+	// 都不满足则 build 建新层。在途预留额度由池维护，防并发进图击穿 cap（M1 TOCTOU）与空层回收竞态（M2）。
+	// 选中/新建即占 1 个预留名额，玩家加入后经 ReleaseLayerReservation 归还。
+	_, inst := lm.mm.instPool.Acquire(logicalMapID, uint64(affinityLayerMapID), cfg.SoftCap, cfg.HardCap,
+		func(newID uint64) *MapInstance {
+			return lm.mm.newMapInstance(newID, InstanceKindLayer, logicalMapID, cfg.MapConfigID, cfg.Name, cfg.Width, cfg.Height)
+		})
+	return inst.Map, inst.MapID, true
 }
 
 // 调用方（HandlePlayerEnterMap）在 AddPlayer 完成后必须 ReleaseLayerReservation(layerMapID) 归还名额，

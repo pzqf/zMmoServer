@@ -1,8 +1,6 @@
 package maps
 
 import (
-	"math"
-	"sync/atomic"
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
@@ -13,11 +11,12 @@ import (
 // —— 通用实例地图生命周期（realm 架构建议③）——
 //
 // "实例地图" = 副本 / 分线(layer) / 战场 / 跨服临时实例：都是一张**派生 mapID 的独立 *Map**
-// （独立单写者 goroutine + 独立 AOI + 独立 tick）。此前只有副本(dungeon)一条私有的创建/销毁路径，
-// 本文件把"地图级"的实例生命周期抽成 MapManager 的通用能力，供分线/跨服实例复用；副本的**玩法**
-// 生命周期(波次/奖励)仍留在 dungeon 包，只是地图的建/销/回收统一走这里。
-//
-// 身份键 = 派生的物理 mapID（每个实例唯一）。副本另有自己的玩法 InstanceID，二者不冲突。
+// （独立单写者 goroutine + 独立 AOI + 独立 tick）。地图级的"建/销/空置回收/在途预留"由 zEngine 的
+// zInstance.Pool（通用实例池）承载（见 map_manager.go 的 instPool）；本文件是它在地图域的接线：
+//   - 按逻辑图分组（Pool 的 key）；派生 mapID = 池内部 id；
+//   - 副本(Dungeon)=pinned，不空置回收、由玩法生命周期显式 DestroyInstance；分线/战场/跨服=可回收；
+//   - 分线的"选层+在途预留额度"复用 Pool.Acquire（见 layer_manager.go）。
+// 副本的**玩法**生命周期(波次/奖励)仍留在 dungeon 包，只是地图的建/销/回收统一走这里。
 
 // InstanceKind 实例地图种类。
 type InstanceKind int
@@ -44,183 +43,96 @@ func (k InstanceKind) String() string {
 	}
 }
 
-// MapInstance 一个实例地图的通用生命周期记录。
+// MapInstance 一个实例地图的生命周期记录。实现 zInstance.Instance：Occupancy=玩家数、Close=地图 Cleanup。
 type MapInstance struct {
-	MapID             id.MapIdType // 派生的物理实例 mapID（registry key / 身份）
-	LogicalMapID      id.MapIdType // 逻辑地图（副本=dungeonID 语义 / 分线=逻辑图 ID）
-	Kind              InstanceKind
-	Map               *Map
-	CreatedAt         time.Time
-	autoReapWhenEmpty bool      // 空置自动回收（分线/战场/跨服=true；副本=false）
-	emptySince        time.Time // 变空的时刻（零值=当前非空 / 尚未开始计时）
-	// reserved 在途分配额度（②：分线 M1 TOCTOU / M2 空层回收竞态）：已被 AllocateLayer 选中/新建、
-	// 但玩家尚未 AddPlayer 完成的名额。计入 cap 判定（GetPlayerCount+reserved，防并发进图击穿
-	// softCap/hardCap），且视为"非空"（reserved>0 不被 ReapEmpty 回收，防玩家被加进已销毁的死图）。
-	// 由 instMu 保护；玩家 AddPlayer 完成（成功计入 count / 或失败）后由 ReleaseLayerReservation 归还。
-	reserved int
+	MapID        id.MapIdType // 派生的物理实例 mapID（= 池内部 id / 身份 / mm.maps 键）
+	LogicalMapID id.MapIdType // 逻辑地图（副本=dungeonID 语义 / 分线=逻辑图 ID）
+	Kind         InstanceKind
+	Map          *Map
+	CreatedAt    time.Time
 }
 
-// CreateInstance 通用实例地图创建：分配派生 mapID、建独立 *Map、套 AOI 通知器、登记。
-// 返回承载的 *Map 与其派生 mapID。副本以外的种类空置会被 ReapEmpty 自动回收。
-func (mm *MapManager) CreateInstance(kind InstanceKind, logicalMapID id.MapIdType, mapConfigID int32, name string, width, height float32) (*Map, id.MapIdType) {
-	mapID := id.MapIdType(atomic.AddInt64(&mm.nextInstanceMapID, 1))
+// Occupancy 当前实例内玩家数（供池判空置回收）。
+func (mi *MapInstance) Occupancy() int { return mi.Map.GetPlayerCount() }
 
+// Close 释放实例地图（先 StopActor 再停 spawn，防 goroutine 泄漏）。由池在回收/销毁时调用。
+func (mi *MapInstance) Close() { mi.Map.Cleanup() }
+
+// newMapInstance 建一张派生实例地图（供 Pool 的 build 闭包调用；newID 即派生 mapID）。
+func (mm *MapManager) newMapInstance(newID uint64, kind InstanceKind, logicalMapID id.MapIdType, mapConfigID int32, name string, width, height float32) *MapInstance {
+	mapID := id.MapIdType(newID)
 	m := NewMap(mapID, mapConfigID, name, width, height)
 	m.SetMapMode(MapModeSingleServer)
 	if mm.aoiNotifier != nil {
 		m.SetAOINotifier(mm.aoiNotifier)
 	}
 	mm.maps.Store(mapID, m)
-
-	mm.instMu.Lock()
-	mm.instances[mapID] = &MapInstance{
-		MapID:             mapID,
-		LogicalMapID:      logicalMapID,
-		Kind:              kind,
-		Map:               m,
-		CreatedAt:         time.Now(),
-		autoReapWhenEmpty: kind != InstanceKindDungeon,
+	return &MapInstance{
+		MapID:        mapID,
+		LogicalMapID: logicalMapID,
+		Kind:         kind,
+		Map:          m,
+		CreatedAt:    time.Now(),
 	}
-	mm.instMu.Unlock()
+}
 
+// CreateInstance 通用实例地图创建：经池登记一张新实例地图（Dungeon=pinned 不回收）。
+// 返回承载的 *Map 与其派生 mapID。副本以外的种类空置会被 ReapEmpty 自动回收。
+func (mm *MapManager) CreateInstance(kind InstanceKind, logicalMapID id.MapIdType, mapConfigID int32, name string, width, height float32) (*Map, id.MapIdType) {
+	_, inst := mm.instPool.Add(logicalMapID, kind == InstanceKindDungeon, func(newID uint64) *MapInstance {
+		return mm.newMapInstance(newID, kind, logicalMapID, mapConfigID, name, width, height)
+	})
 	zLog.Info("Map instance created",
 		zap.String("kind", kind.String()),
-		zap.Int32("map_id", int32(mapID)),
+		zap.Int32("map_id", int32(inst.MapID)),
 		zap.Int32("logical_map_id", int32(logicalMapID)))
-	return m, mapID
+	return inst.Map, inst.MapID
 }
 
-// DestroyInstance 通用实例地图销毁：干净停 goroutine（Cleanup=先 StopActor 再停 spawn）、从地图表摘除、注销。幂等。
+// DestroyInstance 通用实例地图销毁（幂等）：经池摘除 → onEvict(从 mm.maps 删) → Close(Cleanup=先 StopActor 再停 spawn)。
 func (mm *MapManager) DestroyInstance(mapID id.MapIdType) {
-	mm.instMu.Lock()
-	inst, ok := mm.instances[mapID]
-	delete(mm.instances, mapID)
-	mm.instMu.Unlock()
-
-	if m, exists := mm.maps.Load(mapID); exists {
-		m.Cleanup()
-		mm.maps.Delete(mapID)
+	inst, ok := mm.instPool.Get(uint64(mapID))
+	if !ok {
+		return
 	}
-	if ok {
-		zLog.Info("Map instance destroyed",
-			zap.String("kind", inst.Kind.String()),
-			zap.Int32("map_id", int32(mapID)))
-	}
+	kind := inst.Kind
+	mm.instPool.Destroy(uint64(mapID))
+	zLog.Info("Map instance destroyed",
+		zap.String("kind", kind.String()),
+		zap.Int32("map_id", int32(mapID)))
 }
 
-// ReapEmpty 回收"空置持续超过 grace"的自动回收实例（分线/战场/跨服）；副本(autoReapWhenEmpty=false)不在此列。
+// ReapEmpty 回收"空置持续超过 grace"的自动回收实例（分线/战场/跨服；副本=pinned 不在此列）。
 // ⚠ 必须由驱动 PostTickAll 的**同一 goroutine**周期调用——销毁会 Cleanup/StopActor 地图，与该 goroutine
 // 串行才能与 tick 投递互不干扰。返回本次回收的实例数。
 func (mm *MapManager) ReapEmpty(grace time.Duration) int {
-	now := time.Now()
-	var toReap []id.MapIdType
-
-	mm.instMu.Lock()
-	for mapID, inst := range mm.instances {
-		if !inst.autoReapWhenEmpty {
-			continue
-		}
-		if inst.Map.GetPlayerCount() > 0 || inst.reserved > 0 {
-			inst.emptySince = time.Time{} // 非空（含在途预留），清空计时
-			continue
-		}
-		if inst.emptySince.IsZero() {
-			inst.emptySince = now // 刚变空，开始计时
-			continue
-		}
-		if now.Sub(inst.emptySince) >= grace {
-			toReap = append(toReap, mapID)
-		}
-	}
-	mm.instMu.Unlock()
-
-	for _, mapID := range toReap {
-		mm.DestroyInstance(mapID)
-	}
-	return len(toReap)
+	return mm.instPool.Reap(grace)
 }
 
 // GetInstance 查一个实例地图的生命周期记录。
 func (mm *MapManager) GetInstance(mapID id.MapIdType) (*MapInstance, bool) {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
-	inst, ok := mm.instances[mapID]
-	return inst, ok
+	return mm.instPool.Get(uint64(mapID))
 }
 
 // InstanceCount 当前登记的实例地图数（含副本）。
 func (mm *MapManager) InstanceCount() int {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
-	return len(mm.instances)
+	return mm.instPool.Count()
 }
 
-// GetInstancesByLogical 返回某逻辑地图下、指定种类的所有存活实例快照（供分线分配器选层，建议②）。
+// GetInstancesByLogical 返回某逻辑地图下、指定种类的所有存活实例（供分线分配器/查询）。
 func (mm *MapManager) GetInstancesByLogical(logicalMapID id.MapIdType, kind InstanceKind) []*MapInstance {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
 	var out []*MapInstance
-	for _, inst := range mm.instances {
-		if inst.LogicalMapID == logicalMapID && inst.Kind == kind {
+	mm.instPool.RangeByKey(logicalMapID, func(_ uint64, inst *MapInstance) bool {
+		if inst.Kind == kind {
 			out = append(out, inst)
 		}
-	}
+		return true
+	})
 	return out
 }
 
-// reserveExistingLayer 在既有 layer 中按 cap（计入在途预留）选一层并占用 1 个在途名额（reserved++）：
-// 亲和层优先(effective < hardCap)，否则 effective 人数最少且 < softCap 的层；选中层同时清 emptySince。
-// effective = GetPlayerCount + reserved。返回 (nil,0,false) 表示无满足 cap 的既有层，调用方应开新层。
-// 全程持 instMu 原子，使"读人数→选中→reserved++"相对 ReleaseLayerReservation/ReapEmpty 一致（②M1）。
-func (mm *MapManager) reserveExistingLayer(logicalMapID, affinity id.MapIdType, softCap, hardCap int) (*Map, id.MapIdType, bool) {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
-
-	if affinity != 0 {
-		if inst, ok := mm.instances[affinity]; ok && inst.Kind == InstanceKindLayer && inst.LogicalMapID == logicalMapID {
-			if inst.Map.GetPlayerCount()+inst.reserved < hardCap {
-				inst.reserved++
-				inst.emptySince = time.Time{}
-				return inst.Map, inst.MapID, true
-			}
-		}
-	}
-
-	var best *MapInstance
-	bestCount := math.MaxInt
-	for _, inst := range mm.instances {
-		if inst.Kind != InstanceKindLayer || inst.LogicalMapID != logicalMapID {
-			continue
-		}
-		eff := inst.Map.GetPlayerCount() + inst.reserved
-		if eff < softCap && eff < bestCount {
-			best = inst
-			bestCount = eff
-		}
-	}
-	if best != nil {
-		best.reserved++
-		best.emptySince = time.Time{}
-		return best.Map, best.MapID, true
-	}
-	return nil, 0, false
-}
-
-// reserveInstance 对刚创建的实例占用 1 个在途名额（新层从 reserved=1 起）：使"新建层→玩家 AddPlayer"
-// 窗口内该层被视为非空、不被 ReapEmpty 回收、也不被并发分配当空层挤入（②M2）。
-func (mm *MapManager) reserveInstance(mapID id.MapIdType) {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
-	if inst, ok := mm.instances[mapID]; ok {
-		inst.reserved++
-	}
-}
-
-// ReleaseLayerReservation 玩家 AddPlayer 完成（成功计入 count / 或失败）后归还 1 个在途名额。幂等（reserved 不减到负）。
+// ReleaseLayerReservation 玩家 AddPlayer 完成（成功计入 count / 或失败）后归还 1 个在途预留额度。
+// 委托池的 Release（分线 AllocateLayer 经 Pool.Acquire 占的预留，见 layer_manager.go）。
 func (mm *MapManager) ReleaseLayerReservation(mapID id.MapIdType) {
-	mm.instMu.Lock()
-	defer mm.instMu.Unlock()
-	if inst, ok := mm.instances[mapID]; ok && inst.reserved > 0 {
-		inst.reserved--
-	}
+	mm.instPool.Release(uint64(mapID))
 }

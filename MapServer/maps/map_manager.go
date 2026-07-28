@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zEngine/zInstance"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
 	"github.com/pzqf/zUtil/zMap"
@@ -18,12 +19,12 @@ import (
 type MapManager struct {
 	maps                *zMap.TypedMap[id.MapIdType, *Map]
 	dungeonLifecycleMgr *dungeon.DungeonLifecycleManager
-	nextInstanceMapID   int64 // 实例地图（副本/分线/战场/跨服）派生 mapID 的自增源，从 100000 起
 	aoiNotifier         AOINotifier
 
-	// 通用实例地图登记表（建议③）：key=派生 mapID。见 instance_manager.go。
-	instMu    sync.Mutex
-	instances map[id.MapIdType]*MapInstance
+	// 通用实例地图池（建议③）：副本/分线/战场/跨服统一走 zEngine 的 zInstance.Pool（按逻辑图分组、
+	// 派生 mapID=池内部 id、dungeon=pinned 不回收、空置由 ReapEmpty 回收、在途预留额度防分线 TOCTOU）。
+	// 见 instance_manager.go。
+	instPool *zInstance.Pool[id.MapIdType, *MapInstance]
 
 	// 热点图动态分线（建议②-b）：layerMgr=分配器（nil=未启用）；playerMap 记每个玩家实际所在 mapID
 	// （分线玩家在派生层图，普通玩家在逻辑图），供 op 从"客户端传的逻辑 mapID"解析到真实地图。见 layer_manager.go。
@@ -49,13 +50,16 @@ func (mm *MapManager) SetAOINotifier(n AOINotifier) {
 
 // NewMapManager 创建新的地图管理器
 func NewMapManager() *MapManager {
-	return &MapManager{
-		maps:              zMap.NewTypedMap[id.MapIdType, *Map](),
-		nextInstanceMapID: 100000,
-		instances:         make(map[id.MapIdType]*MapInstance),
-		playerMap:         make(map[int64]id.MapIdType),
-		seamlessLinks:     make(map[id.MapIdType]map[id.MapIdType]bool),
+	mm := &MapManager{
+		maps:          zMap.NewTypedMap[id.MapIdType, *Map](),
+		playerMap:     make(map[int64]id.MapIdType),
+		seamlessLinks: make(map[id.MapIdType]map[id.MapIdType]bool),
 	}
+	// 实例被池回收/销毁时从 maps 表摘除（Map.Cleanup 由 MapInstance.Close 承担）。
+	mm.instPool = zInstance.NewPoolWithBase[id.MapIdType, *MapInstance](func(_ uint64, inst *MapInstance) {
+		mm.maps.Delete(inst.MapID)
+	}, 100000)
+	return mm
 }
 
 func (mm *MapManager) SetDungeonLifecycleManager(dlm *dungeon.DungeonLifecycleManager) {
