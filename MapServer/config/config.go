@@ -31,6 +31,42 @@ type Config struct {
 type MapsConfig struct {
 	Mode   string `ini:"Mode"`
 	MapIDs []int  `ini:"MapIDs"`
+	// 分线/无缝的生产配置管线（原来 RegisterLayerable 仅 ZMMO_TEST_LAYER 测试夹具、
+	// RegisterSeamlessLink 零生产接线；这里由 ini 驱动，让分线/无缝拓扑成为配置而非测试夹具）。
+	LayerableMaps []int  `ini:"LayerableMaps"` // 可分线的逻辑地图ID子集（空=不分线）
+	LayerSoftCap  int    `ini:"LayerSoftCap"`  // 单层软上限：到达后新玩家开新层
+	LayerHardCap  int    `ini:"LayerHardCap"`  // 单层硬上限：亲和也不能超过
+	SeamlessLinks string `ini:"SeamlessLinks"` // 无缝相邻图对，格式 "a-b,c-d"（双向登记）
+}
+
+// ParseSeamlessLinks 解析 SeamlessLinks（"a-b,c-d"）为图对；非法项跳过。
+func (mc *MapsConfig) ParseSeamlessLinks() [][2]int32 {
+	var pairs [][2]int32
+	if strings.TrimSpace(mc.SeamlessLinks) == "" {
+		return pairs
+	}
+	for _, seg := range strings.Split(mc.SeamlessLinks, ",") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			continue
+		}
+		var a, b int32
+		if _, err := fmt.Sscanf(seg, "%d-%d", &a, &b); err != nil || a == 0 || b == 0 {
+			continue
+		}
+		pairs = append(pairs, [2]int32{a, b})
+	}
+	return pairs
+}
+
+// IsLayerableConfigured 该逻辑地图是否在 ini 中声明为可分线。
+func (mc *MapsConfig) IsLayerableConfigured(mapID int32) bool {
+	for _, m := range mc.LayerableMaps {
+		if int32(m) == mapID {
+			return true
+		}
+	}
+	return false
 }
 
 type ServerConfig struct {
@@ -133,8 +169,12 @@ func LoadConfig(configPath string) (*Config, error) {
 			ClientKeyPath:  zConfig.GetStringWithDefault(zcfg, "Etcd.ClientKeyPath", "../resources/etcd/server.key"),
 		},
 		Maps: MapsConfig{
-			Mode:   strings.ToLower(zConfig.GetStringWithDefault(zcfg, "Maps.Mode", MapModeSingleServer)),
-			MapIDs: zConfig.GetIntSliceWithDefault(zcfg, "Maps.MapIDs", []int{1001}),
+			Mode:          strings.ToLower(zConfig.GetStringWithDefault(zcfg, "Maps.Mode", MapModeSingleServer)),
+			MapIDs:        zConfig.GetIntSliceWithDefault(zcfg, "Maps.MapIDs", []int{1001}),
+			LayerableMaps: zConfig.GetIntSliceWithDefault(zcfg, "Maps.LayerableMaps", nil),
+			LayerSoftCap:  zConfig.GetIntWithDefault(zcfg, "Maps.LayerSoftCap", 0),
+			LayerHardCap:  zConfig.GetIntWithDefault(zcfg, "Maps.LayerHardCap", 0),
+			SeamlessLinks: zConfig.GetStringWithDefault(zcfg, "Maps.SeamlessLinks", ""),
 		},
 	}
 
@@ -167,6 +207,15 @@ func (c *Config) Validate() error {
 
 	if len(c.Maps.MapIDs) == 0 {
 		return fmt.Errorf("Maps.MapIDs must not be empty")
+	}
+	// 声明了可分线图就必须给出合法的软/硬上限，否则分线无从执行（分线是 realm 承重件，不容静默失效）。
+	if len(c.Maps.LayerableMaps) > 0 {
+		if c.Maps.LayerSoftCap <= 0 || c.Maps.LayerHardCap <= 0 {
+			return fmt.Errorf("Maps.LayerableMaps set but LayerSoftCap/LayerHardCap not positive")
+		}
+		if c.Maps.LayerSoftCap > c.Maps.LayerHardCap {
+			return fmt.Errorf("Maps.LayerSoftCap(%d) must be <= LayerHardCap(%d)", c.Maps.LayerSoftCap, c.Maps.LayerHardCap)
+		}
 	}
 	return nil
 }

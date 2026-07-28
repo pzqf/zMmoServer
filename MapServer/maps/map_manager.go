@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
+	"github.com/pzqf/zCommon/config/tables"
 	"github.com/pzqf/zEngine/zInstance"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
@@ -111,6 +112,22 @@ func (mm *MapManager) CreateMap(mapID id.MapIdType, mapConfigID int32, name stri
 	newMap := NewMap(mapID, mapConfigID, name, width, height)
 	newMap.SetAOINotifier(mm.aoiNotifier)
 	mm.maps.Store(mapID, newMap)
+
+	// 从配置表加载传送点（与刷怪点同为配置驱动数据：刷怪点在 NewMap→SpawnManager.Init 已按
+	// mapConfigID 装好；传送点原来只在死路径 CreateMapFromResource 里 apply，生产 CreateMap 漏装，
+	// 导致配方 D 的传送点是空壳。这里在生产路径按表 mapConfigID 补齐）。
+	if tm := tables.GetTableManager(); tm != nil {
+		if ml := tm.GetMapLoader(); ml != nil {
+			tps := ml.GetTeleportPointsByMapID(mapConfigID)
+			for _, tp := range tps {
+				newMap.AddTeleportPoint(tp)
+			}
+			if len(tps) > 0 {
+				zLog.Info("Map teleport points loaded from config",
+					zap.Int32("map_id", int32(mapID)), zap.Int("count", len(tps)))
+			}
+		}
+	}
 
 	zLog.Info("Map created", zap.Int32("map_id", int32(mapID)), zap.String("name", name))
 

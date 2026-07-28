@@ -342,9 +342,23 @@ func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
 			newMap.SetMaxLevel(mapCfg.MaxLevel)
 			createdCount++
 
-			// 分线测试夹具（env ZMMO_TEST_LAYER=<mapID>）：把该逻辑图标为可分线、softCap=1，
-			// 供"两客户端进同图分到不同层"的 E2E。生产应由 mapconfig 决定 layerable + soft/hardCap。
-			if os.Getenv("ZMMO_TEST_LAYER") == strconv.Itoa(int(mapCfg.MapID)) {
+			// 生产分线：由 [Maps] ini 的 LayerableMaps + LayerSoftCap/HardCap 驱动（配置而非测试夹具）。
+			if bs.config.Maps.IsLayerableConfigured(mapCfg.MapID) {
+				bs.mapManager.EnableLayering().RegisterLayerable(mapID, maps.LayerConfig{
+					MapConfigID: mapCfg.MapID,
+					Name:        mapCfg.Name,
+					Width:       float32(mapCfg.Width),
+					Height:      float32(mapCfg.Height),
+					SoftCap:     bs.config.Maps.LayerSoftCap,
+					HardCap:     bs.config.Maps.LayerHardCap,
+				})
+				zLog.Info("Layerable map registered from config",
+					zap.Int32("map_id", mapCfg.MapID),
+					zap.Int("soft_cap", bs.config.Maps.LayerSoftCap),
+					zap.Int("hard_cap", bs.config.Maps.LayerHardCap))
+			} else if os.Getenv("ZMMO_TEST_LAYER") == strconv.Itoa(int(mapCfg.MapID)) {
+				// 分线测试夹具（env ZMMO_TEST_LAYER=<mapID>，仅测试用）：softCap=1，
+				// 供"两客户端进同图分到不同层"的 E2E。生产由上面的 ini 配置驱动。
 				bs.mapManager.EnableLayering().RegisterLayerable(mapID, maps.LayerConfig{
 					MapConfigID: mapCfg.MapID,
 					Name:        mapCfg.Name,
@@ -356,6 +370,13 @@ func (bs *BaseServer) loadMapsFromExcelTables() (string, error) {
 				zLog.Info("Test layerable map registered (ZMMO_TEST_LAYER)", zap.Int32("map_id", mapCfg.MapID))
 			}
 		}
+	}
+
+	// 生产无缝链路：由 [Maps] ini 的 SeamlessLinks("a-b,c-d") 驱动，双向登记（原来 RegisterSeamlessLink 零生产接线）。
+	for _, pair := range bs.config.Maps.ParseSeamlessLinks() {
+		bs.mapManager.RegisterSeamlessLink(id.MapIdType(pair[0]), id.MapIdType(pair[1]))
+		zLog.Info("Seamless link registered from config",
+			zap.Int32("map_a", pair[0]), zap.Int32("map_b", pair[1]))
 	}
 
 	zLog.Info("Maps created from excel tables", zap.Int("count", createdCount))
