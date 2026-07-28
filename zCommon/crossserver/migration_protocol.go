@@ -1,14 +1,20 @@
 package crossserver
 
+import "github.com/pzqf/zCommon/protocol"
+
+// 跨服迁移消息 ID —— 取自 internal.proto 的 InternalMsgId 610 段，与其它跨服消息同一号段，
+// 满足「外层 zNet ProtoId == 内层 BaseMessage.MsgId == InternalMsgId」的三重一致（见 docs/协议契约.md）。
+// 响应不单独分号：CrossTransport 的响应复用请求 msgID，方向由 Envelope.MessageType 区分。
+//
+// 历史：曾是 30001-30008 的私有号段，且经裸 Wrap(meta, json) 发送、msgID 根本没上线，
+// 收侧无法路由，控制面从没跑通。2026-07-28 归并到 InternalMsgId 并走共用 codec。
 const (
-	MsgMigrationRequest       uint32 = 30001
-	MsgMigrationPrepare       uint32 = 30002
-	MsgMigrationData          uint32 = 30003
-	MsgMigrationCommit        uint32 = 30004
-	MsgMigrationRollback      uint32 = 30005
-	MsgMigrationComplete      uint32 = 30006
-	MsgMigrationHeartbeat     uint32 = 30007
-	MsgMigrationQueryStatus   uint32 = 30008
+	MsgMigrationRequest     = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_REQUEST)
+	MsgMigrationData        = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_DATA)
+	MsgMigrationRollback    = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_ROLLBACK)
+	MsgMigrationComplete    = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_COMPLETE)
+	MsgMigrationHeartbeat   = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_HEARTBEAT)
+	MsgMigrationQueryStatus = uint32(protocol.InternalMsgId_MSG_INTERNAL_MIGRATION_QUERY_STATUS)
 )
 
 type MigrationState uint8
@@ -93,68 +99,7 @@ func (t MigrationType) String() string {
 	}
 }
 
-type MigrationRequestPayload struct {
-	MigrationID   uint64
-	PlayerID      int64
-	AccountID     int64
-	PlayerName    string
-	SourceServer  int32
-	SourceService uint8
-	TargetServer  int32
-	TargetService uint8
-	TargetMapID   int32
-	MigrationType MigrationType
-	Reason        string
-}
-
-type MigrationPreparePayload struct {
-	MigrationID uint64
-	PlayerID    int64
-	Accepted    bool
-	Reason      string
-}
-
-type MigrationDataPayload struct {
-	MigrationID  uint64
-	PlayerID     int64
-	PlayerData   []byte
-	MapData      []byte
-	Checksum     uint32
-	DataVersion  int64
-}
-
-type MigrationCommitPayload struct {
-	MigrationID uint64
-	PlayerID    int64
-	Success     bool
-	Reason      string
-}
-
-type MigrationRollbackPayload struct {
-	MigrationID uint64
-	PlayerID    int64
-	Reason      string
-}
-
-type MigrationCompletePayload struct {
-	MigrationID uint64
-	PlayerID    int64
-	NewServerID int32
-}
-
-type MigrationHeartbeatPayload struct {
-	MigrationID uint64
-	State       MigrationState
-	Timestamp   int64
-}
-
-type MigrationStatusPayload struct {
-	MigrationID   uint64
-	PlayerID      int64
-	State         MigrationState
-	SourceServer  int32
-	TargetServer  int32
-	MigrationType MigrationType
-	CreatedAt     int64
-	UpdatedAt     int64
-}
+// 载荷类型统一用 internal.proto 生成的 protobuf 消息（protocol.MigrationRequest /
+// MigrationPrepareAck / MigrationDataTransfer / MigrationCommitAck / MigrationRollbackNotify /
+// MigrationCompleteNotify / MigrationHeartbeat / MigrationStatusQuery / MigrationStatus），
+// 不再有一份平行的 JSON 结构体——契约「全程 protobuf、禁止 JSON」见 docs/协议契约.md。

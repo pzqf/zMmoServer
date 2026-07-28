@@ -43,6 +43,16 @@ enum InternalMsgId {
   // 跨服相关 600-699
   MSG_INTERNAL_CROSS_SERVER_REQUEST = 600;
   MSG_INTERNAL_CROSS_SERVER_RESPONSE = 601;
+
+  // 跨服玩家迁移 610-619（2PC 控制面，见 zCommon/crossserver/migration_manager.go）。
+  // 只给「请求/通知」分号，**响应不单独分号**：CrossTransport 的响应复用请求 msgID，
+  // 由 Envelope.MessageType(Request/Response/Error) 区分方向、由 RequestID 关联。
+  MSG_INTERNAL_MIGRATION_REQUEST = 610;      // 源→目标：请我把这个玩家迁过来（响应 MigrationPrepareAck）
+  MSG_INTERNAL_MIGRATION_DATA = 611;         // 源→目标：玩家数据投递（响应 MigrationCommitAck）
+  MSG_INTERNAL_MIGRATION_ROLLBACK = 612;     // 源→目标：撤销本次迁移（通知，无响应）
+  MSG_INTERNAL_MIGRATION_COMPLETE = 613;     // 源→目标：源侧已提交，迁移完成（通知，无响应）
+  MSG_INTERNAL_MIGRATION_HEARTBEAT = 614;    // 迁移中保活（通知，无响应）
+  MSG_INTERNAL_MIGRATION_QUERY_STATUS = 615; // 查询迁移状态（响应 MigrationStatus）
 }
 
 // 服务类型
@@ -316,4 +326,90 @@ message MapAttackResponse {
   int64 target_id = 4;
   int64 damage = 5;
   int64 target_hp = 6;
+}
+
+// ============================================
+// 跨服玩家迁移协议 (2PC 控制面)
+// ============================================
+// state / migration_type 用 uint32 承载 Go 侧的 MigrationState / MigrationType
+// （crossserver/migration_protocol.go），避免枚举双份定义漂移。
+
+// 迁移请求（源服 → 目标服）
+message MigrationRequest {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  int64 account_id = 3;
+  string player_name = 4;
+  int32 source_server = 5;
+  uint32 source_service = 6;
+  int32 target_server = 7;
+  uint32 target_service = 8;
+  int32 target_map_id = 9;
+  uint32 migration_type = 10;
+  string reason = 11;
+}
+
+// 迁移请求的应答（目标服 → 源服）：目标是否接纳
+message MigrationPrepareAck {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  bool accepted = 3;
+  string reason = 4;
+}
+
+// 玩家数据投递（源服 → 目标服）。player_data/map_data 对传输层是不透明字节，
+// 由 PlayerDataSerializer 决定其内部编码；checksum 是 player_data 的 CRC32(IEEE)。
+message MigrationDataTransfer {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  bytes player_data = 3;
+  bytes map_data = 4;
+  uint32 checksum = 5;
+  int64 data_version = 6;
+}
+
+// 数据投递的应答（目标服 → 源服）：目标是否已落地
+message MigrationCommitAck {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  bool success = 3;
+  string reason = 4;
+}
+
+// 撤销通知（源服 → 目标服）
+message MigrationRollbackNotify {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  string reason = 3;
+}
+
+// 完成通知（源服 → 目标服）
+message MigrationCompleteNotify {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  int32 new_server_id = 3;
+}
+
+// 迁移保活
+message MigrationHeartbeat {
+  uint64 migration_id = 1;
+  uint32 state = 2;
+  int64 timestamp = 3;
+}
+
+// 迁移状态查询
+message MigrationStatusQuery {
+  uint64 migration_id = 1;
+}
+
+// 迁移状态应答
+message MigrationStatus {
+  uint64 migration_id = 1;
+  int64 player_id = 2;
+  uint32 state = 3;
+  int32 source_server = 4;
+  int32 target_server = 5;
+  uint32 migration_type = 6;
+  int64 created_at = 7;
+  int64 updated_at = 8;
 }

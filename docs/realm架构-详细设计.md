@@ -162,8 +162,17 @@ MapInstance {
   ④ 的真机 E2E 已证单玩家 reward→其家服；多归属服只是对每个玩家各走一次同一路径。
 
 **剩余缺口（非本层）**：把不同服的客户端**物理路由**进同一台 MapServer 的这个实例（server B 的玩家进 server A 的
-实例），属**跨服匹配 + 网关跨服路由**的职责（`cross_server_entry`/`MigrationManager` 是雏形），不是实例层的事。
-实例层（生命周期 + 结果回流）已备好，等匹配把人送进来即可。
+实例），属**跨服匹配 + 网关跨服路由**的职责，不是实例层的事。实例层（生命周期 + 结果回流）已备好，等匹配把人送进来即可。
+
+进度（2026-07-28）：
+- ✅ **传输层已修好**：`CrossTransport`（`crossserver/transport.go`）补上 msgID 上线 + 响应/错误回投 +
+  RequestID 关联；`MigrationManager.ExecuteMigration` 的 2PC 控制面（请求接纳→投数据→源服提交→通知完成）
+  首次真正跑通，有双端集成测试 + t1 `-race`。详见 `协议契约.md` §三.2/§三.5。
+- ❌ 仍缺（按序）：① `MigrationManager` 生产接线（真 serializer/callback + bootstrap 构造连接）；
+  ② 跨 realm 服务发现（`map_server_manager.go` 的 `doDiscovery` 按本 group 锁死）；③ 匹配/分配服务
+  （决定进哪 group 哪实例）；④ MapServer 入站"建跨服实例"case；⑤ 跨 realm 多进程 E2E。
+- 🗑 `cross_server_entry.go`（`CrossServerMapEntry`）已删：0 生产接线，且其中的迁移调用把玩家"迁到本服自己"、
+  fire-and-forget 忽略失败——留着会让人误以为跨服进图已接通。真入口按 ④ 重做。
 
 ### 分步任务
 1. 抽 `MapInstance` + 把 `dungeonLifecycleMgr` 泛化为 `InstanceManager`（dungeon 作为一个 Kind，保持现有行为）。

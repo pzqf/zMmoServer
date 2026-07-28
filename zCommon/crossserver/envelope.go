@@ -16,6 +16,9 @@ const (
 const (
 	MessageTypeRequest  uint8 = 1
 	MessageTypeResponse uint8 = 2
+	// MessageTypeError 是响应的失败变体：handler 返回 error 时由 CrossTransport 回投，
+	// payload = 错误文本。有它，等待方才能立刻拿到失败原因，而不是干等到超时。
+	MessageTypeError uint8 = 3
 )
 
 const (

@@ -53,6 +53,15 @@ const (
 	// 跨服相关 600-699
 	InternalMsgId_MSG_INTERNAL_CROSS_SERVER_REQUEST  InternalMsgId = 600
 	InternalMsgId_MSG_INTERNAL_CROSS_SERVER_RESPONSE InternalMsgId = 601
+	// 跨服玩家迁移 610-619（2PC 控制面，见 zCommon/crossserver/migration_manager.go）。
+	// 只给「请求/通知」分号，**响应不单独分号**：CrossTransport 的响应复用请求 msgID，
+	// 由 Envelope.MessageType(Request/Response/Error) 区分方向、由 RequestID 关联。
+	InternalMsgId_MSG_INTERNAL_MIGRATION_REQUEST      InternalMsgId = 610 // 源→目标：请我把这个玩家迁过来（响应 MigrationPrepareAck）
+	InternalMsgId_MSG_INTERNAL_MIGRATION_DATA         InternalMsgId = 611 // 源→目标：玩家数据投递（响应 MigrationCommitAck）
+	InternalMsgId_MSG_INTERNAL_MIGRATION_ROLLBACK     InternalMsgId = 612 // 源→目标：撤销本次迁移（通知，无响应）
+	InternalMsgId_MSG_INTERNAL_MIGRATION_COMPLETE     InternalMsgId = 613 // 源→目标：源侧已提交，迁移完成（通知，无响应）
+	InternalMsgId_MSG_INTERNAL_MIGRATION_HEARTBEAT    InternalMsgId = 614 // 迁移中保活（通知，无响应）
+	InternalMsgId_MSG_INTERNAL_MIGRATION_QUERY_STATUS InternalMsgId = 615 // 查询迁移状态（响应 MigrationStatus）
 )
 
 // Enum value maps for InternalMsgId.
@@ -81,31 +90,43 @@ var (
 		408: "MSG_INTERNAL_MAP_PICKUP_REQUEST",
 		600: "MSG_INTERNAL_CROSS_SERVER_REQUEST",
 		601: "MSG_INTERNAL_CROSS_SERVER_RESPONSE",
+		610: "MSG_INTERNAL_MIGRATION_REQUEST",
+		611: "MSG_INTERNAL_MIGRATION_DATA",
+		612: "MSG_INTERNAL_MIGRATION_ROLLBACK",
+		613: "MSG_INTERNAL_MIGRATION_COMPLETE",
+		614: "MSG_INTERNAL_MIGRATION_HEARTBEAT",
+		615: "MSG_INTERNAL_MIGRATION_QUERY_STATUS",
 	}
 	InternalMsgId_value = map[string]int32{
-		"MSG_INTERNAL_INVALID":               0,
-		"MSG_INTERNAL_SERVICE_REGISTER":      100,
-		"MSG_INTERNAL_SERVICE_DEREGISTER":    101,
-		"MSG_INTERNAL_SERVICE_HEARTBEAT":     102,
-		"MSG_INTERNAL_SERVICE_DISCOVER":      103,
-		"MSG_INTERNAL_GATEWAY_ROUTE":         200,
-		"MSG_INTERNAL_GATEWAY_BROADCAST":     201,
-		"MSG_INTERNAL_GATEWAY_KICK":          202,
-		"MSG_INTERNAL_PLAYER_ROUTE":          300,
-		"MSG_INTERNAL_PLAYER_BIND_SERVER":    301,
-		"MSG_INTERNAL_PLAYER_UNBIND_SERVER":  302,
-		"MSG_INTERNAL_PLAYER_TRANSFER":       303,
-		"MSG_INTERNAL_MAP_ENTER_REQUEST":     400,
-		"MSG_INTERNAL_MAP_ENTER_RESPONSE":    401,
-		"MSG_INTERNAL_MAP_LEAVE_REQUEST":     402,
-		"MSG_INTERNAL_MAP_LEAVE_RESPONSE":    403,
-		"MSG_INTERNAL_MAP_MOVE_REQUEST":      404,
-		"MSG_INTERNAL_MAP_MOVE_SYNC":         405,
-		"MSG_INTERNAL_MAP_ATTACK_REQUEST":    406,
-		"MSG_INTERNAL_COMBAT_ACTION":         407,
-		"MSG_INTERNAL_MAP_PICKUP_REQUEST":    408,
-		"MSG_INTERNAL_CROSS_SERVER_REQUEST":  600,
-		"MSG_INTERNAL_CROSS_SERVER_RESPONSE": 601,
+		"MSG_INTERNAL_INVALID":                0,
+		"MSG_INTERNAL_SERVICE_REGISTER":       100,
+		"MSG_INTERNAL_SERVICE_DEREGISTER":     101,
+		"MSG_INTERNAL_SERVICE_HEARTBEAT":      102,
+		"MSG_INTERNAL_SERVICE_DISCOVER":       103,
+		"MSG_INTERNAL_GATEWAY_ROUTE":          200,
+		"MSG_INTERNAL_GATEWAY_BROADCAST":      201,
+		"MSG_INTERNAL_GATEWAY_KICK":           202,
+		"MSG_INTERNAL_PLAYER_ROUTE":           300,
+		"MSG_INTERNAL_PLAYER_BIND_SERVER":     301,
+		"MSG_INTERNAL_PLAYER_UNBIND_SERVER":   302,
+		"MSG_INTERNAL_PLAYER_TRANSFER":        303,
+		"MSG_INTERNAL_MAP_ENTER_REQUEST":      400,
+		"MSG_INTERNAL_MAP_ENTER_RESPONSE":     401,
+		"MSG_INTERNAL_MAP_LEAVE_REQUEST":      402,
+		"MSG_INTERNAL_MAP_LEAVE_RESPONSE":     403,
+		"MSG_INTERNAL_MAP_MOVE_REQUEST":       404,
+		"MSG_INTERNAL_MAP_MOVE_SYNC":          405,
+		"MSG_INTERNAL_MAP_ATTACK_REQUEST":     406,
+		"MSG_INTERNAL_COMBAT_ACTION":          407,
+		"MSG_INTERNAL_MAP_PICKUP_REQUEST":     408,
+		"MSG_INTERNAL_CROSS_SERVER_REQUEST":   600,
+		"MSG_INTERNAL_CROSS_SERVER_RESPONSE":  601,
+		"MSG_INTERNAL_MIGRATION_REQUEST":      610,
+		"MSG_INTERNAL_MIGRATION_DATA":         611,
+		"MSG_INTERNAL_MIGRATION_ROLLBACK":     612,
+		"MSG_INTERNAL_MIGRATION_COMPLETE":     613,
+		"MSG_INTERNAL_MIGRATION_HEARTBEAT":    614,
+		"MSG_INTERNAL_MIGRATION_QUERY_STATUS": 615,
 	}
 )
 
@@ -2398,6 +2419,684 @@ func (x *MapAttackResponse) GetTargetHp() int64 {
 	return 0
 }
 
+// 迁移请求（源服 → 目标服）
+type MigrationRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	AccountId     int64                  `protobuf:"varint,3,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
+	PlayerName    string                 `protobuf:"bytes,4,opt,name=player_name,json=playerName,proto3" json:"player_name,omitempty"`
+	SourceServer  int32                  `protobuf:"varint,5,opt,name=source_server,json=sourceServer,proto3" json:"source_server,omitempty"`
+	SourceService uint32                 `protobuf:"varint,6,opt,name=source_service,json=sourceService,proto3" json:"source_service,omitempty"`
+	TargetServer  int32                  `protobuf:"varint,7,opt,name=target_server,json=targetServer,proto3" json:"target_server,omitempty"`
+	TargetService uint32                 `protobuf:"varint,8,opt,name=target_service,json=targetService,proto3" json:"target_service,omitempty"`
+	TargetMapId   int32                  `protobuf:"varint,9,opt,name=target_map_id,json=targetMapId,proto3" json:"target_map_id,omitempty"`
+	MigrationType uint32                 `protobuf:"varint,10,opt,name=migration_type,json=migrationType,proto3" json:"migration_type,omitempty"`
+	Reason        string                 `protobuf:"bytes,11,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationRequest) Reset() {
+	*x = MigrationRequest{}
+	mi := &file_internal_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationRequest) ProtoMessage() {}
+
+func (x *MigrationRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationRequest.ProtoReflect.Descriptor instead.
+func (*MigrationRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *MigrationRequest) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetAccountId() int64 {
+	if x != nil {
+		return x.AccountId
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetPlayerName() string {
+	if x != nil {
+		return x.PlayerName
+	}
+	return ""
+}
+
+func (x *MigrationRequest) GetSourceServer() int32 {
+	if x != nil {
+		return x.SourceServer
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetSourceService() uint32 {
+	if x != nil {
+		return x.SourceService
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetTargetServer() int32 {
+	if x != nil {
+		return x.TargetServer
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetTargetService() uint32 {
+	if x != nil {
+		return x.TargetService
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetTargetMapId() int32 {
+	if x != nil {
+		return x.TargetMapId
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetMigrationType() uint32 {
+	if x != nil {
+		return x.MigrationType
+	}
+	return 0
+}
+
+func (x *MigrationRequest) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// 迁移请求的应答（目标服 → 源服）：目标是否接纳
+type MigrationPrepareAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Accepted      bool                   `protobuf:"varint,3,opt,name=accepted,proto3" json:"accepted,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationPrepareAck) Reset() {
+	*x = MigrationPrepareAck{}
+	mi := &file_internal_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationPrepareAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationPrepareAck) ProtoMessage() {}
+
+func (x *MigrationPrepareAck) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationPrepareAck.ProtoReflect.Descriptor instead.
+func (*MigrationPrepareAck) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *MigrationPrepareAck) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationPrepareAck) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationPrepareAck) GetAccepted() bool {
+	if x != nil {
+		return x.Accepted
+	}
+	return false
+}
+
+func (x *MigrationPrepareAck) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// 玩家数据投递（源服 → 目标服）。player_data/map_data 对传输层是不透明字节，
+// 由 PlayerDataSerializer 决定其内部编码；checksum 是 player_data 的 CRC32(IEEE)。
+type MigrationDataTransfer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	PlayerData    []byte                 `protobuf:"bytes,3,opt,name=player_data,json=playerData,proto3" json:"player_data,omitempty"`
+	MapData       []byte                 `protobuf:"bytes,4,opt,name=map_data,json=mapData,proto3" json:"map_data,omitempty"`
+	Checksum      uint32                 `protobuf:"varint,5,opt,name=checksum,proto3" json:"checksum,omitempty"`
+	DataVersion   int64                  `protobuf:"varint,6,opt,name=data_version,json=dataVersion,proto3" json:"data_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationDataTransfer) Reset() {
+	*x = MigrationDataTransfer{}
+	mi := &file_internal_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationDataTransfer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationDataTransfer) ProtoMessage() {}
+
+func (x *MigrationDataTransfer) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationDataTransfer.ProtoReflect.Descriptor instead.
+func (*MigrationDataTransfer) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *MigrationDataTransfer) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationDataTransfer) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationDataTransfer) GetPlayerData() []byte {
+	if x != nil {
+		return x.PlayerData
+	}
+	return nil
+}
+
+func (x *MigrationDataTransfer) GetMapData() []byte {
+	if x != nil {
+		return x.MapData
+	}
+	return nil
+}
+
+func (x *MigrationDataTransfer) GetChecksum() uint32 {
+	if x != nil {
+		return x.Checksum
+	}
+	return 0
+}
+
+func (x *MigrationDataTransfer) GetDataVersion() int64 {
+	if x != nil {
+		return x.DataVersion
+	}
+	return 0
+}
+
+// 数据投递的应答（目标服 → 源服）：目标是否已落地
+type MigrationCommitAck struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Success       bool                   `protobuf:"varint,3,opt,name=success,proto3" json:"success,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationCommitAck) Reset() {
+	*x = MigrationCommitAck{}
+	mi := &file_internal_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationCommitAck) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationCommitAck) ProtoMessage() {}
+
+func (x *MigrationCommitAck) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationCommitAck.ProtoReflect.Descriptor instead.
+func (*MigrationCommitAck) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *MigrationCommitAck) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationCommitAck) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationCommitAck) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *MigrationCommitAck) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// 撤销通知（源服 → 目标服）
+type MigrationRollbackNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationRollbackNotify) Reset() {
+	*x = MigrationRollbackNotify{}
+	mi := &file_internal_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationRollbackNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationRollbackNotify) ProtoMessage() {}
+
+func (x *MigrationRollbackNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationRollbackNotify.ProtoReflect.Descriptor instead.
+func (*MigrationRollbackNotify) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *MigrationRollbackNotify) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationRollbackNotify) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationRollbackNotify) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// 完成通知（源服 → 目标服）
+type MigrationCompleteNotify struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	NewServerId   int32                  `protobuf:"varint,3,opt,name=new_server_id,json=newServerId,proto3" json:"new_server_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationCompleteNotify) Reset() {
+	*x = MigrationCompleteNotify{}
+	mi := &file_internal_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationCompleteNotify) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationCompleteNotify) ProtoMessage() {}
+
+func (x *MigrationCompleteNotify) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationCompleteNotify.ProtoReflect.Descriptor instead.
+func (*MigrationCompleteNotify) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *MigrationCompleteNotify) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationCompleteNotify) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationCompleteNotify) GetNewServerId() int32 {
+	if x != nil {
+		return x.NewServerId
+	}
+	return 0
+}
+
+// 迁移保活
+type MigrationHeartbeat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	State         uint32                 `protobuf:"varint,2,opt,name=state,proto3" json:"state,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,3,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationHeartbeat) Reset() {
+	*x = MigrationHeartbeat{}
+	mi := &file_internal_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationHeartbeat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationHeartbeat) ProtoMessage() {}
+
+func (x *MigrationHeartbeat) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationHeartbeat.ProtoReflect.Descriptor instead.
+func (*MigrationHeartbeat) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *MigrationHeartbeat) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationHeartbeat) GetState() uint32 {
+	if x != nil {
+		return x.State
+	}
+	return 0
+}
+
+func (x *MigrationHeartbeat) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
+// 迁移状态查询
+type MigrationStatusQuery struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationStatusQuery) Reset() {
+	*x = MigrationStatusQuery{}
+	mi := &file_internal_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationStatusQuery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationStatusQuery) ProtoMessage() {}
+
+func (x *MigrationStatusQuery) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationStatusQuery.ProtoReflect.Descriptor instead.
+func (*MigrationStatusQuery) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *MigrationStatusQuery) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+// 迁移状态应答
+type MigrationStatus struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MigrationId   uint64                 `protobuf:"varint,1,opt,name=migration_id,json=migrationId,proto3" json:"migration_id,omitempty"`
+	PlayerId      int64                  `protobuf:"varint,2,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	State         uint32                 `protobuf:"varint,3,opt,name=state,proto3" json:"state,omitempty"`
+	SourceServer  int32                  `protobuf:"varint,4,opt,name=source_server,json=sourceServer,proto3" json:"source_server,omitempty"`
+	TargetServer  int32                  `protobuf:"varint,5,opt,name=target_server,json=targetServer,proto3" json:"target_server,omitempty"`
+	MigrationType uint32                 `protobuf:"varint,6,opt,name=migration_type,json=migrationType,proto3" json:"migration_type,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     int64                  `protobuf:"varint,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MigrationStatus) Reset() {
+	*x = MigrationStatus{}
+	mi := &file_internal_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MigrationStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MigrationStatus) ProtoMessage() {}
+
+func (x *MigrationStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MigrationStatus.ProtoReflect.Descriptor instead.
+func (*MigrationStatus) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *MigrationStatus) GetMigrationId() uint64 {
+	if x != nil {
+		return x.MigrationId
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetState() uint32 {
+	if x != nil {
+		return x.State
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetSourceServer() int32 {
+	if x != nil {
+		return x.SourceServer
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetTargetServer() int32 {
+	if x != nil {
+		return x.TargetServer
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetMigrationType() uint32 {
+	if x != nil {
+		return x.MigrationType
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *MigrationStatus) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
 var File_internal_proto protoreflect.FileDescriptor
 
 const file_internal_proto_rawDesc = "" +
@@ -2596,7 +3295,65 @@ const file_internal_proto_rawDesc = "" +
 	"\tplayer_id\x18\x03 \x01(\x03R\bplayerId\x12\x1b\n" +
 	"\ttarget_id\x18\x04 \x01(\x03R\btargetId\x12\x16\n" +
 	"\x06damage\x18\x05 \x01(\x03R\x06damage\x12\x1b\n" +
-	"\ttarget_hp\x18\x06 \x01(\x03R\btargetHp*\xc8\x06\n" +
+	"\ttarget_hp\x18\x06 \x01(\x03R\btargetHp\"\x8d\x03\n" +
+	"\x10MigrationRequest\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x03 \x01(\x03R\taccountId\x12\x1f\n" +
+	"\vplayer_name\x18\x04 \x01(\tR\n" +
+	"playerName\x12#\n" +
+	"\rsource_server\x18\x05 \x01(\x05R\fsourceServer\x12%\n" +
+	"\x0esource_service\x18\x06 \x01(\rR\rsourceService\x12#\n" +
+	"\rtarget_server\x18\a \x01(\x05R\ftargetServer\x12%\n" +
+	"\x0etarget_service\x18\b \x01(\rR\rtargetService\x12\"\n" +
+	"\rtarget_map_id\x18\t \x01(\x05R\vtargetMapId\x12%\n" +
+	"\x0emigration_type\x18\n" +
+	" \x01(\rR\rmigrationType\x12\x16\n" +
+	"\x06reason\x18\v \x01(\tR\x06reason\"\x89\x01\n" +
+	"\x13MigrationPrepareAck\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1a\n" +
+	"\baccepted\x18\x03 \x01(\bR\baccepted\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\xd2\x01\n" +
+	"\x15MigrationDataTransfer\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x1f\n" +
+	"\vplayer_data\x18\x03 \x01(\fR\n" +
+	"playerData\x12\x19\n" +
+	"\bmap_data\x18\x04 \x01(\fR\amapData\x12\x1a\n" +
+	"\bchecksum\x18\x05 \x01(\rR\bchecksum\x12!\n" +
+	"\fdata_version\x18\x06 \x01(\x03R\vdataVersion\"\x86\x01\n" +
+	"\x12MigrationCommitAck\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x18\n" +
+	"\asuccess\x18\x03 \x01(\bR\asuccess\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"q\n" +
+	"\x17MigrationRollbackNotify\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"}\n" +
+	"\x17MigrationCompleteNotify\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\"\n" +
+	"\rnew_server_id\x18\x03 \x01(\x05R\vnewServerId\"k\n" +
+	"\x12MigrationHeartbeat\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\rR\x05state\x12\x1c\n" +
+	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\"9\n" +
+	"\x14MigrationStatusQuery\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\"\x96\x02\n" +
+	"\x0fMigrationStatus\x12!\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
+	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\rR\x05state\x12#\n" +
+	"\rsource_server\x18\x04 \x01(\x05R\fsourceServer\x12#\n" +
+	"\rtarget_server\x18\x05 \x01(\x05R\ftargetServer\x12%\n" +
+	"\x0emigration_type\x18\x06 \x01(\rR\rmigrationType\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\a \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\b \x01(\x03R\tupdatedAt*\xac\b\n" +
 	"\rInternalMsgId\x12\x18\n" +
 	"\x14MSG_INTERNAL_INVALID\x10\x00\x12!\n" +
 	"\x1dMSG_INTERNAL_SERVICE_REGISTER\x10d\x12#\n" +
@@ -2620,7 +3377,13 @@ const file_internal_proto_rawDesc = "" +
 	"\x1aMSG_INTERNAL_COMBAT_ACTION\x10\x97\x03\x12$\n" +
 	"\x1fMSG_INTERNAL_MAP_PICKUP_REQUEST\x10\x98\x03\x12&\n" +
 	"!MSG_INTERNAL_CROSS_SERVER_REQUEST\x10\xd8\x04\x12'\n" +
-	"\"MSG_INTERNAL_CROSS_SERVER_RESPONSE\x10\xd9\x04*\x9f\x01\n" +
+	"\"MSG_INTERNAL_CROSS_SERVER_RESPONSE\x10\xd9\x04\x12#\n" +
+	"\x1eMSG_INTERNAL_MIGRATION_REQUEST\x10\xe2\x04\x12 \n" +
+	"\x1bMSG_INTERNAL_MIGRATION_DATA\x10\xe3\x04\x12$\n" +
+	"\x1fMSG_INTERNAL_MIGRATION_ROLLBACK\x10\xe4\x04\x12$\n" +
+	"\x1fMSG_INTERNAL_MIGRATION_COMPLETE\x10\xe5\x04\x12%\n" +
+	" MSG_INTERNAL_MIGRATION_HEARTBEAT\x10\xe6\x04\x12(\n" +
+	"#MSG_INTERNAL_MIGRATION_QUERY_STATUS\x10\xe7\x04*\x9f\x01\n" +
 	"\vServiceType\x12\x18\n" +
 	"\x14SERVICE_TYPE_INVALID\x10\x00\x12\x17\n" +
 	"\x13SERVICE_TYPE_GLOBAL\x10\x01\x12\x18\n" +
@@ -2642,7 +3405,7 @@ func file_internal_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
+var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_internal_proto_goTypes = []any{
 	(InternalMsgId)(0),                // 0: protocol.InternalMsgId
 	(ServiceType)(0),                  // 1: protocol.ServiceType
@@ -2675,11 +3438,20 @@ var file_internal_proto_goTypes = []any{
 	(*MapMoveResponse)(nil),           // 28: protocol.MapMoveResponse
 	(*MapAttackRequest)(nil),          // 29: protocol.MapAttackRequest
 	(*MapAttackResponse)(nil),         // 30: protocol.MapAttackResponse
-	nil,                               // 31: protocol.ServiceInfo.MetadataEntry
+	(*MigrationRequest)(nil),          // 31: protocol.MigrationRequest
+	(*MigrationPrepareAck)(nil),       // 32: protocol.MigrationPrepareAck
+	(*MigrationDataTransfer)(nil),     // 33: protocol.MigrationDataTransfer
+	(*MigrationCommitAck)(nil),        // 34: protocol.MigrationCommitAck
+	(*MigrationRollbackNotify)(nil),   // 35: protocol.MigrationRollbackNotify
+	(*MigrationCompleteNotify)(nil),   // 36: protocol.MigrationCompleteNotify
+	(*MigrationHeartbeat)(nil),        // 37: protocol.MigrationHeartbeat
+	(*MigrationStatusQuery)(nil),      // 38: protocol.MigrationStatusQuery
+	(*MigrationStatus)(nil),           // 39: protocol.MigrationStatus
+	nil,                               // 40: protocol.ServiceInfo.MetadataEntry
 }
 var file_internal_proto_depIdxs = []int32{
 	1,  // 0: protocol.ServiceInfo.service_type:type_name -> protocol.ServiceType
-	31, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
+	40, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
 	2,  // 2: protocol.ServiceRegisterRequest.service:type_name -> protocol.ServiceInfo
 	1,  // 3: protocol.ServiceDeregisterRequest.service_type:type_name -> protocol.ServiceType
 	1,  // 4: protocol.ServiceHeartbeatRequest.service_type:type_name -> protocol.ServiceType
@@ -2705,7 +3477,7 @@ func file_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_rawDesc), len(file_internal_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   30,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

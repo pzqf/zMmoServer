@@ -47,6 +47,17 @@ func (cr *CrossRouter) RegisterHandler(serviceType uint8, msgID uint32, handler 
 		zap.Uint32("msg_id", msgID))
 }
 
+// RegisterHandlerAllServices 把同一个 handler 注册给所有对端服务类型。
+//
+// 注意 Route 的键是 **meta.SourceService（发消息那一方的服务类型）**，不是本进程的服务类型——
+// 也就是说「谁来的消息」决定查哪张表。跨服消息可能从 Game/Map/Global 任一侧发来，逐个注册
+// 容易漏（漏了就是"no handler for service type N"、请求超时），故提供本入口一次注册齐。
+func (cr *CrossRouter) RegisterHandlerAllServices(msgID uint32, handler CrossHandlerFunc) {
+	for _, svc := range []uint8{ServiceTypeGame, ServiceTypeMap, ServiceTypeGateway, ServiceTypeGlobal} {
+		cr.RegisterHandler(svc, msgID, handler)
+	}
+}
+
 func (cr *CrossRouter) UnregisterHandler(serviceType uint8, msgID uint32) {
 	sr, exists := cr.handlers.Load(serviceType)
 	if !exists {
