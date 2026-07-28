@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zEngine/zLog"
+	"github.com/pzqf/zEngine/zNet"
 	"go.uber.org/zap"
 )
 
@@ -30,7 +31,7 @@ type RPCEndpoint struct {
 	handler     RPCHandlerFunc
 	timeout     time.Duration
 	router      *CrossRouter
-	reqRouter   *RequestRouter
+	reqRouter   *zNet.RequestRouter
 }
 
 func NewRPCEndpoint(serviceType uint8, msgID uint32, handler RPCHandlerFunc) *RPCEndpoint {
@@ -52,7 +53,7 @@ func (e *RPCEndpoint) WithRouter(router *CrossRouter) *RPCEndpoint {
 	return e
 }
 
-func (e *RPCEndpoint) WithRequestRouter(reqRouter *RequestRouter) *RPCEndpoint {
+func (e *RPCEndpoint) WithRequestRouter(reqRouter *zNet.RequestRouter) *RPCEndpoint {
 	e.reqRouter = reqRouter
 	return e
 }
@@ -153,12 +154,12 @@ func (e *RPCEndpoint) CallToService(ctx context.Context, serverRouter *ServerRou
 
 type RPCService struct {
 	router    *CrossRouter
-	reqRouter *RequestRouter
+	reqRouter *zNet.RequestRouter
 	srvRouter *ServerRouter
 	endpoints []*RPCEndpoint
 }
 
-func NewRPCService(router *CrossRouter, reqRouter *RequestRouter, srvRouter *ServerRouter) *RPCService {
+func NewRPCService(router *CrossRouter, reqRouter *zNet.RequestRouter, srvRouter *ServerRouter) *RPCService {
 	return &RPCService{
 		router:    router,
 		reqRouter: reqRouter,

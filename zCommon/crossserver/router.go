@@ -1,11 +1,9 @@
 package crossserver
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zMap"
@@ -210,111 +208,3 @@ func (sr *ServerRouter) ConnectionCount() int {
 	return int(sr.connections.Len())
 }
 
-type PendingResponse struct {
-	ch       chan *ResponseResult
-	deadline time.Time
-}
-
-type ResponseResult struct {
-	Data  []byte
-	Error error
-}
-
-type RequestRouter struct {
-	pending   *zMap.TypedMap[uint64, *PendingResponse]
-	nextReqID atomic.Uint64
-	timeout   time.Duration
-	cleanupMu sync.Mutex
-}
-
-func NewRequestRouter(timeout time.Duration) *RequestRouter {
-	if timeout <= 0 {
-		timeout = 10 * time.Second
-	}
-	return &RequestRouter{
-		pending: zMap.NewTypedMap[uint64, *PendingResponse](),
-		timeout: timeout,
-	}
-}
-
-func (rr *RequestRouter) NextRequestID() uint64 {
-	return rr.nextReqID.Add(1)
-}
-
-func (rr *RequestRouter) RegisterPending(requestID uint64) <-chan *ResponseResult {
-	ch := make(chan *ResponseResult, 1)
-	rr.pending.Store(requestID, &PendingResponse{
-		ch:       ch,
-		deadline: time.Now().Add(rr.timeout),
-	})
-	return ch
-}
-
-func (rr *RequestRouter) CompleteRequest(requestID uint64, data []byte, err error) bool {
-	pending, exists := rr.pending.LoadAndDelete(requestID)
-	if !exists {
-		return false
-	}
-
-	result := &ResponseResult{Data: data, Error: err}
-	select {
-	case pending.ch <- result:
-	default:
-	}
-	return true
-}
-
-func (rr *RequestRouter) SendRequest(ctx context.Context, requestID uint64, sendFn func() error) ([]byte, error) {
-	respCh := rr.RegisterPending(requestID)
-
-	if err := sendFn(); err != nil {
-		rr.pending.Delete(requestID)
-		return nil, fmt.Errorf("send request failed: %w", err)
-	}
-
-	select {
-	case result := <-respCh:
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		return result.Data, nil
-	case <-ctx.Done():
-		rr.pending.Delete(requestID)
-		return nil, ctx.Err()
-	case <-time.After(rr.timeout):
-		rr.pending.Delete(requestID)
-		return nil, fmt.Errorf("request %d timed out after %v", requestID, rr.timeout)
-	}
-}
-
-func (rr *RequestRouter) Cleanup() {
-	rr.cleanupMu.Lock()
-	defer rr.cleanupMu.Unlock()
-
-	now := time.Now()
-	var expired []uint64
-	rr.pending.Range(func(reqID uint64, p *PendingResponse) bool {
-		if now.After(p.deadline) {
-			expired = append(expired, reqID)
-		}
-		return true
-	})
-
-	for _, reqID := range expired {
-		if p, exists := rr.pending.LoadAndDelete(reqID); exists {
-			select {
-			case p.ch <- &ResponseResult{Error: fmt.Errorf("request expired")}:
-			default:
-			}
-		}
-	}
-
-	if len(expired) > 0 {
-		zLog.Debug("Cleaned up expired pending requests",
-			zap.Int("count", len(expired)))
-	}
-}
-
-func (rr *RequestRouter) PendingCount() int {
-	return int(rr.pending.Len())
-}
