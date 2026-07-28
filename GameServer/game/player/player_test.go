@@ -124,6 +124,6 @@ func (m *mockMapOperator) Pickup(playerID id.PlayerIdType, mapID id.MapIdType) e
 	return nil
 }
 
-func (m *mockMapOperator) EnterCrossMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (uint32, id.MapIdType, error) {
-	return 0, 0, nil
+func (m *mockMapOperator) AttachCrossMap(playerID id.PlayerIdType, mapServerID uint32, mapID id.MapIdType, pos common.Vector3) error {
+	return nil
 }

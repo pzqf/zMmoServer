@@ -51,8 +51,11 @@ type MapService struct {
 	crossBindings *zMap.TypedMap[int64, uint32]
 	// crossReqRouter 等"建跨服实例"应答（621）的关联器。
 	crossReqRouter *zNet.RequestRouter
-	// crossHTTP 调 GlobalServer 分配接口的 HTTP 客户端（短超时：调用发生在玩家 actor 上）。
+	// crossHTTP 调 GlobalServer 分配接口的 HTTP 客户端（短超时）。
 	crossHTTP *http.Client
+	// crossAllocCache 跨服活动分配的本地短 TTL 缓存：GlobalServer 侧是粘性分配，
+	// 同一活动涌入的玩家没必要每人打一次 HTTP 去拿同一个答案。
+	crossAllocCache *zMap.TypedMap[int64, *cachedCrossAllocation]
 }
 
 const maxOutboxRetry = 5
@@ -79,9 +82,10 @@ func NewMapService(cfg *config.Config, protocol protolayer.Protocol) *MapService
 		pendingByReq:   zMap.NewTypedMap[uint64, chan mapAttackResult](),
 		outbox:         consistency.NewMemoryOutbox(),
 		inbox:          consistency.NewMemoryInbox(),
-		crossBindings:  zMap.NewTypedMap[int64, uint32](),
-		crossReqRouter: zNet.NewRequestRouter(crossEnsureTimeout),
-		crossHTTP:      &http.Client{Timeout: crossAllocateTimeout},
+		crossBindings:   zMap.NewTypedMap[int64, uint32](),
+		crossReqRouter:  zNet.NewRequestRouter(crossEnsureTimeout),
+		crossHTTP:       &http.Client{Timeout: crossAllocateTimeout},
+		crossAllocCache: zMap.NewTypedMap[int64, *cachedCrossAllocation](),
 	}
 }
 

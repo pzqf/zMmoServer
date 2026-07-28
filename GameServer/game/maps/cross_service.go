@@ -54,6 +54,9 @@ const (
 	// crossConnIdleGrace 跨域连接被判为空闲前的最短存活时间。必须显著大于"连上→建实例→绑定"
 	// 那几百毫秒，否则会把正在进图的玩家的连接收掉。
 	crossConnIdleGrace = 5 * time.Minute
+	// crossAllocCacheTTL 本地分配缓存的存活时间。取短值：GlobalServer 侧本就是粘性分配，
+	// 缓存只为削掉"同一活动 N 个玩家各打一次 HTTP"的重复往返，不承担正确性。
+	crossAllocCacheTTL = 30 * time.Second
 )
 
 // StartCrossMaintainLoop 周期维护跨服资源：清关联器里超时未回的挂起项 + 回收没人再用的跨域连接。
@@ -90,8 +93,13 @@ func (ms *MapService) reapIdleCrossConnections() {
 	}
 }
 
-// EnterCrossServerMap 把玩家送进一场跨服活动的实例地图。失败时不留下任何绑定（玩家仍在原 realm）。
-func (ms *MapService) EnterCrossServerMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (*CrossEnterResult, error) {
+// ResolveCrossActivity 解析一场跨服活动的落点：问 GlobalServer 要分配 → 连上那台 MapServer →
+// 请它建/取实例，拿到物理 mapID。**全程不碰任何玩家状态**，因此可以（也应该）在玩家 actor
+// 之外的 goroutine 上跑——这三跳都是网络往返，加起来可达数秒，占着玩家 actor 会让该玩家
+// 在这期间完全无响应。
+//
+// 落点用不上时（承载服务器换了/挂了）会作废本地分配缓存并用新鲜分配重试一次。
+func (ms *MapService) ResolveCrossActivity(activityID int64, mapConfigID int32) (*CrossEnterResult, error) {
 	if activityID <= 0 {
 		return nil, fmt.Errorf("invalid activity id %d", activityID)
 	}
@@ -99,50 +107,80 @@ func (ms *MapService) EnterCrossServerMap(playerID id.PlayerIdType, activityID i
 		return nil, fmt.Errorf("connection manager not set")
 	}
 
-	// 1) 全区唯一决策方给出落点。
-	alloc, err := ms.allocateCrossActivity(activityID, mapConfigID)
-	if err != nil {
-		return nil, err
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		alloc, fromCache, err := ms.allocateCrossActivity(activityID, mapConfigID)
+		if err != nil {
+			return nil, err
+		}
+
+		// 定点连上那台 MapServer（本 realm 的服务器也可能被选中，一样按 serverID 走定点连接：
+		// 跨服实例的 mapID 不能进 mapID→连接 的路由表）。
+		if err := ms.connectionManager.ConnectToCrossRealmMapServer(alloc.ServerID, alloc.Address); err != nil {
+			lastErr = fmt.Errorf("connect cross map server %d(%s): %w", alloc.ServerID, alloc.Address, err)
+		} else if mapID, err := ms.ensureCrossInstance(alloc.ServerID, activityID, mapConfigID); err != nil {
+			// 建/取实例失败（按 activityID 幂等，多 realm 收敛到同一张）。
+			lastErr = err
+		} else {
+			return &CrossEnterResult{
+				ActivityID:  activityID,
+				MapServerID: alloc.ServerID,
+				MapID:       mapID,
+				Address:     alloc.Address,
+			}, nil
+		}
+
+		// 落点不可用：作废缓存。用的若是缓存（承载服可能已换/已挂），立刻拿新鲜分配再试一次；
+		// 本来就是新鲜分配的话再试也是同一个答案，直接返回错误。
+		ms.invalidateCrossAllocation(activityID)
+		if !fromCache {
+			return nil, lastErr
+		}
+		zLog.Warn("Cached cross allocation unusable, retrying with fresh allocation",
+			zap.Int64("activity_id", activityID), zap.Error(lastErr))
+	}
+	return nil, lastErr
+}
+
+// AttachPlayerToCrossInstance 把玩家挂到**已解析好**的跨服实例上：绑路由 + 发进图请求。
+// 只有本地状态改动和一次 fire-and-forget 发送，很快，适合在玩家 actor 上执行。
+func (ms *MapService) AttachPlayerToCrossInstance(playerID id.PlayerIdType, target *CrossEnterResult, pos common.Vector3) error {
+	if target == nil || target.MapID == 0 {
+		return fmt.Errorf("invalid cross instance target")
 	}
 
-	// 2) 定点连上那台 MapServer（本 realm 的服务器也可能被选中，一样按 serverID 走定点连接：
-	//    跨服实例的 mapID 不能进 mapID→连接 的路由表）。
-	if err := ms.connectionManager.ConnectToCrossRealmMapServer(alloc.ServerID, alloc.Address); err != nil {
-		return nil, fmt.Errorf("connect cross map server %d(%s): %w", alloc.ServerID, alloc.Address, err)
-	}
+	// 绑定后其地图消息才会定点发往该服务器——必须在发进图请求之前绑。
+	ms.crossBindings.Store(int64(playerID), target.MapServerID)
 
-	// 3) 建/取实例（按 activityID 幂等，多 realm 收敛到同一张）。
-	mapID, err := ms.ensureCrossInstance(alloc.ServerID, activityID, mapConfigID)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4) 绑定后其地图消息才会定点发往该服务器——必须在发进图请求之前绑。
-	ms.crossBindings.Store(int64(playerID), alloc.ServerID)
-
-	// 5) 复用常规进图链（带进场属性快照）。
-	if err := ms.sendMapEnterRequest(playerID, mapID, pos); err != nil {
+	// 复用常规进图链（带进场属性快照）。
+	if err := ms.sendMapEnterRequest(playerID, target.MapID, pos); err != nil {
 		ms.crossBindings.Delete(int64(playerID)) // 没进去就不能留绑定，否则该玩家后续消息全被发去外域
-		return nil, fmt.Errorf("send cross map enter: %w", err)
+		return fmt.Errorf("send cross map enter: %w", err)
 	}
 
 	if ms.playerMapManager != nil {
-		ms.playerMapManager.SetPlayerMap(playerID, mapID, alloc.ServerID)
+		ms.playerMapManager.SetPlayerMap(playerID, target.MapID, target.MapServerID)
 	}
 
 	zLog.Info("Player entered cross-server instance",
 		zap.Int64("player_id", int64(playerID)),
-		zap.Int64("activity_id", activityID),
-		zap.Uint32("map_server_id", alloc.ServerID),
-		zap.String("group_id", alloc.GroupID),
-		zap.Int32("map_id", int32(mapID)))
+		zap.Int64("activity_id", target.ActivityID),
+		zap.Uint32("map_server_id", target.MapServerID),
+		zap.Int32("map_id", int32(target.MapID)))
+	return nil
+}
 
-	return &CrossEnterResult{
-		ActivityID:  activityID,
-		MapServerID: alloc.ServerID,
-		MapID:       mapID,
-		Address:     alloc.Address,
-	}, nil
+// EnterCrossServerMap 解析落点 + 挂玩家，一步到位。**整条链会阻塞调用者数秒**，
+// 生产路径请改用 ResolveCrossActivity（慢，放 actor 外）+ AttachPlayerToCrossInstance（快，放 actor 上）。
+func (ms *MapService) EnterCrossServerMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (*CrossEnterResult, error) {
+	target, err := ms.ResolveCrossActivity(activityID, mapConfigID)
+	if err != nil {
+		return nil, err
+	}
+	if err := ms.AttachPlayerToCrossInstance(playerID, target, pos); err != nil {
+		return nil, err
+	}
+	return target, nil
 }
 
 // LeaveCrossServerMap 离开跨服实例：先按绑定把离开请求发到承载服务器，再解绑回本 realm。
@@ -168,13 +206,12 @@ func (ms *MapService) IsInCrossServerInstance(playerID id.PlayerIdType) (uint32,
 	return ms.crossBindings.Load(int64(playerID))
 }
 
-// EnterCrossMap 实现 player.MapOperator 接口（玩家 actor 调用）。
-func (ms *MapService) EnterCrossMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (uint32, id.MapIdType, error) {
-	result, err := ms.EnterCrossServerMap(playerID, activityID, mapConfigID, pos)
-	if err != nil {
-		return 0, 0, err
-	}
-	return result.MapServerID, result.MapID, nil
+// AttachCrossMap 实现 player.MapOperator 接口（玩家 actor 调用，只做快的那一小段）。
+func (ms *MapService) AttachCrossMap(playerID id.PlayerIdType, mapServerID uint32, mapID id.MapIdType, pos common.Vector3) error {
+	return ms.AttachPlayerToCrossInstance(playerID, &CrossEnterResult{
+		MapServerID: mapServerID,
+		MapID:       mapID,
+	}, pos)
 }
 
 // crossAllocation GlobalServer 分配结果。
@@ -184,9 +221,41 @@ type crossAllocation struct {
 	Address  string
 }
 
-// allocateCrossActivity 问 GlobalServer 这场活动落在哪台 MapServer 上。
+// cachedCrossAllocation 带过期的本地分配缓存项。
+type cachedCrossAllocation struct {
+	alloc     *crossAllocation
+	expiresAt time.Time
+}
+
+// allocateCrossActivity 问 GlobalServer 这场活动落在哪台 MapServer 上，返回 (落点, 是否来自缓存)。
+//
 // 走 HTTP：GlobalServer 是全区全服的 HTTP 进程（账号/服务器列表），无 TCP 栈；分配是低频控制面调用。
-func (ms *MapService) allocateCrossActivity(activityID int64, mapConfigID int32) (*crossAllocation, error) {
+// 本地带短 TTL 缓存：一场活动的分配在 GlobalServer 侧是**粘性**的，同一活动涌入 N 个玩家时
+// 每人打一次 HTTP 拿的是同一个答案，纯属浪费（还把 GlobalServer 的限流额度耗在这上面）。
+// 缓存过期或落点用不上时（见 ResolveCrossActivity 的重试）会被作废，故承载服切换仍能收敛。
+func (ms *MapService) allocateCrossActivity(activityID int64, mapConfigID int32) (*crossAllocation, bool, error) {
+	if cached, ok := ms.crossAllocCache.Load(activityID); ok && time.Now().Before(cached.expiresAt) {
+		return cached.alloc, true, nil
+	}
+
+	alloc, err := ms.fetchCrossAllocation(activityID, mapConfigID)
+	if err != nil {
+		return nil, false, err
+	}
+	ms.crossAllocCache.Store(activityID, &cachedCrossAllocation{
+		alloc:     alloc,
+		expiresAt: time.Now().Add(crossAllocCacheTTL),
+	})
+	return alloc, false, nil
+}
+
+// invalidateCrossAllocation 作废某活动的本地分配缓存（落点连不上/建实例失败时）。
+func (ms *MapService) invalidateCrossAllocation(activityID int64) {
+	ms.crossAllocCache.Delete(activityID)
+}
+
+// fetchCrossAllocation 真正向 GlobalServer 发一次分配请求。
+func (ms *MapService) fetchCrossAllocation(activityID int64, mapConfigID int32) (*crossAllocation, error) {
 	addr := ""
 	if ms.config != nil {
 		addr = ms.config.GlobalServer.GlobalServerAddr

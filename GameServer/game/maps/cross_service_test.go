@@ -198,13 +198,42 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Fatalf("等待超时: %s", what)
 }
 
-// fakeGlobalServer 假的跨服分配接口。
-func fakeGlobalServer(t *testing.T, serverID uint32, groupID, address string, fail bool) *httptest.Server {
+// countingGlobalServer 假的跨服分配接口，并记录被调用次数（用于验证本地缓存真的削掉了重复 HTTP）。
+type countingGlobalServer struct {
+	*httptest.Server
+	mu       sync.Mutex
+	calls    int
+	serverID uint32
+	address  string
+}
+
+func (g *countingGlobalServer) callCount() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.calls
+}
+
+// retarget 让后续分配指向新的落点（模拟承载服务器切换/故障转移）。
+func (g *countingGlobalServer) retarget(serverID uint32, address string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.serverID, g.address = serverID, address
+}
+
+func newCountingGlobalServer(t *testing.T, serverID uint32, groupID, address string, fail bool) *countingGlobalServer {
 	t.Helper()
+	g := &countingGlobalServer{serverID: serverID, address: address}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/cross/allocate", func(w http.ResponseWriter, r *http.Request) {
 		var req protocol.CrossAllocateRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
+
+		g.mu.Lock()
+		g.calls++
+		curServerID, curAddress := g.serverID, g.address
+		g.mu.Unlock()
+
 		w.Header().Set("Content-Type", "application/json")
 		if fail {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -216,14 +245,21 @@ func fakeGlobalServer(t *testing.T, serverID uint32, groupID, address string, fa
 		_ = json.NewEncoder(w).Encode(&protocol.CrossAllocateResponse{
 			Result:      0,
 			ActivityId:  req.ActivityId,
-			MapServerId: int32(serverID),
+			MapServerId: int32(curServerID),
 			GroupId:     groupID,
-			Address:     address,
+			Address:     curAddress,
 		})
 	})
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-	return srv
+
+	g.Server = httptest.NewServer(mux)
+	t.Cleanup(g.Close)
+	return g
+}
+
+// fakeGlobalServer 假的跨服分配接口。
+func fakeGlobalServer(t *testing.T, serverID uint32, groupID, address string, fail bool) *httptest.Server {
+	t.Helper()
+	return newCountingGlobalServer(t, serverID, groupID, address, fail).Server
 }
 
 // newTestMapService 造一个可用于跨服链路的 MapService（不跑 Start，避免依赖 Excel 配置表）。
@@ -435,6 +471,78 @@ func TestHandlePlayerLeaveMap_UnbindsCrossPlayer(t *testing.T) {
 	if _, bound := ms.IsInCrossServerInstance(playerID); bound {
 		t.Fatalf("普通离开路径也必须解绑，否则该玩家回本服后消息仍被发去外域")
 	}
+}
+
+// TestCrossAllocation_CachedAcrossPlayers 同一活动涌入多个玩家时，只应打**一次** GlobalServer：
+// 分配在 GlobalServer 侧本就是粘性的，每人一次 HTTP 拿同一个答案纯属浪费。
+func TestCrossAllocation_CachedAcrossPlayers(t *testing.T) {
+	const (
+		crossServerID = uint32(201)
+		instanceMapID = int32(100021)
+		activityID    = int64(70011)
+	)
+
+	fakeMap := newFakeMapServer(t, crossServerID, instanceMapID)
+	global := newCountingGlobalServer(t, crossServerID, "2", fakeMap.addr, false)
+	ms, _ := newTestMapService(t, 101, hostPort(global.URL))
+
+	for i := 0; i < 5; i++ {
+		if _, err := ms.EnterCrossServerMap(id.PlayerIdType(60100+i), activityID, 5001, common.Vector3{}); err != nil {
+			t.Fatalf("第 %d 个玩家进图失败: %v", i, err)
+		}
+	}
+
+	if n := global.callCount(); n != 1 {
+		t.Fatalf("5 个玩家进同一活动只应向 GlobalServer 要一次分配, got %d", n)
+	}
+	waitFor(t, "5 个玩家的进图请求都到了外域", func() bool { return len(fakeMap.enters()) == 5 })
+
+	// 不同活动不共享缓存。
+	if _, err := ms.EnterCrossServerMap(60200, activityID+1, 5001, common.Vector3{}); err != nil {
+		t.Fatalf("另一活动进图失败: %v", err)
+	}
+	if n := global.callCount(); n != 2 {
+		t.Fatalf("另一场活动应重新要分配, got %d", n)
+	}
+}
+
+// TestCrossAllocation_StaleCacheFailsOver 缓存里的落点用不上了（承载服换了/挂了）→
+// 必须作废缓存并用新鲜分配重试，而不是把玩家一路往死服务器上送。
+func TestCrossAllocation_StaleCacheFailsOver(t *testing.T) {
+	const (
+		oldServerID = uint32(201)
+		newServerID = uint32(301)
+		oldMapID    = int32(100022)
+		newMapID    = int32(100023)
+		activityID  = int64(70012)
+	)
+
+	oldMap := newFakeMapServer(t, oldServerID, oldMapID)
+	newMap := newFakeMapServer(t, newServerID, newMapID)
+	global := newCountingGlobalServer(t, oldServerID, "2", oldMap.addr, false)
+	ms, _ := newTestMapService(t, 101, hostPort(global.URL))
+
+	// 先进一次，把落点写进缓存。
+	first, err := ms.EnterCrossServerMap(60301, activityID, 5001, common.Vector3{})
+	if err != nil {
+		t.Fatalf("首次进图失败: %v", err)
+	}
+	if first.MapServerID != oldServerID {
+		t.Fatalf("首次应落到 %d, got %d", oldServerID, first.MapServerID)
+	}
+
+	// 承载服务器挂掉，GlobalServer 改分配到新的一台。
+	oldMap.srv.Close()
+	global.retarget(newServerID, newMap.addr)
+
+	second, err := ms.EnterCrossServerMap(60302, activityID, 5001, common.Vector3{})
+	if err != nil {
+		t.Fatalf("承载服切换后应能重试成功: %v", err)
+	}
+	if second.MapServerID != newServerID {
+		t.Fatalf("应改落到新承载服 %d, got %d", newServerID, second.MapServerID)
+	}
+	waitFor(t, "进图请求落到新承载服", func() bool { return len(newMap.enters()) == 1 })
 }
 
 // TestReapIdleCrossConnections 没有玩家再绑定的跨域连接会被回收；但**刚建连的不能收**——

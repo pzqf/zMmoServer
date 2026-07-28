@@ -125,8 +125,9 @@ func (p *Player) handleNetMapEnter(msg *PlayerMessage) {
 // handleNetCrossEnter 进跨服活动实例（realm §5.1）。
 //
 // 与普通进图的关键差别：目标地图**不是客户端给的 mapID**——先由 GlobalServer 分配承载服务器、
-// 再由该 MapServer 按 activityID 建/取实例，实例 mapID 是结果而非输入。整条链在玩家自己的
-// actor 上同步等待（与攻击等响应同一模式），故 MapService 侧对每一跳都设了短超时。
+// 再由该 MapServer 按 activityID 建/取实例，实例 mapID 是结果而非输入。
+// 那几跳网络往返（可达数秒）**已在投递到本 actor 之前完成**，msg 里带的是解析好的落点；
+// 这里只做剩下那一小段快的：绑路由 + 发进图请求 + 记 CurrentMapID。
 func (p *Player) handleNetCrossEnter(msg *PlayerMessage) {
 	req, ok := msg.Data.(*NetCrossEnterRequest)
 	if !ok {
@@ -156,9 +157,8 @@ func (p *Player) handleNetCrossEnter(msg *PlayerMessage) {
 	}
 
 	pos := common.Vector3{X: req.PosX, Y: req.PosY, Z: req.PosZ}
-	mapServerID, mapID, err := p.mapOp.EnterCrossMap(req.PlayerID, req.ActivityID, req.MapConfigID, pos)
-	if err != nil {
-		zLog.Error("Failed to enter cross-server map",
+	if err := p.mapOp.AttachCrossMap(req.PlayerID, req.MapServerID, req.MapID, pos); err != nil {
+		zLog.Error("Failed to attach to cross-server instance",
 			zap.Int64("player_id", int64(req.PlayerID)),
 			zap.Int64("activity_id", req.ActivityID), zap.Error(err))
 		respond(&protocol.ClientCrossEnterResponse{
@@ -167,13 +167,13 @@ func (p *Player) handleNetCrossEnter(msg *PlayerMessage) {
 		return
 	}
 
-	p.SetCurrentMapID(mapID)
+	p.SetCurrentMapID(req.MapID)
 
 	respond(&protocol.ClientCrossEnterResponse{
 		Result:      0,
 		ActivityId:  req.ActivityID,
-		MapServerId: int32(mapServerID),
-		MapId:       int32(mapID),
+		MapServerId: int32(req.MapServerID),
+		MapId:       int32(req.MapID),
 		Pos:         &protocol.Position{X: pos.X, Y: pos.Y, Z: pos.Z},
 	})
 }

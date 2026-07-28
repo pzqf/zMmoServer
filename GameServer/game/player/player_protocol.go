@@ -144,12 +144,16 @@ type NetMapEnterRequest struct {
 	PosZ     float32
 }
 
-// NetCrossEnterRequest 进跨服活动实例（realm §5.1）。目标地图不是玩家给的 mapID——由
-// GlobalServer 分配 + 目标 MapServer 建实例后才确定，故这里只带活动与地图配置。
+// NetCrossEnterRequest 进跨服活动实例（realm §5.1）。
+//
+// 落点（MapServerID/MapID）是**在投递到 actor 之前就解析好的**：解析要打 GlobalServer 的 HTTP、
+// 连外域 MapServer、等它建实例，加起来可达数秒；放在玩家 actor 上跑会让该玩家在这期间完全无响应。
+// 故 actor 只做剩下那一小段快的：绑路由 + 发进图请求 + 记 CurrentMapID。
 type NetCrossEnterRequest struct {
 	PlayerID    id.PlayerIdType
 	ActivityID  int64
-	MapConfigID int32
+	MapServerID uint32
+	MapID       id.MapIdType
 	PosX        float32
 	PosY        float32
 	PosZ        float32
