@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pzqf/zCommon/consistency"
+	consistency "github.com/pzqf/zEngine/zConsistency"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"

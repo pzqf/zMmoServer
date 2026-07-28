@@ -1,7 +1,7 @@
 package health
 
 import (
-	zhealth "github.com/pzqf/zCommon/health"
+	zhealth "github.com/pzqf/zEngine/zHealth"
 )
 
 type Checker = zhealth.Checker

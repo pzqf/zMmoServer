@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pzqf/zCommon/aoi"
+	aoi "github.com/pzqf/zEngine/zAoi"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/config/models"
 	"github.com/pzqf/zCommon/crossserver"

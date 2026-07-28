@@ -1,7 +1,7 @@
 package health
 
 import (
-	zhealth "github.com/pzqf/zCommon/health"
+	zhealth "github.com/pzqf/zEngine/zHealth"
 	"github.com/pzqf/zMmoServer/GameServer/connection"
 	"github.com/pzqf/zMmoServer/GameServer/game/player"
 	"github.com/pzqf/zMmoServer/GameServer/gateway"

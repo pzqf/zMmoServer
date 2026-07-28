@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
-	"github.com/pzqf/zCommon/consistency"
+	consistency "github.com/pzqf/zEngine/zConsistency"
 	zcont "github.com/pzqf/zCommon/container"
 	"github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/db/connector"

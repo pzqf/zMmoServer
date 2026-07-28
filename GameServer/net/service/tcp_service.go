@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
-	"github.com/pzqf/zCommon/consistency"
+	consistency "github.com/pzqf/zEngine/zConsistency"
 	"github.com/pzqf/zCommon/crossserver"
 	"github.com/pzqf/zCommon/message"
 	"github.com/pzqf/zCommon/netutil"

@@ -8,7 +8,7 @@ import (
 	"github.com/pzqf/zCommon/common/id"
 	sharedDB "github.com/pzqf/zCommon/db"
 	"github.com/pzqf/zCommon/discovery"
-	"github.com/pzqf/zCommon/health"
+	health "github.com/pzqf/zEngine/zHealth"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
