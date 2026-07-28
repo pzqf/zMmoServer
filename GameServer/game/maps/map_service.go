@@ -3,9 +3,12 @@ package maps
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/pzqf/zEngine/zNet"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/config/tables"
@@ -42,6 +45,14 @@ type MapService struct {
 	retryCtx          context.Context
 	retryCancel       context.CancelFunc
 	onOutboxChanged   func(OutboxStats)
+	// crossBindings 参加跨服活动的玩家 → 承载其实例的 MapServer serverID（跨服物理路由 ②）。
+	// 有绑定的玩家，其全部地图消息按 serverID **定点**发到那台服务器（可能在别的 realm），
+	// 不再按 mapID 走本 realm 路由——跨服实例的 mapID 是各 MapServer 实例池的派生号，会撞号。
+	crossBindings *zMap.TypedMap[int64, uint32]
+	// crossReqRouter 等"建跨服实例"应答（621）的关联器。
+	crossReqRouter *zNet.RequestRouter
+	// crossHTTP 调 GlobalServer 分配接口的 HTTP 客户端（短超时：调用发生在玩家 actor 上）。
+	crossHTTP *http.Client
 }
 
 const maxOutboxRetry = 5
@@ -68,6 +79,9 @@ func NewMapService(cfg *config.Config, protocol protolayer.Protocol) *MapService
 		pendingByReq:   zMap.NewTypedMap[uint64, chan mapAttackResult](),
 		outbox:         consistency.NewMemoryOutbox(),
 		inbox:          consistency.NewMemoryInbox(),
+		crossBindings:  zMap.NewTypedMap[int64, uint32](),
+		crossReqRouter: zNet.NewRequestRouter(crossEnsureTimeout),
+		crossHTTP:      &http.Client{Timeout: crossAllocateTimeout},
 	}
 }
 
@@ -299,6 +313,9 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, innerData 
 		return fmt.Errorf("failed to pack cross server message: %w", err)
 	}
 
+	// 跨服活动中的玩家：定点发到承载其实例的那台 MapServer（可能在别的 realm），不按 mapID 路由。
+	crossServerID, isCross := ms.crossBindings.Load(int64(playerID))
+
 	msg := consistency.OutboxMessage{
 		RequestID:   meta.RequestID,
 		Topic:       fmt.Sprintf("map:%d:proto:%d", mapID, protoId),
@@ -306,11 +323,19 @@ func (ms *MapService) sendMapMessage(mapID id.MapIdType, protoId int, innerData 
 		ProtoID:     int32(protoId),
 		Payload:     enveloped,
 	}
+	if isCross {
+		// 记下定点目标：重投时必须仍发到那台服务器，按 mapID 重投会串到本 realm 的错服务器上。
+		msg.TargetServerID = crossserver.ServerKey(int32(crossServerID))
+	}
 	ms.outbox.Add(msg)
 	ms.outbox.MarkAttempt(meta.RequestID, nil)
 	ms.publishOutboxStats()
 
-	err = ms.sendFramedToMap(int(mapID), protoId, enveloped)
+	if isCross {
+		err = ms.connectionManager.SendToCrossRealmMapServer(crossServerID, protoId, enveloped)
+	} else {
+		err = ms.sendFramedToMap(int(mapID), protoId, enveloped)
+	}
 	if err != nil {
 		ms.outbox.MarkAttempt(meta.RequestID, err)
 		zLog.Warn("Cross-server send failed",
@@ -359,6 +384,25 @@ func (ms *MapService) outboxRetryLoop() {
 						zap.Uint64("request_id", msg.RequestID),
 						zap.Int("attempts", msg.Attempts),
 						zap.String("topic", msg.Topic))
+					ms.publishOutboxStats()
+					continue
+				}
+
+				// 跨服定点消息：按 TargetServerID 重投到那台 MapServer，绝不能回落到 mapID 路由
+				// （跨服实例 mapID 会与本 realm 的实例撞号，重投会打到错的服务器上）。
+				if msg.TargetServerID != "" {
+					crossServerID, perr := strconv.ParseUint(msg.TargetServerID, 10, 32)
+					if perr != nil || msg.ProtoID == 0 {
+						ms.outbox.MarkDeadLetter(msg.RequestID, "invalid cross-realm target metadata")
+						ms.publishOutboxStats()
+						continue
+					}
+					ms.outbox.MarkAttempt(msg.RequestID, nil)
+					if err := ms.connectionManager.SendToCrossRealmMapServer(uint32(crossServerID), int(msg.ProtoID), msg.Payload); err != nil {
+						ms.outbox.MarkAttempt(msg.RequestID, err)
+						continue
+					}
+					ms.outbox.MarkSent(msg.RequestID)
 					ms.publishOutboxStats()
 					continue
 				}

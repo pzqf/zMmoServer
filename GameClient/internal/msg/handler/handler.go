@@ -33,6 +33,10 @@ type MessageHandler struct {
 	// AOI 视野集：记当前视野内的实体ID（进入视野+1、离开-1），供观测"我视野里有谁"——
 	// 分线隔离/无缝交接等场景可直接看客户端视野是否含某玩家。
 	viewSet map[int64]bool
+
+	// 跨服进图落点（realm §5.1）：服务端分配的承载 MapServer 与实例 mapID。
+	crossMapServerID int32
+	crossMapID       int32
 }
 
 func (h *MessageHandler) viewAdd(entityID int64) {
@@ -74,6 +78,7 @@ func NewMessageHandler() *MessageHandler {
 			uint32(protocol.SystemMsgId_MSG_SYSTEM_TOKEN_VERIFY_RESPONSE): make(chan int32, 1),
 			uint32(protocol.PlayerMsgId_MSG_PLAYER_ENTER_GAME_RESPONSE):   make(chan int32, 1),
 			uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):              make(chan int32, 1),
+			uint32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE):        make(chan int32, 1),
 		},
 	}
 }
@@ -135,6 +140,8 @@ func (h *MessageHandler) HandleMessage(protoId uint32, data []byte) {
 		h.handlePlayerCreateResponse(data)
 	case uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE):
 		h.handleMapEnterResponse(data)
+	case uint32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE):
+		h.handleCrossEnterResponse(data)
 	case uint32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE):
 		h.handleMapMoveResponse(data)
 	case uint32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE):
@@ -408,6 +415,30 @@ func (h *MessageHandler) handleMapEnterResponse(data []byte) {
 	}
 	fmt.Printf("ClientMapEnterResponse: Result=%d, ErrorMsg=%s, MapID=%d\n", resp.Result, resp.ErrorMsg, resp.MapId)
 	h.signal(uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), resp.Result)
+}
+
+// handleCrossEnterResponse 跨服进图应答：打印承载 MapServer 与实例 mapID——
+// 跨 realm E2E 就靠这两个字段断言"两个 realm 的玩家确实落到同一台服务器的同一张实例图上"。
+func (h *MessageHandler) handleCrossEnterResponse(data []byte) {
+	var resp protocol.ClientCrossEnterResponse
+	if err := proto.Unmarshal(data, &resp); err != nil {
+		fmt.Printf("Failed to unmarshal ClientCrossEnterResponse: %v\n", err)
+		return
+	}
+	fmt.Printf("[跨服] ClientCrossEnterResponse: Result=%d, ErrorMsg=%s, ActivityID=%d, MapServerID=%d, MapID=%d\n",
+		resp.Result, resp.ErrorMsg, resp.ActivityId, resp.MapServerId, resp.MapId)
+	h.mu.Lock()
+	h.crossMapID = resp.MapId
+	h.crossMapServerID = resp.MapServerId
+	h.mu.Unlock()
+	h.signal(uint32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE), resp.Result)
+}
+
+// CrossEnterInfo 上次跨服进图的落点（承载 MapServer / 实例 mapID）。
+func (h *MessageHandler) CrossEnterInfo() (mapServerID int32, mapID int32) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.crossMapServerID, h.crossMapID
 }
 
 func (h *MessageHandler) handleMapMoveResponse(data []byte) {

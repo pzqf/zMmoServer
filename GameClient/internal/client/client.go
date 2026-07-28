@@ -252,6 +252,21 @@ func (c *Client) WaitMapEnter(timeout time.Duration) (int32, bool) {
 	return c.messageHandler.WaitFor(uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), timeout)
 }
 
+// SendCrossEnter 进入跨服活动实例（realm §5.1）。
+func (c *Client) SendCrossEnter(playerID int64, activityID int64, mapConfigID int32) error {
+	return c.messageSender.SendCrossEnter(playerID, activityID, mapConfigID)
+}
+
+// WaitCrossEnter 等待跨服进图响应（服务端要跑 分配→连外域→建实例→进图，比普通进图慢）。
+func (c *Client) WaitCrossEnter(timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitFor(uint32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE), timeout)
+}
+
+// CrossEnterInfo 上次跨服进图的落点（承载 MapServer ID / 实例 mapID）。
+func (c *Client) CrossEnterInfo() (int32, int32) {
+	return c.messageHandler.CrossEnterInfo()
+}
+
 // SelectedServer 获取选中的服务器
 func (c *Client) SelectedServer() *protocol.ServerInfo {
 	return c.selectedServer

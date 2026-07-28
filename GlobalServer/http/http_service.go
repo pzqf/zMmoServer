@@ -237,6 +237,14 @@ func (s *HttpService) registerRoutes() {
 		server.GET("/list", handler.HandleGetServerList)
 		server.GET("/group/:groupId", handler.HandleGetServerListByGroup)
 	}
+
+	// 跨服活动分配（realm §5.1 ③）：GlobalServer 是全区唯一决策方，回答"这场跨服活动放在哪台
+	// MapServer 上"，各 realm 的 GameServer 据此把玩家送到同一张实例地图。
+	cross := api.Group("/cross")
+	{
+		cross.POST("/allocate", handler.HandleCrossAllocate)
+		cross.GET("/allocations", handler.HandleCrossAllocations)
+	}
 }
 
 // handleHealthCheck handles health check requests

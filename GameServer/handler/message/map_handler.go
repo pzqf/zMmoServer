@@ -69,6 +69,8 @@ func (h *MapHandler) Handle(session zNet.Session, protoId int32, data []byte) er
 		return h.handleMapMove(session, data)
 	case int32(protocol.MapMsgId_MSG_MAP_ATTACK):
 		return h.handleMapAttack(session, data)
+	case int32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER):
+		return h.handleCrossEnter(session, data)
 	default:
 		zLog.Warn("Unknown map message", zap.Int32("proto_id", protoId))
 		return nil
@@ -126,6 +128,76 @@ func (h *MapHandler) handleMapEnter(session zNet.Session, data []byte) error {
 	}
 
 	return nil
+}
+
+// handleCrossEnter 进跨服活动实例（realm §5.1）。整条链（分配→连外域→建实例→进图）在玩家 actor
+// 上同步跑，比普通进图慢，故回调等待放宽到 8s（服务端各跳超时之和 < 8s）。
+func (h *MapHandler) handleCrossEnter(session zNet.Session, data []byte) error {
+	var req protocol.ClientCrossEnterRequest
+	if err := proto.Unmarshal(data, &req); err != nil {
+		zLog.Error("Failed to unmarshal cross enter request", zap.Error(err))
+		return err
+	}
+
+	playerID := id.PlayerIdType(req.PlayerId)
+	clientSessionID := getClientSessionID(session)
+	zLog.Info("Cross enter request",
+		zap.Int64("player_id", int64(playerID)),
+		zap.Int64("activity_id", req.ActivityId),
+		zap.Int32("map_config_id", req.MapConfigId))
+
+	pos := common.Vector3{X: 250, Y: 250, Z: 0}
+
+	msg, callback := player.NewPlayerMessageWithCallback(
+		playerID, player.SourceGateway, player.MsgNetMapCrossEnter,
+		&player.NetCrossEnterRequest{
+			PlayerID:    playerID,
+			ActivityID:  req.ActivityId,
+			MapConfigID: req.MapConfigId,
+			PosX:        pos.X,
+			PosY:        pos.Y,
+			PosZ:        pos.Z,
+		},
+	)
+
+	if err := h.playerManager.RouteMessage(playerID, msg); err != nil {
+		zLog.Error("Failed to route cross enter message", zap.Error(err))
+		h.sendCrossEnterResponse(session, clientSessionID, playerID, 1, err.Error(), req.ActivityId)
+		return nil
+	}
+
+	select {
+	case resp := <-callback:
+		if netResp, ok := resp.(*player.NetResponse); ok {
+			return h.sendToClient(session, clientSessionID, playerID, int32(netResp.ProtoId), netResp.Data)
+		}
+		if errResp, ok := resp.(*player.BaseResponse); ok && !errResp.Success {
+			h.sendCrossEnterResponse(session, clientSessionID, playerID, 1, errResp.Error, req.ActivityId)
+			return nil
+		}
+		h.sendCrossEnterResponse(session, clientSessionID, playerID, 1, "unexpected response", req.ActivityId)
+	case <-time.After(8 * time.Second):
+		zLog.Warn("Cross enter timeout", zap.Int64("player_id", int64(playerID)))
+		h.sendCrossEnterResponse(session, clientSessionID, playerID, 1, "timeout", req.ActivityId)
+	}
+
+	return nil
+}
+
+func (h *MapHandler) sendCrossEnterResponse(gwSession zNet.Session, clientSessionID zNet.SessionIdType, playerID id.PlayerIdType, result int32, errMsg string, activityID int64) {
+	resp := &protocol.ClientCrossEnterResponse{
+		Result:     result,
+		ErrorMsg:   errMsg,
+		ActivityId: activityID,
+	}
+	respData, err := proto.Marshal(resp)
+	if err != nil {
+		zLog.Error("Failed to marshal cross enter response", zap.Error(err))
+		return
+	}
+	if err := h.sendToClient(gwSession, clientSessionID, playerID, int32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE), respData); err != nil {
+		zLog.Error("Failed to send cross enter response", zap.Error(err))
+	}
 }
 
 func (h *MapHandler) handleMapLeave(session zNet.Session, data []byte) error {

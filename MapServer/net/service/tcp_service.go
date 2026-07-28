@@ -222,6 +222,8 @@ func (ts *TCPService) handleGameServerMessage(session zNet.Session, protoId int3
 		ts.handleMapAttackRequest(session, baseMsg, &meta)
 	case int32(protocol.InternalMsgId_MSG_INTERNAL_MAP_PICKUP_REQUEST):
 		ts.handleMapPickupRequest(session, baseMsg, &meta)
+	case int32(protocol.InternalMsgId_MSG_INTERNAL_CROSS_INSTANCE_ENSURE):
+		ts.handleCrossInstanceEnsure(session, baseMsg, &meta)
 	default:
 		zLog.Info("Received unknown message from GameServer", zap.Int32("proto_id", protoId))
 	}
@@ -435,6 +437,53 @@ func (ts *TCPService) handleMapPickupRequest(session zNet.Session, baseMsg *prot
 	zLog.Info("Player picked up item",
 		zap.Int64("player_id", req.PlayerId), zap.Int32("item_id", itemID), zap.Int32("count", count))
 	ts.notifyItemGrant(req.PlayerId, itemID, count)
+}
+
+// handleCrossInstanceEnsure 处理"建/取跨服活动实例"（GameServer → MapServer，跨 realm 物理路由 ④）。
+//
+// 幂等由 activityID 承担（MapManager.EnsureCrossServerInstance）：多个 realm 的 GameServer 会各自
+// 为同一场活动来请求，必须收敛到同一张实例地图。故此处**不**按 requestID 走 inbox 去重——
+// 重投得到的是同一个 mapID，重复应答无害；而按 requestID 丢弃重投会让请求方拿不到 mapID 干等超时。
+func (ts *TCPService) handleCrossInstanceEnsure(session zNet.Session, baseMsg *protocol.BaseMessage, meta *crossserver.Meta) {
+	var req protocol.CrossInstanceEnsureRequest
+	if err := proto.Unmarshal(baseMsg.Data, &req); err != nil {
+		zLog.Error("Failed to unmarshal CrossInstanceEnsureRequest", zap.Error(err))
+		return
+	}
+
+	respond := func(resp *protocol.CrossInstanceEnsureResponse) {
+		ts.sendResponse(session, int(protocol.InternalMsgId_MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE),
+			resp, baseMsg, meta)
+	}
+
+	if ts.mapService == nil {
+		respond(&protocol.CrossInstanceEnsureResponse{
+			Success: false, ErrorMsg: "map service not initialized", ActivityId: req.ActivityId,
+		})
+		return
+	}
+
+	_, mapID, created := ts.mapService.EnsureCrossServerInstance(
+		req.ActivityId, req.MapConfigId, req.Name, req.Width, req.Height,
+		int32(ts.config.Server.ServerID))
+	if mapID == 0 {
+		respond(&protocol.CrossInstanceEnsureResponse{
+			Success: false, ErrorMsg: "invalid activity id", ActivityId: req.ActivityId,
+		})
+		return
+	}
+
+	zLog.Info("Cross-server instance ensured for requester",
+		zap.Int64("activity_id", req.ActivityId),
+		zap.Int32("map_id", int32(mapID)),
+		zap.Bool("created", created),
+		zap.Uint32("from_game_server", baseMsg.ServerId))
+
+	respond(&protocol.CrossInstanceEnsureResponse{
+		Success:    true,
+		ActivityId: req.ActivityId,
+		MapId:      int32(mapID),
+	})
 }
 
 // sendResponse 发送响应消息

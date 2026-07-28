@@ -164,15 +164,27 @@ MapInstance {
 **剩余缺口（非本层）**：把不同服的客户端**物理路由**进同一台 MapServer 的这个实例（server B 的玩家进 server A 的
 实例），属**跨服匹配 + 网关跨服路由**的职责，不是实例层的事。实例层（生命周期 + 结果回流）已备好，等匹配把人送进来即可。
 
-进度（2026-07-28）：
-- ✅ **传输层已修好**：`CrossTransport`（`crossserver/transport.go`）补上 msgID 上线 + 响应/错误回投 +
-  RequestID 关联；`MigrationManager.ExecuteMigration` 的 2PC 控制面（请求接纳→投数据→源服提交→通知完成）
-  首次真正跑通，有双端集成测试 + t1 `-race`。详见 `协议契约.md` §三.2/§三.5。
-- ❌ 仍缺（按序）：① `MigrationManager` 生产接线（真 serializer/callback + bootstrap 构造连接）；
-  ② 跨 realm 服务发现（`map_server_manager.go` 的 `doDiscovery` 按本 group 锁死）；③ 匹配/分配服务
-  （决定进哪 group 哪实例）；④ MapServer 入站"建跨服实例"case；⑤ 跨 realm 多进程 E2E。
+进度（2026-07-28）：**跨 realm 物理路由已全线打通并过多进程 E2E**。
+
+- ✅ **传输层**：`CrossTransport`（`crossserver/transport.go`）补上 msgID 上线 + 响应/错误回投 +
+  RequestID 关联；`MigrationManager.ExecuteMigration` 的 2PC 控制面首次跑通（双端集成测试 + t1 `-race`）。
+- ✅ **① 跨 realm 发现**：`MapServerManager.doCrossRealmDiscovery` 用 `Discover("map", "")` 拿全量，
+  结果存**单独一张表** `crossRealmServers`——绝不并入 `mapToServer`，普通进图路由仍只看本 realm（铁律5）。
+- ✅ **② 分配服务**：`GlobalServer/crossmatch` —— 全区唯一决策方，按 `activity_id` **粘性**选一台
+  MapServer（人少优先、平票按 serverID 升序、承载服消失才改选），HTTP `/api/v1/cross/allocate`。
+- ✅ **③ 入站建实例**：MapServer 620/621，`MapManager.EnsureCrossServerInstance` 按 `activity_id` 幂等——
+  多个 realm 的 GameServer 都来问，收敛到同一张实例地图。
+- ✅ **④ 定点路由**：GameServer 按 `serverID` 建跨域连接 + `crossBindings[playerID]`，该玩家的地图消息
+  （含 outbox 重投）全部定点发往承载服。**不能按 mapID 路由**：实例 mapID 是各 MapServer 实例池的派生号，
+  跨服务器会撞号（守护测试 `TestCrossEnter_DoesNotLeakIntoLocalRealmRouting`）。
+- ✅ **⑤ 多进程 E2E**：`scripts/e2e-cross-realm.ps1` —— 两 realm 全栈 + 两客户端，实测两个 realm 的玩家
+  落在**同一台 MapServer 的同一张实例图**并在 AOI 里互见。
+- 🐞 E2E 揪出的真缺陷：`requestID` 只在进程内唯一，而收侧按裸 requestID 去重 → 两个 realm 的同号请求
+  撞车，第二个 realm 玩家的进图被当成重放丢弃。已改为 `ComposeRequestID`（高位放 serverID）全集群唯一。
 - 🗑 `cross_server_entry.go`（`CrossServerMapEntry`）已删：0 生产接线，且其中的迁移调用把玩家"迁到本服自己"、
-  fire-and-forget 忽略失败——留着会让人误以为跨服进图已接通。真入口按 ④ 重做。
+  fire-and-forget 忽略失败——留着会让人误以为跨服进图已接通。真入口已按上面重做。
+- ⏸ `MigrationManager`（玩家存档整体迁移）仍零生产接线——跨服活动是"人过去、家还在原服、结果回流"，
+  用不到它；只有"永久换服 / 跨机无缝分区"才需要，届时按 `协议契约.md` §三.2 接线即可。
 
 ### 分步任务
 1. 抽 `MapInstance` + 把 `dungeonLifecycleMgr` 泛化为 `InstanceManager`（dungeon 作为一个 Kind，保持现有行为）。

@@ -40,8 +40,21 @@ type Meta struct {
 
 var requestSeq uint64
 
+// ComposeRequestID 把**发送方服务器 ID** 混进请求 ID 的高位，使 requestID 全集群唯一。
+//
+// 为什么必须这么做（2026-07-28 跨 realm E2E 实测踩到的真缺陷）：requestID 同时是**幂等去重键**，
+// 而收侧（MapServer 的进图/攻击去重、GameServer 的响应去重、迁移 inbox）都是按**裸 requestID**
+// 去重的。各进程的序号各自从 1 开始递增，于是两个 realm 的 GameServer 会发出同号请求——目标
+// MapServer 把第二个 realm 玩家的进图请求当成重放直接丢弃，那个玩家永远进不去跨服实例。
+//
+// 高 24 位放 serverID（6 位十进制 ID 最大 999999，占 20 位），低 40 位放进程内序号（够用一万亿次）。
+// serverID=0（未指定）时退化为纯进程内序号，与旧行为一致。
+func ComposeRequestID(serverID int32, seq uint64) uint64 {
+	return uint64(uint32(serverID)&0xFFFFFF)<<40 | (seq & 0xFFFFFFFFFF)
+}
+
 func NewRequestMeta(sourceService uint8, sourceServerID int32) Meta {
-	id := atomic.AddUint64(&requestSeq, 1)
+	id := ComposeRequestID(sourceServerID, atomic.AddUint64(&requestSeq, 1))
 	return Meta{
 		TraceID:        id,
 		RequestID:      id,

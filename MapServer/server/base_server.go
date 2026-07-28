@@ -265,6 +265,8 @@ func (bs *BaseServer) startGameLoop() {
 			if reapAccum >= reapInterval {
 				reapAccum = 0
 				bs.mapManager.ReapEmpty(reapGrace)
+				// 实例回收后清掉指向它的跨服活动绑定（须在 ReapEmpty 之后、同 goroutine，见其注释）。
+				bs.mapManager.ReapCrossActivityBindings()
 			}
 		}
 	}

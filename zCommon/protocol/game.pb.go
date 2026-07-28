@@ -152,21 +152,23 @@ func (PlayerMsgId) EnumDescriptor() ([]byte, []int) {
 type MapMsgId int32
 
 const (
-	MapMsgId_MSG_MAP_INVALID         MapMsgId = 0
-	MapMsgId_MSG_MAP_ENTER           MapMsgId = 1200
-	MapMsgId_MSG_MAP_ENTER_RESPONSE  MapMsgId = 1201
-	MapMsgId_MSG_MAP_LEAVE           MapMsgId = 1202
-	MapMsgId_MSG_MAP_LEAVE_RESPONSE  MapMsgId = 1203
-	MapMsgId_MSG_MAP_MOVE            MapMsgId = 1204
-	MapMsgId_MSG_MAP_MOVE_RESPONSE   MapMsgId = 1205
-	MapMsgId_MSG_MAP_ATTACK          MapMsgId = 1206
-	MapMsgId_MSG_MAP_ATTACK_RESPONSE MapMsgId = 1207
-	MapMsgId_MSG_MAP_ENTER_VIEW      MapMsgId = 1220
-	MapMsgId_MSG_MAP_LEAVE_VIEW      MapMsgId = 1221
-	MapMsgId_MSG_MAP_ENTITY_MOVE     MapMsgId = 1222
-	MapMsgId_MSG_MAP_ENTITY_ATTR     MapMsgId = 1223 // 实体属性(血量)变更广播
-	MapMsgId_MSG_MAP_ENTITY_DEATH    MapMsgId = 1224 // 实体死亡广播
-	MapMsgId_MSG_MAP_ENTITY_BUFF     MapMsgId = 1225 // 实体 buff 增删广播
+	MapMsgId_MSG_MAP_INVALID              MapMsgId = 0
+	MapMsgId_MSG_MAP_ENTER                MapMsgId = 1200
+	MapMsgId_MSG_MAP_ENTER_RESPONSE       MapMsgId = 1201
+	MapMsgId_MSG_MAP_LEAVE                MapMsgId = 1202
+	MapMsgId_MSG_MAP_LEAVE_RESPONSE       MapMsgId = 1203
+	MapMsgId_MSG_MAP_MOVE                 MapMsgId = 1204
+	MapMsgId_MSG_MAP_MOVE_RESPONSE        MapMsgId = 1205
+	MapMsgId_MSG_MAP_ATTACK               MapMsgId = 1206
+	MapMsgId_MSG_MAP_ATTACK_RESPONSE      MapMsgId = 1207
+	MapMsgId_MSG_MAP_CROSS_ENTER          MapMsgId = 1208 // 进入跨服活动实例（可能落在别的 realm 的 MapServer 上）
+	MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE MapMsgId = 1209
+	MapMsgId_MSG_MAP_ENTER_VIEW           MapMsgId = 1220
+	MapMsgId_MSG_MAP_LEAVE_VIEW           MapMsgId = 1221
+	MapMsgId_MSG_MAP_ENTITY_MOVE          MapMsgId = 1222
+	MapMsgId_MSG_MAP_ENTITY_ATTR          MapMsgId = 1223 // 实体属性(血量)变更广播
+	MapMsgId_MSG_MAP_ENTITY_DEATH         MapMsgId = 1224 // 实体死亡广播
+	MapMsgId_MSG_MAP_ENTITY_BUFF          MapMsgId = 1225 // 实体 buff 增删广播
 )
 
 // Enum value maps for MapMsgId.
@@ -181,6 +183,8 @@ var (
 		1205: "MSG_MAP_MOVE_RESPONSE",
 		1206: "MSG_MAP_ATTACK",
 		1207: "MSG_MAP_ATTACK_RESPONSE",
+		1208: "MSG_MAP_CROSS_ENTER",
+		1209: "MSG_MAP_CROSS_ENTER_RESPONSE",
 		1220: "MSG_MAP_ENTER_VIEW",
 		1221: "MSG_MAP_LEAVE_VIEW",
 		1222: "MSG_MAP_ENTITY_MOVE",
@@ -189,21 +193,23 @@ var (
 		1225: "MSG_MAP_ENTITY_BUFF",
 	}
 	MapMsgId_value = map[string]int32{
-		"MSG_MAP_INVALID":         0,
-		"MSG_MAP_ENTER":           1200,
-		"MSG_MAP_ENTER_RESPONSE":  1201,
-		"MSG_MAP_LEAVE":           1202,
-		"MSG_MAP_LEAVE_RESPONSE":  1203,
-		"MSG_MAP_MOVE":            1204,
-		"MSG_MAP_MOVE_RESPONSE":   1205,
-		"MSG_MAP_ATTACK":          1206,
-		"MSG_MAP_ATTACK_RESPONSE": 1207,
-		"MSG_MAP_ENTER_VIEW":      1220,
-		"MSG_MAP_LEAVE_VIEW":      1221,
-		"MSG_MAP_ENTITY_MOVE":     1222,
-		"MSG_MAP_ENTITY_ATTR":     1223,
-		"MSG_MAP_ENTITY_DEATH":    1224,
-		"MSG_MAP_ENTITY_BUFF":     1225,
+		"MSG_MAP_INVALID":              0,
+		"MSG_MAP_ENTER":                1200,
+		"MSG_MAP_ENTER_RESPONSE":       1201,
+		"MSG_MAP_LEAVE":                1202,
+		"MSG_MAP_LEAVE_RESPONSE":       1203,
+		"MSG_MAP_MOVE":                 1204,
+		"MSG_MAP_MOVE_RESPONSE":        1205,
+		"MSG_MAP_ATTACK":               1206,
+		"MSG_MAP_ATTACK_RESPONSE":      1207,
+		"MSG_MAP_CROSS_ENTER":          1208,
+		"MSG_MAP_CROSS_ENTER_RESPONSE": 1209,
+		"MSG_MAP_ENTER_VIEW":           1220,
+		"MSG_MAP_LEAVE_VIEW":           1221,
+		"MSG_MAP_ENTITY_MOVE":          1222,
+		"MSG_MAP_ENTITY_ATTR":          1223,
+		"MSG_MAP_ENTITY_DEATH":         1224,
+		"MSG_MAP_ENTITY_BUFF":          1225,
 	}
 )
 
@@ -896,6 +902,153 @@ func (x *ClientMapLeaveResponse) GetErrorMsg() string {
 	return ""
 }
 
+// 进入跨服活动实例请求。activity_id 标识一场跨服活动（同一活动的所有 realm 玩家进同一张实例地图），
+// map_config_id 是该活动用哪张地图配置。玩家可能被送到**别的 realm 的 MapServer** 上。
+type ClientCrossEnterRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	ActivityId    int64                  `protobuf:"varint,2,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapConfigId   int32                  `protobuf:"varint,3,opt,name=map_config_id,json=mapConfigId,proto3" json:"map_config_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientCrossEnterRequest) Reset() {
+	*x = ClientCrossEnterRequest{}
+	mi := &file_game_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientCrossEnterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientCrossEnterRequest) ProtoMessage() {}
+
+func (x *ClientCrossEnterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientCrossEnterRequest.ProtoReflect.Descriptor instead.
+func (*ClientCrossEnterRequest) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ClientCrossEnterRequest) GetPlayerId() int64 {
+	if x != nil {
+		return x.PlayerId
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterRequest) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterRequest) GetMapConfigId() int32 {
+	if x != nil {
+		return x.MapConfigId
+	}
+	return 0
+}
+
+// 进入跨服活动实例响应。map_server_id/map_id 用于排查（客户端不据此路由，路由在服务端）。
+type ClientCrossEnterResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	ActivityId    int64                  `protobuf:"varint,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapServerId   int32                  `protobuf:"varint,4,opt,name=map_server_id,json=mapServerId,proto3" json:"map_server_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,5,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	Pos           *Position              `protobuf:"bytes,6,opt,name=pos,proto3" json:"pos,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClientCrossEnterResponse) Reset() {
+	*x = ClientCrossEnterResponse{}
+	mi := &file_game_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClientCrossEnterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClientCrossEnterResponse) ProtoMessage() {}
+
+func (x *ClientCrossEnterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_game_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClientCrossEnterResponse.ProtoReflect.Descriptor instead.
+func (*ClientCrossEnterResponse) Descriptor() ([]byte, []int) {
+	return file_game_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ClientCrossEnterResponse) GetResult() int32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *ClientCrossEnterResponse) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterResponse) GetMapServerId() int32 {
+	if x != nil {
+		return x.MapServerId
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterResponse) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
+func (x *ClientCrossEnterResponse) GetPos() *Position {
+	if x != nil {
+		return x.Pos
+	}
+	return nil
+}
+
 // 地图攻击请求
 type ClientMapAttackRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -908,7 +1061,7 @@ type ClientMapAttackRequest struct {
 
 func (x *ClientMapAttackRequest) Reset() {
 	*x = ClientMapAttackRequest{}
-	mi := &file_game_proto_msgTypes[11]
+	mi := &file_game_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -920,7 +1073,7 @@ func (x *ClientMapAttackRequest) String() string {
 func (*ClientMapAttackRequest) ProtoMessage() {}
 
 func (x *ClientMapAttackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[11]
+	mi := &file_game_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -933,7 +1086,7 @@ func (x *ClientMapAttackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMapAttackRequest.ProtoReflect.Descriptor instead.
 func (*ClientMapAttackRequest) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{11}
+	return file_game_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ClientMapAttackRequest) GetPlayerId() int64 {
@@ -970,7 +1123,7 @@ type ClientMapAttackResponse struct {
 
 func (x *ClientMapAttackResponse) Reset() {
 	*x = ClientMapAttackResponse{}
-	mi := &file_game_proto_msgTypes[12]
+	mi := &file_game_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -982,7 +1135,7 @@ func (x *ClientMapAttackResponse) String() string {
 func (*ClientMapAttackResponse) ProtoMessage() {}
 
 func (x *ClientMapAttackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[12]
+	mi := &file_game_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -995,7 +1148,7 @@ func (x *ClientMapAttackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientMapAttackResponse.ProtoReflect.Descriptor instead.
 func (*ClientMapAttackResponse) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{12}
+	return file_game_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ClientMapAttackResponse) GetResult() int32 {
@@ -1037,7 +1190,7 @@ type EntityEnterViewNotify struct {
 
 func (x *EntityEnterViewNotify) Reset() {
 	*x = EntityEnterViewNotify{}
-	mi := &file_game_proto_msgTypes[13]
+	mi := &file_game_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1049,7 +1202,7 @@ func (x *EntityEnterViewNotify) String() string {
 func (*EntityEnterViewNotify) ProtoMessage() {}
 
 func (x *EntityEnterViewNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[13]
+	mi := &file_game_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1062,7 +1215,7 @@ func (x *EntityEnterViewNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityEnterViewNotify.ProtoReflect.Descriptor instead.
 func (*EntityEnterViewNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{13}
+	return file_game_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EntityEnterViewNotify) GetEntityId() int64 {
@@ -1089,7 +1242,7 @@ type EntityLeaveViewNotify struct {
 
 func (x *EntityLeaveViewNotify) Reset() {
 	*x = EntityLeaveViewNotify{}
-	mi := &file_game_proto_msgTypes[14]
+	mi := &file_game_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1101,7 +1254,7 @@ func (x *EntityLeaveViewNotify) String() string {
 func (*EntityLeaveViewNotify) ProtoMessage() {}
 
 func (x *EntityLeaveViewNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[14]
+	mi := &file_game_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1114,7 +1267,7 @@ func (x *EntityLeaveViewNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityLeaveViewNotify.ProtoReflect.Descriptor instead.
 func (*EntityLeaveViewNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{14}
+	return file_game_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *EntityLeaveViewNotify) GetEntityId() int64 {
@@ -1136,7 +1289,7 @@ type EntityMoveNotify struct {
 
 func (x *EntityMoveNotify) Reset() {
 	*x = EntityMoveNotify{}
-	mi := &file_game_proto_msgTypes[15]
+	mi := &file_game_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1148,7 +1301,7 @@ func (x *EntityMoveNotify) String() string {
 func (*EntityMoveNotify) ProtoMessage() {}
 
 func (x *EntityMoveNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[15]
+	mi := &file_game_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1161,7 +1314,7 @@ func (x *EntityMoveNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityMoveNotify.ProtoReflect.Descriptor instead.
 func (*EntityMoveNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{15}
+	return file_game_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *EntityMoveNotify) GetEntityId() int64 {
@@ -1197,7 +1350,7 @@ type EntityAttrNotify struct {
 
 func (x *EntityAttrNotify) Reset() {
 	*x = EntityAttrNotify{}
-	mi := &file_game_proto_msgTypes[16]
+	mi := &file_game_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1209,7 +1362,7 @@ func (x *EntityAttrNotify) String() string {
 func (*EntityAttrNotify) ProtoMessage() {}
 
 func (x *EntityAttrNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[16]
+	mi := &file_game_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1222,7 +1375,7 @@ func (x *EntityAttrNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityAttrNotify.ProtoReflect.Descriptor instead.
 func (*EntityAttrNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{16}
+	return file_game_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *EntityAttrNotify) GetEntityId() int64 {
@@ -1257,7 +1410,7 @@ type EntityDeathNotify struct {
 
 func (x *EntityDeathNotify) Reset() {
 	*x = EntityDeathNotify{}
-	mi := &file_game_proto_msgTypes[17]
+	mi := &file_game_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1269,7 +1422,7 @@ func (x *EntityDeathNotify) String() string {
 func (*EntityDeathNotify) ProtoMessage() {}
 
 func (x *EntityDeathNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[17]
+	mi := &file_game_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1282,7 +1435,7 @@ func (x *EntityDeathNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityDeathNotify.ProtoReflect.Descriptor instead.
 func (*EntityDeathNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{17}
+	return file_game_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *EntityDeathNotify) GetEntityId() int64 {
@@ -1312,7 +1465,7 @@ type EntityBuffNotify struct {
 
 func (x *EntityBuffNotify) Reset() {
 	*x = EntityBuffNotify{}
-	mi := &file_game_proto_msgTypes[18]
+	mi := &file_game_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1324,7 +1477,7 @@ func (x *EntityBuffNotify) String() string {
 func (*EntityBuffNotify) ProtoMessage() {}
 
 func (x *EntityBuffNotify) ProtoReflect() protoreflect.Message {
-	mi := &file_game_proto_msgTypes[18]
+	mi := &file_game_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1337,7 +1490,7 @@ func (x *EntityBuffNotify) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EntityBuffNotify.ProtoReflect.Descriptor instead.
 func (*EntityBuffNotify) Descriptor() ([]byte, []int) {
-	return file_game_proto_rawDescGZIP(), []int{18}
+	return file_game_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *EntityBuffNotify) GetEntityId() int64 {
@@ -1422,7 +1575,20 @@ const file_game_proto_rawDesc = "" +
 	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\"M\n" +
 	"\x16ClientMapLeaveResponse\x12\x16\n" +
 	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x1b\n" +
-	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"i\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\"{\n" +
+	"\x17ClientCrossEnterRequest\x12\x1b\n" +
+	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x1f\n" +
+	"\vactivity_id\x18\x02 \x01(\x03R\n" +
+	"activityId\x12\"\n" +
+	"\rmap_config_id\x18\x03 \x01(\x05R\vmapConfigId\"\xd1\x01\n" +
+	"\x18ClientCrossEnterResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
+	"\vactivity_id\x18\x03 \x01(\x03R\n" +
+	"activityId\x12\"\n" +
+	"\rmap_server_id\x18\x04 \x01(\x05R\vmapServerId\x12\x15\n" +
+	"\x06map_id\x18\x05 \x01(\x05R\x05mapId\x12$\n" +
+	"\x03pos\x18\x06 \x01(\v2\x12.protocol.PositionR\x03pos\"i\n" +
 	"\x16ClientMapAttackRequest\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
 	"\x06map_id\x18\x02 \x01(\x05R\x05mapId\x12\x1b\n" +
@@ -1470,7 +1636,7 @@ const file_game_proto_rawDesc = "" +
 	"\x1aMSG_PLAYER_CREATE_RESPONSE\x10\xc9\x01\x12\x1a\n" +
 	"\x15MSG_PLAYER_ENTER_GAME\x10\xca\x01\x12#\n" +
 	"\x1eMSG_PLAYER_ENTER_GAME_RESPONSE\x10\xcb\x01\x12\x1a\n" +
-	"\x15MSG_PLAYER_LEAVE_GAME\x10\xcc\x01*\xfe\x02\n" +
+	"\x15MSG_PLAYER_LEAVE_GAME\x10\xcc\x01*\xbb\x03\n" +
 	"\bMapMsgId\x12\x13\n" +
 	"\x0fMSG_MAP_INVALID\x10\x00\x12\x12\n" +
 	"\rMSG_MAP_ENTER\x10\xb0\t\x12\x1b\n" +
@@ -1480,7 +1646,9 @@ const file_game_proto_rawDesc = "" +
 	"\fMSG_MAP_MOVE\x10\xb4\t\x12\x1a\n" +
 	"\x15MSG_MAP_MOVE_RESPONSE\x10\xb5\t\x12\x13\n" +
 	"\x0eMSG_MAP_ATTACK\x10\xb6\t\x12\x1c\n" +
-	"\x17MSG_MAP_ATTACK_RESPONSE\x10\xb7\t\x12\x17\n" +
+	"\x17MSG_MAP_ATTACK_RESPONSE\x10\xb7\t\x12\x18\n" +
+	"\x13MSG_MAP_CROSS_ENTER\x10\xb8\t\x12!\n" +
+	"\x1cMSG_MAP_CROSS_ENTER_RESPONSE\x10\xb9\t\x12\x17\n" +
 	"\x12MSG_MAP_ENTER_VIEW\x10\xc4\t\x12\x17\n" +
 	"\x12MSG_MAP_LEAVE_VIEW\x10\xc5\t\x12\x18\n" +
 	"\x13MSG_MAP_ENTITY_MOVE\x10\xc6\t\x12\x18\n" +
@@ -1501,44 +1669,47 @@ func file_game_proto_rawDescGZIP() []byte {
 }
 
 var file_game_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_game_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_game_proto_goTypes = []any{
-	(SystemMsgId)(0),                // 0: protocol.SystemMsgId
-	(PlayerMsgId)(0),                // 1: protocol.PlayerMsgId
-	(MapMsgId)(0),                   // 2: protocol.MapMsgId
-	(*ClientMessage)(nil),           // 3: protocol.ClientMessage
-	(*AccountLoginNotify)(nil),      // 4: protocol.AccountLoginNotify
-	(*ServerMessage)(nil),           // 5: protocol.ServerMessage
-	(*HeartbeatRequest)(nil),        // 6: protocol.HeartbeatRequest
-	(*HeartbeatResponse)(nil),       // 7: protocol.HeartbeatResponse
-	(*ClientMapEnterRequest)(nil),   // 8: protocol.ClientMapEnterRequest
-	(*ClientMapEnterResponse)(nil),  // 9: protocol.ClientMapEnterResponse
-	(*ClientMapMoveRequest)(nil),    // 10: protocol.ClientMapMoveRequest
-	(*ClientMapMoveResponse)(nil),   // 11: protocol.ClientMapMoveResponse
-	(*ClientMapLeaveRequest)(nil),   // 12: protocol.ClientMapLeaveRequest
-	(*ClientMapLeaveResponse)(nil),  // 13: protocol.ClientMapLeaveResponse
-	(*ClientMapAttackRequest)(nil),  // 14: protocol.ClientMapAttackRequest
-	(*ClientMapAttackResponse)(nil), // 15: protocol.ClientMapAttackResponse
-	(*EntityEnterViewNotify)(nil),   // 16: protocol.EntityEnterViewNotify
-	(*EntityLeaveViewNotify)(nil),   // 17: protocol.EntityLeaveViewNotify
-	(*EntityMoveNotify)(nil),        // 18: protocol.EntityMoveNotify
-	(*EntityAttrNotify)(nil),        // 19: protocol.EntityAttrNotify
-	(*EntityDeathNotify)(nil),       // 20: protocol.EntityDeathNotify
-	(*EntityBuffNotify)(nil),        // 21: protocol.EntityBuffNotify
-	(*Position)(nil),                // 22: protocol.Position
+	(SystemMsgId)(0),                 // 0: protocol.SystemMsgId
+	(PlayerMsgId)(0),                 // 1: protocol.PlayerMsgId
+	(MapMsgId)(0),                    // 2: protocol.MapMsgId
+	(*ClientMessage)(nil),            // 3: protocol.ClientMessage
+	(*AccountLoginNotify)(nil),       // 4: protocol.AccountLoginNotify
+	(*ServerMessage)(nil),            // 5: protocol.ServerMessage
+	(*HeartbeatRequest)(nil),         // 6: protocol.HeartbeatRequest
+	(*HeartbeatResponse)(nil),        // 7: protocol.HeartbeatResponse
+	(*ClientMapEnterRequest)(nil),    // 8: protocol.ClientMapEnterRequest
+	(*ClientMapEnterResponse)(nil),   // 9: protocol.ClientMapEnterResponse
+	(*ClientMapMoveRequest)(nil),     // 10: protocol.ClientMapMoveRequest
+	(*ClientMapMoveResponse)(nil),    // 11: protocol.ClientMapMoveResponse
+	(*ClientMapLeaveRequest)(nil),    // 12: protocol.ClientMapLeaveRequest
+	(*ClientMapLeaveResponse)(nil),   // 13: protocol.ClientMapLeaveResponse
+	(*ClientCrossEnterRequest)(nil),  // 14: protocol.ClientCrossEnterRequest
+	(*ClientCrossEnterResponse)(nil), // 15: protocol.ClientCrossEnterResponse
+	(*ClientMapAttackRequest)(nil),   // 16: protocol.ClientMapAttackRequest
+	(*ClientMapAttackResponse)(nil),  // 17: protocol.ClientMapAttackResponse
+	(*EntityEnterViewNotify)(nil),    // 18: protocol.EntityEnterViewNotify
+	(*EntityLeaveViewNotify)(nil),    // 19: protocol.EntityLeaveViewNotify
+	(*EntityMoveNotify)(nil),         // 20: protocol.EntityMoveNotify
+	(*EntityAttrNotify)(nil),         // 21: protocol.EntityAttrNotify
+	(*EntityDeathNotify)(nil),        // 22: protocol.EntityDeathNotify
+	(*EntityBuffNotify)(nil),         // 23: protocol.EntityBuffNotify
+	(*Position)(nil),                 // 24: protocol.Position
 }
 var file_game_proto_depIdxs = []int32{
-	22, // 0: protocol.ClientMapEnterResponse.pos:type_name -> protocol.Position
-	22, // 1: protocol.ClientMapMoveRequest.pos:type_name -> protocol.Position
-	22, // 2: protocol.ClientMapMoveResponse.pos:type_name -> protocol.Position
-	22, // 3: protocol.EntityEnterViewNotify.pos:type_name -> protocol.Position
-	22, // 4: protocol.EntityMoveNotify.old_pos:type_name -> protocol.Position
-	22, // 5: protocol.EntityMoveNotify.new_pos:type_name -> protocol.Position
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	24, // 0: protocol.ClientMapEnterResponse.pos:type_name -> protocol.Position
+	24, // 1: protocol.ClientMapMoveRequest.pos:type_name -> protocol.Position
+	24, // 2: protocol.ClientMapMoveResponse.pos:type_name -> protocol.Position
+	24, // 3: protocol.ClientCrossEnterResponse.pos:type_name -> protocol.Position
+	24, // 4: protocol.EntityEnterViewNotify.pos:type_name -> protocol.Position
+	24, // 5: protocol.EntityMoveNotify.old_pos:type_name -> protocol.Position
+	24, // 6: protocol.EntityMoveNotify.new_pos:type_name -> protocol.Position
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_game_proto_init() }
@@ -1553,7 +1724,7 @@ func file_game_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_game_proto_rawDesc), len(file_game_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -12,6 +12,7 @@ import (
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zEngine/zServer"
 	"github.com/pzqf/zMmoServer/GlobalServer/config"
+	"github.com/pzqf/zMmoServer/GlobalServer/crossmatch"
 	"github.com/pzqf/zMmoServer/GlobalServer/db"
 	"github.com/pzqf/zMmoServer/GlobalServer/gameserverlist"
 	"github.com/pzqf/zMmoServer/GlobalServer/handler"
@@ -140,6 +141,10 @@ func (s *BaseServer) initServiceDiscovery() error {
 	if err := gameserverlist.InitServerListManager(sd); err != nil {
 		return fmt.Errorf("init server list manager: %w", err)
 	}
+
+	// 跨服活动分配器（realm §5.1 ③）：全区唯一决策方，跨 realm 发现 MapServer 并为每场活动
+	// 粘性选定一台承载服务器。
+	crossmatch.InitAllocator(sd)
 
 	s.serviceInfo = &discovery.ServerInfo{
 		ID:            s.serverIDStr,

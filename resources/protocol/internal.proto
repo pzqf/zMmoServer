@@ -53,6 +53,10 @@ enum InternalMsgId {
   MSG_INTERNAL_MIGRATION_COMPLETE = 613;     // 源→目标：源侧已提交，迁移完成（通知，无响应）
   MSG_INTERNAL_MIGRATION_HEARTBEAT = 614;    // 迁移中保活（通知，无响应）
   MSG_INTERNAL_MIGRATION_QUERY_STATUS = 615; // 查询迁移状态（响应 MigrationStatus）
+
+  // 跨服临时实例 620-629（跨 realm 物理路由：GameServer → 目标 realm 的 MapServer）
+  MSG_INTERNAL_CROSS_INSTANCE_ENSURE = 620;          // 建/取跨服活动实例（按 activity_id 幂等）
+  MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE = 621; // 返回该实例在目标 MapServer 上的物理 map_id
 }
 
 // 服务类型
@@ -400,6 +404,47 @@ message MigrationHeartbeat {
 // 迁移状态查询
 message MigrationStatusQuery {
   uint64 migration_id = 1;
+}
+
+// ============================================
+// 跨服临时实例（跨 realm 物理路由）
+// ============================================
+
+// 跨服活动分配请求（GameServer → GlobalServer，走 HTTP/JSON：
+// GlobalServer 是全区全服的 HTTP 进程，无 TCP 栈；分配是低频控制面调用，不上跨服二进制通道）。
+message CrossAllocateRequest {
+  int64 activity_id = 1;
+  int32 map_config_id = 2;
+}
+
+// 跨服活动分配应答：告诉发起方这场活动被放在哪台 MapServer 上（可能属于别的 realm）。
+message CrossAllocateResponse {
+  int32 result = 1; // 0=成功
+  string error_msg = 2;
+  int64 activity_id = 3;
+  int32 map_server_id = 4;
+  string group_id = 5;
+  string address = 6; // host:port
+}
+
+// 建/取跨服活动实例（GameServer → 目标 realm 的 MapServer）。
+// **按 activity_id 幂等**：同一活动无论多少个 realm 的 GameServer 来请求，都收敛到同一张实例地图，
+// 否则各 realm 各建一张、玩家永远碰不到面。
+message CrossInstanceEnsureRequest {
+  int64 activity_id = 1;
+  int32 map_config_id = 2;
+  string name = 3;
+  float width = 4;
+  float height = 5;
+}
+
+// 建/取跨服活动实例的应答：map_id 是该实例在**目标 MapServer 上的物理地图 ID**
+// （实例池派生，仅在该 MapServer 内唯一——跨 MapServer 会撞号，故 GameServer 侧不得只按 map_id 路由）。
+message CrossInstanceEnsureResponse {
+  bool success = 1;
+  string error_msg = 2;
+  int64 activity_id = 3;
+  int32 map_id = 4;
 }
 
 // 迁移状态应答

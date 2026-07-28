@@ -38,6 +38,13 @@ type MapManager struct {
 	// 只有登记了无缝链路的图对才走无缝交接；否则跨图=普通 enter/leave（有 loading）。见 seamless.go。
 	seamlessMu    sync.Mutex
 	seamlessLinks map[id.MapIdType]map[id.MapIdType]bool
+
+	// 跨服活动实例绑定（realm §5.1，跨 realm 物理路由）：activityID → 承载该活动的实例 mapID。
+	// **一个活动只有一张实例地图**——多个 realm 的 GameServer 会各自来请求，若不收敛就各建一张、
+	// 玩家永远碰不到面。绑定采用**惰性失效**（用时校验实例是否还在池里）：绝不能在池的 onEvict
+	// 回调里回头拿本锁，否则 Reap(池锁→本锁) 与 Ensure(本锁→池锁) 构成锁序反转死锁。
+	crossActivityMu sync.Mutex
+	crossActivities map[int64]id.MapIdType
 }
 
 // SetAOINotifier 注入 AOI 回程通知器，后续所创建的地图都会套用。
@@ -53,9 +60,10 @@ func (mm *MapManager) SetAOINotifier(n AOINotifier) {
 // NewMapManager 创建新的地图管理器
 func NewMapManager() *MapManager {
 	mm := &MapManager{
-		maps:          zMap.NewTypedMap[id.MapIdType, *Map](),
-		playerMap:     make(map[int64]id.MapIdType),
-		seamlessLinks: make(map[id.MapIdType]map[id.MapIdType]bool),
+		maps:            zMap.NewTypedMap[id.MapIdType, *Map](),
+		playerMap:       make(map[int64]id.MapIdType),
+		seamlessLinks:   make(map[id.MapIdType]map[id.MapIdType]bool),
+		crossActivities: make(map[int64]id.MapIdType),
 	}
 	// 实例被池回收/销毁时从 maps 表摘除（Map.Cleanup 由 MapInstance.Close 承担）。
 	mm.instPool = zInstance.NewPoolWithBase[id.MapIdType, *MapInstance](func(_ uint64, inst *MapInstance) {
@@ -415,6 +423,89 @@ func (mm *MapManager) CreateCrossServerMap(mapConfigID int32, name string, width
 		zap.Int32("server_group_id", serverGroupID))
 
 	return crossMap
+}
+
+// EnsureCrossServerInstance 建/取一个**跨服活动**的实例地图，按 activityID 幂等。
+//
+// 跨 realm 物理路由的落点（realm §5.1 ④）：多个 realm 的 GameServer 都会为同一场活动来请求，
+// 必须收敛到同一张实例地图，否则各 realm 各建一张、跨服玩家永远碰不到面。
+// 返回的 mapID 是该实例在**本 MapServer 上的物理地图 ID**（实例池派生，跨 MapServer 会撞号）。
+//
+// 绑定惰性失效：实例被 ReapEmpty 回收后，这里发现它已不在池里就重建一张并改绑。
+func (mm *MapManager) EnsureCrossServerInstance(activityID int64, mapConfigID int32, name string, width, height float32, serverGroupID int32) (*Map, id.MapIdType, bool) {
+	if activityID <= 0 {
+		return nil, 0, false
+	}
+
+	mm.crossActivityMu.Lock()
+	defer mm.crossActivityMu.Unlock()
+
+	if mapID, ok := mm.crossActivities[activityID]; ok {
+		// 校验实例还活着（可能已被空置回收）；活着就复用。
+		if inst, alive := mm.instPool.Get(uint64(mapID)); alive && inst.Kind == InstanceKindCrossServer {
+			if m := mm.GetMap(mapID); m != nil {
+				return m, mapID, false
+			}
+		}
+		delete(mm.crossActivities, activityID)
+	}
+
+	if name == "" {
+		name = fmt.Sprintf("CrossActivity_%d", activityID)
+	}
+	if width <= 0 {
+		width = 500
+	}
+	if height <= 0 {
+		height = 500
+	}
+
+	crossMap := mm.CreateCrossServerMap(mapConfigID, name, width, height, MapModeCrossGroup, serverGroupID)
+	mapID := crossMap.GetID()
+	mm.crossActivities[activityID] = mapID
+
+	zLog.Info("Cross-server activity instance ensured (created)",
+		zap.Int64("activity_id", activityID),
+		zap.Int32("map_config_id", mapConfigID),
+		zap.Int32("map_id", int32(mapID)))
+
+	return crossMap, mapID, true
+}
+
+// GetCrossServerInstanceMapID 查某活动当前绑定的实例 mapID（0=未绑定/已回收）。供测试与运维。
+func (mm *MapManager) GetCrossServerInstanceMapID(activityID int64) (id.MapIdType, bool) {
+	mm.crossActivityMu.Lock()
+	defer mm.crossActivityMu.Unlock()
+	mapID, ok := mm.crossActivities[activityID]
+	if !ok {
+		return 0, false
+	}
+	if _, alive := mm.instPool.Get(uint64(mapID)); !alive {
+		return 0, false
+	}
+	return mapID, true
+}
+
+// ReapCrossActivityBindings 清掉实例已被回收的活动绑定（防绑定表随活动数无界增长）。
+// ⚠ 必须与 ReapEmpty **同一 goroutine、且在 ReapEmpty 之后**调用：它拿 crossActivityMu 再问池，
+// 与池内部回调无重叠，避免锁序反转。返回清掉的条数。
+func (mm *MapManager) ReapCrossActivityBindings() int {
+	mm.crossActivityMu.Lock()
+	defer mm.crossActivityMu.Unlock()
+
+	var dead []int64
+	for activityID, mapID := range mm.crossActivities {
+		if _, alive := mm.instPool.Get(uint64(mapID)); !alive {
+			dead = append(dead, activityID)
+		}
+	}
+	for _, activityID := range dead {
+		delete(mm.crossActivities, activityID)
+	}
+	if len(dead) > 0 {
+		zLog.Debug("Cross-server activity bindings reaped", zap.Int("count", len(dead)))
+	}
+	return len(dead)
 }
 
 func (mm *MapManager) GetDungeonLifecycleManager() *dungeon.DungeonLifecycleManager {

@@ -123,3 +123,7 @@ func (m *mockMapOperator) Attack(playerID id.PlayerIdType, mapID id.MapIdType, t
 func (m *mockMapOperator) Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error {
 	return nil
 }
+
+func (m *mockMapOperator) EnterCrossMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (uint32, id.MapIdType, error) {
+	return 0, 0, nil
+}

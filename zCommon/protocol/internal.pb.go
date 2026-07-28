@@ -62,6 +62,9 @@ const (
 	InternalMsgId_MSG_INTERNAL_MIGRATION_COMPLETE     InternalMsgId = 613 // 源→目标：源侧已提交，迁移完成（通知，无响应）
 	InternalMsgId_MSG_INTERNAL_MIGRATION_HEARTBEAT    InternalMsgId = 614 // 迁移中保活（通知，无响应）
 	InternalMsgId_MSG_INTERNAL_MIGRATION_QUERY_STATUS InternalMsgId = 615 // 查询迁移状态（响应 MigrationStatus）
+	// 跨服临时实例 620-629（跨 realm 物理路由：GameServer → 目标 realm 的 MapServer）
+	InternalMsgId_MSG_INTERNAL_CROSS_INSTANCE_ENSURE          InternalMsgId = 620 // 建/取跨服活动实例（按 activity_id 幂等）
+	InternalMsgId_MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE InternalMsgId = 621 // 返回该实例在目标 MapServer 上的物理 map_id
 )
 
 // Enum value maps for InternalMsgId.
@@ -96,37 +99,41 @@ var (
 		613: "MSG_INTERNAL_MIGRATION_COMPLETE",
 		614: "MSG_INTERNAL_MIGRATION_HEARTBEAT",
 		615: "MSG_INTERNAL_MIGRATION_QUERY_STATUS",
+		620: "MSG_INTERNAL_CROSS_INSTANCE_ENSURE",
+		621: "MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE",
 	}
 	InternalMsgId_value = map[string]int32{
-		"MSG_INTERNAL_INVALID":                0,
-		"MSG_INTERNAL_SERVICE_REGISTER":       100,
-		"MSG_INTERNAL_SERVICE_DEREGISTER":     101,
-		"MSG_INTERNAL_SERVICE_HEARTBEAT":      102,
-		"MSG_INTERNAL_SERVICE_DISCOVER":       103,
-		"MSG_INTERNAL_GATEWAY_ROUTE":          200,
-		"MSG_INTERNAL_GATEWAY_BROADCAST":      201,
-		"MSG_INTERNAL_GATEWAY_KICK":           202,
-		"MSG_INTERNAL_PLAYER_ROUTE":           300,
-		"MSG_INTERNAL_PLAYER_BIND_SERVER":     301,
-		"MSG_INTERNAL_PLAYER_UNBIND_SERVER":   302,
-		"MSG_INTERNAL_PLAYER_TRANSFER":        303,
-		"MSG_INTERNAL_MAP_ENTER_REQUEST":      400,
-		"MSG_INTERNAL_MAP_ENTER_RESPONSE":     401,
-		"MSG_INTERNAL_MAP_LEAVE_REQUEST":      402,
-		"MSG_INTERNAL_MAP_LEAVE_RESPONSE":     403,
-		"MSG_INTERNAL_MAP_MOVE_REQUEST":       404,
-		"MSG_INTERNAL_MAP_MOVE_SYNC":          405,
-		"MSG_INTERNAL_MAP_ATTACK_REQUEST":     406,
-		"MSG_INTERNAL_COMBAT_ACTION":          407,
-		"MSG_INTERNAL_MAP_PICKUP_REQUEST":     408,
-		"MSG_INTERNAL_CROSS_SERVER_REQUEST":   600,
-		"MSG_INTERNAL_CROSS_SERVER_RESPONSE":  601,
-		"MSG_INTERNAL_MIGRATION_REQUEST":      610,
-		"MSG_INTERNAL_MIGRATION_DATA":         611,
-		"MSG_INTERNAL_MIGRATION_ROLLBACK":     612,
-		"MSG_INTERNAL_MIGRATION_COMPLETE":     613,
-		"MSG_INTERNAL_MIGRATION_HEARTBEAT":    614,
-		"MSG_INTERNAL_MIGRATION_QUERY_STATUS": 615,
+		"MSG_INTERNAL_INVALID":                        0,
+		"MSG_INTERNAL_SERVICE_REGISTER":               100,
+		"MSG_INTERNAL_SERVICE_DEREGISTER":             101,
+		"MSG_INTERNAL_SERVICE_HEARTBEAT":              102,
+		"MSG_INTERNAL_SERVICE_DISCOVER":               103,
+		"MSG_INTERNAL_GATEWAY_ROUTE":                  200,
+		"MSG_INTERNAL_GATEWAY_BROADCAST":              201,
+		"MSG_INTERNAL_GATEWAY_KICK":                   202,
+		"MSG_INTERNAL_PLAYER_ROUTE":                   300,
+		"MSG_INTERNAL_PLAYER_BIND_SERVER":             301,
+		"MSG_INTERNAL_PLAYER_UNBIND_SERVER":           302,
+		"MSG_INTERNAL_PLAYER_TRANSFER":                303,
+		"MSG_INTERNAL_MAP_ENTER_REQUEST":              400,
+		"MSG_INTERNAL_MAP_ENTER_RESPONSE":             401,
+		"MSG_INTERNAL_MAP_LEAVE_REQUEST":              402,
+		"MSG_INTERNAL_MAP_LEAVE_RESPONSE":             403,
+		"MSG_INTERNAL_MAP_MOVE_REQUEST":               404,
+		"MSG_INTERNAL_MAP_MOVE_SYNC":                  405,
+		"MSG_INTERNAL_MAP_ATTACK_REQUEST":             406,
+		"MSG_INTERNAL_COMBAT_ACTION":                  407,
+		"MSG_INTERNAL_MAP_PICKUP_REQUEST":             408,
+		"MSG_INTERNAL_CROSS_SERVER_REQUEST":           600,
+		"MSG_INTERNAL_CROSS_SERVER_RESPONSE":          601,
+		"MSG_INTERNAL_MIGRATION_REQUEST":              610,
+		"MSG_INTERNAL_MIGRATION_DATA":                 611,
+		"MSG_INTERNAL_MIGRATION_ROLLBACK":             612,
+		"MSG_INTERNAL_MIGRATION_COMPLETE":             613,
+		"MSG_INTERNAL_MIGRATION_HEARTBEAT":            614,
+		"MSG_INTERNAL_MIGRATION_QUERY_STATUS":         615,
+		"MSG_INTERNAL_CROSS_INSTANCE_ENSURE":          620,
+		"MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE": 621,
 	}
 )
 
@@ -2996,6 +3003,294 @@ func (x *MigrationStatusQuery) GetMigrationId() uint64 {
 	return 0
 }
 
+// 跨服活动分配请求（GameServer → GlobalServer，走 HTTP/JSON：
+// GlobalServer 是全区全服的 HTTP 进程，无 TCP 栈；分配是低频控制面调用，不上跨服二进制通道）。
+type CrossAllocateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActivityId    int64                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapConfigId   int32                  `protobuf:"varint,2,opt,name=map_config_id,json=mapConfigId,proto3" json:"map_config_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CrossAllocateRequest) Reset() {
+	*x = CrossAllocateRequest{}
+	mi := &file_internal_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CrossAllocateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CrossAllocateRequest) ProtoMessage() {}
+
+func (x *CrossAllocateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CrossAllocateRequest.ProtoReflect.Descriptor instead.
+func (*CrossAllocateRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *CrossAllocateRequest) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *CrossAllocateRequest) GetMapConfigId() int32 {
+	if x != nil {
+		return x.MapConfigId
+	}
+	return 0
+}
+
+// 跨服活动分配应答：告诉发起方这场活动被放在哪台 MapServer 上（可能属于别的 realm）。
+type CrossAllocateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Result        int32                  `protobuf:"varint,1,opt,name=result,proto3" json:"result,omitempty"` // 0=成功
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	ActivityId    int64                  `protobuf:"varint,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapServerId   int32                  `protobuf:"varint,4,opt,name=map_server_id,json=mapServerId,proto3" json:"map_server_id,omitempty"`
+	GroupId       string                 `protobuf:"bytes,5,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	Address       string                 `protobuf:"bytes,6,opt,name=address,proto3" json:"address,omitempty"` // host:port
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CrossAllocateResponse) Reset() {
+	*x = CrossAllocateResponse{}
+	mi := &file_internal_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CrossAllocateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CrossAllocateResponse) ProtoMessage() {}
+
+func (x *CrossAllocateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CrossAllocateResponse.ProtoReflect.Descriptor instead.
+func (*CrossAllocateResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *CrossAllocateResponse) GetResult() int32 {
+	if x != nil {
+		return x.Result
+	}
+	return 0
+}
+
+func (x *CrossAllocateResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *CrossAllocateResponse) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *CrossAllocateResponse) GetMapServerId() int32 {
+	if x != nil {
+		return x.MapServerId
+	}
+	return 0
+}
+
+func (x *CrossAllocateResponse) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *CrossAllocateResponse) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+// 建/取跨服活动实例（GameServer → 目标 realm 的 MapServer）。
+// **按 activity_id 幂等**：同一活动无论多少个 realm 的 GameServer 来请求，都收敛到同一张实例地图，
+// 否则各 realm 各建一张、玩家永远碰不到面。
+type CrossInstanceEnsureRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ActivityId    int64                  `protobuf:"varint,1,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapConfigId   int32                  `protobuf:"varint,2,opt,name=map_config_id,json=mapConfigId,proto3" json:"map_config_id,omitempty"`
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Width         float32                `protobuf:"fixed32,4,opt,name=width,proto3" json:"width,omitempty"`
+	Height        float32                `protobuf:"fixed32,5,opt,name=height,proto3" json:"height,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CrossInstanceEnsureRequest) Reset() {
+	*x = CrossInstanceEnsureRequest{}
+	mi := &file_internal_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CrossInstanceEnsureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CrossInstanceEnsureRequest) ProtoMessage() {}
+
+func (x *CrossInstanceEnsureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CrossInstanceEnsureRequest.ProtoReflect.Descriptor instead.
+func (*CrossInstanceEnsureRequest) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *CrossInstanceEnsureRequest) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *CrossInstanceEnsureRequest) GetMapConfigId() int32 {
+	if x != nil {
+		return x.MapConfigId
+	}
+	return 0
+}
+
+func (x *CrossInstanceEnsureRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CrossInstanceEnsureRequest) GetWidth() float32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *CrossInstanceEnsureRequest) GetHeight() float32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+// 建/取跨服活动实例的应答：map_id 是该实例在**目标 MapServer 上的物理地图 ID**
+// （实例池派生，仅在该 MapServer 内唯一——跨 MapServer 会撞号，故 GameServer 侧不得只按 map_id 路由）。
+type CrossInstanceEnsureResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ErrorMsg      string                 `protobuf:"bytes,2,opt,name=error_msg,json=errorMsg,proto3" json:"error_msg,omitempty"`
+	ActivityId    int64                  `protobuf:"varint,3,opt,name=activity_id,json=activityId,proto3" json:"activity_id,omitempty"`
+	MapId         int32                  `protobuf:"varint,4,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CrossInstanceEnsureResponse) Reset() {
+	*x = CrossInstanceEnsureResponse{}
+	mi := &file_internal_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CrossInstanceEnsureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CrossInstanceEnsureResponse) ProtoMessage() {}
+
+func (x *CrossInstanceEnsureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CrossInstanceEnsureResponse.ProtoReflect.Descriptor instead.
+func (*CrossInstanceEnsureResponse) Descriptor() ([]byte, []int) {
+	return file_internal_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *CrossInstanceEnsureResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *CrossInstanceEnsureResponse) GetErrorMsg() string {
+	if x != nil {
+		return x.ErrorMsg
+	}
+	return ""
+}
+
+func (x *CrossInstanceEnsureResponse) GetActivityId() int64 {
+	if x != nil {
+		return x.ActivityId
+	}
+	return 0
+}
+
+func (x *CrossInstanceEnsureResponse) GetMapId() int32 {
+	if x != nil {
+		return x.MapId
+	}
+	return 0
+}
+
 // 迁移状态应答
 type MigrationStatus struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -3013,7 +3308,7 @@ type MigrationStatus struct {
 
 func (x *MigrationStatus) Reset() {
 	*x = MigrationStatus{}
-	mi := &file_internal_proto_msgTypes[37]
+	mi := &file_internal_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3025,7 +3320,7 @@ func (x *MigrationStatus) String() string {
 func (*MigrationStatus) ProtoMessage() {}
 
 func (x *MigrationStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_msgTypes[37]
+	mi := &file_internal_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3038,7 +3333,7 @@ func (x *MigrationStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrationStatus.ProtoReflect.Descriptor instead.
 func (*MigrationStatus) Descriptor() ([]byte, []int) {
-	return file_internal_proto_rawDescGZIP(), []int{37}
+	return file_internal_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MigrationStatus) GetMigrationId() uint64 {
@@ -3342,7 +3637,32 @@ const file_internal_proto_rawDesc = "" +
 	"\x05state\x18\x02 \x01(\rR\x05state\x12\x1c\n" +
 	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\"9\n" +
 	"\x14MigrationStatusQuery\x12!\n" +
-	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\"\x96\x02\n" +
+	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\"[\n" +
+	"\x14CrossAllocateRequest\x12\x1f\n" +
+	"\vactivity_id\x18\x01 \x01(\x03R\n" +
+	"activityId\x12\"\n" +
+	"\rmap_config_id\x18\x02 \x01(\x05R\vmapConfigId\"\xc6\x01\n" +
+	"\x15CrossAllocateResponse\x12\x16\n" +
+	"\x06result\x18\x01 \x01(\x05R\x06result\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
+	"\vactivity_id\x18\x03 \x01(\x03R\n" +
+	"activityId\x12\"\n" +
+	"\rmap_server_id\x18\x04 \x01(\x05R\vmapServerId\x12\x19\n" +
+	"\bgroup_id\x18\x05 \x01(\tR\agroupId\x12\x18\n" +
+	"\aaddress\x18\x06 \x01(\tR\aaddress\"\xa3\x01\n" +
+	"\x1aCrossInstanceEnsureRequest\x12\x1f\n" +
+	"\vactivity_id\x18\x01 \x01(\x03R\n" +
+	"activityId\x12\"\n" +
+	"\rmap_config_id\x18\x02 \x01(\x05R\vmapConfigId\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x14\n" +
+	"\x05width\x18\x04 \x01(\x02R\x05width\x12\x16\n" +
+	"\x06height\x18\x05 \x01(\x02R\x06height\"\x8c\x01\n" +
+	"\x1bCrossInstanceEnsureResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
+	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1f\n" +
+	"\vactivity_id\x18\x03 \x01(\x03R\n" +
+	"activityId\x12\x15\n" +
+	"\x06map_id\x18\x04 \x01(\x05R\x05mapId\"\x96\x02\n" +
 	"\x0fMigrationStatus\x12!\n" +
 	"\fmigration_id\x18\x01 \x01(\x04R\vmigrationId\x12\x1b\n" +
 	"\tplayer_id\x18\x02 \x01(\x03R\bplayerId\x12\x14\n" +
@@ -3353,7 +3673,7 @@ const file_internal_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\a \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\b \x01(\x03R\tupdatedAt*\xac\b\n" +
+	"updated_at\x18\b \x01(\x03R\tupdatedAt*\x87\t\n" +
 	"\rInternalMsgId\x12\x18\n" +
 	"\x14MSG_INTERNAL_INVALID\x10\x00\x12!\n" +
 	"\x1dMSG_INTERNAL_SERVICE_REGISTER\x10d\x12#\n" +
@@ -3383,7 +3703,9 @@ const file_internal_proto_rawDesc = "" +
 	"\x1fMSG_INTERNAL_MIGRATION_ROLLBACK\x10\xe4\x04\x12$\n" +
 	"\x1fMSG_INTERNAL_MIGRATION_COMPLETE\x10\xe5\x04\x12%\n" +
 	" MSG_INTERNAL_MIGRATION_HEARTBEAT\x10\xe6\x04\x12(\n" +
-	"#MSG_INTERNAL_MIGRATION_QUERY_STATUS\x10\xe7\x04*\x9f\x01\n" +
+	"#MSG_INTERNAL_MIGRATION_QUERY_STATUS\x10\xe7\x04\x12'\n" +
+	"\"MSG_INTERNAL_CROSS_INSTANCE_ENSURE\x10\xec\x04\x120\n" +
+	"+MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE\x10\xed\x04*\x9f\x01\n" +
 	"\vServiceType\x12\x18\n" +
 	"\x14SERVICE_TYPE_INVALID\x10\x00\x12\x17\n" +
 	"\x13SERVICE_TYPE_GLOBAL\x10\x01\x12\x18\n" +
@@ -3405,53 +3727,57 @@ func file_internal_proto_rawDescGZIP() []byte {
 }
 
 var file_internal_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
+var file_internal_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_internal_proto_goTypes = []any{
-	(InternalMsgId)(0),                // 0: protocol.InternalMsgId
-	(ServiceType)(0),                  // 1: protocol.ServiceType
-	(*ServiceInfo)(nil),               // 2: protocol.ServiceInfo
-	(*ServiceRegisterRequest)(nil),    // 3: protocol.ServiceRegisterRequest
-	(*ServiceRegisterResponse)(nil),   // 4: protocol.ServiceRegisterResponse
-	(*ServiceDeregisterRequest)(nil),  // 5: protocol.ServiceDeregisterRequest
-	(*ServiceHeartbeatRequest)(nil),   // 6: protocol.ServiceHeartbeatRequest
-	(*ServiceDiscoverRequest)(nil),    // 7: protocol.ServiceDiscoverRequest
-	(*ServiceDiscoverResponse)(nil),   // 8: protocol.ServiceDiscoverResponse
-	(*GatewayRouteMessage)(nil),       // 9: protocol.GatewayRouteMessage
-	(*GatewayBroadcastMessage)(nil),   // 10: protocol.GatewayBroadcastMessage
-	(*GatewayKickRequest)(nil),        // 11: protocol.GatewayKickRequest
-	(*PlayerRouteInfo)(nil),           // 12: protocol.PlayerRouteInfo
-	(*PlayerBindServerRequest)(nil),   // 13: protocol.PlayerBindServerRequest
-	(*PlayerBindServerResponse)(nil),  // 14: protocol.PlayerBindServerResponse
-	(*PlayerUnbindServerRequest)(nil), // 15: protocol.PlayerUnbindServerRequest
-	(*PlayerTransferRequest)(nil),     // 16: protocol.PlayerTransferRequest
-	(*PlayerTransferResponse)(nil),    // 17: protocol.PlayerTransferResponse
-	(*CrossServerRequest)(nil),        // 18: protocol.CrossServerRequest
-	(*CrossServerResponse)(nil),       // 19: protocol.CrossServerResponse
-	(*CrossServerMessage)(nil),        // 20: protocol.CrossServerMessage
-	(*BaseMessage)(nil),               // 21: protocol.BaseMessage
-	(*InternalMessage)(nil),           // 22: protocol.InternalMessage
-	(*MapEnterRequest)(nil),           // 23: protocol.MapEnterRequest
-	(*MapEnterResponse)(nil),          // 24: protocol.MapEnterResponse
-	(*MapLeaveRequest)(nil),           // 25: protocol.MapLeaveRequest
-	(*MapLeaveResponse)(nil),          // 26: protocol.MapLeaveResponse
-	(*MapMoveRequest)(nil),            // 27: protocol.MapMoveRequest
-	(*MapMoveResponse)(nil),           // 28: protocol.MapMoveResponse
-	(*MapAttackRequest)(nil),          // 29: protocol.MapAttackRequest
-	(*MapAttackResponse)(nil),         // 30: protocol.MapAttackResponse
-	(*MigrationRequest)(nil),          // 31: protocol.MigrationRequest
-	(*MigrationPrepareAck)(nil),       // 32: protocol.MigrationPrepareAck
-	(*MigrationDataTransfer)(nil),     // 33: protocol.MigrationDataTransfer
-	(*MigrationCommitAck)(nil),        // 34: protocol.MigrationCommitAck
-	(*MigrationRollbackNotify)(nil),   // 35: protocol.MigrationRollbackNotify
-	(*MigrationCompleteNotify)(nil),   // 36: protocol.MigrationCompleteNotify
-	(*MigrationHeartbeat)(nil),        // 37: protocol.MigrationHeartbeat
-	(*MigrationStatusQuery)(nil),      // 38: protocol.MigrationStatusQuery
-	(*MigrationStatus)(nil),           // 39: protocol.MigrationStatus
-	nil,                               // 40: protocol.ServiceInfo.MetadataEntry
+	(InternalMsgId)(0),                  // 0: protocol.InternalMsgId
+	(ServiceType)(0),                    // 1: protocol.ServiceType
+	(*ServiceInfo)(nil),                 // 2: protocol.ServiceInfo
+	(*ServiceRegisterRequest)(nil),      // 3: protocol.ServiceRegisterRequest
+	(*ServiceRegisterResponse)(nil),     // 4: protocol.ServiceRegisterResponse
+	(*ServiceDeregisterRequest)(nil),    // 5: protocol.ServiceDeregisterRequest
+	(*ServiceHeartbeatRequest)(nil),     // 6: protocol.ServiceHeartbeatRequest
+	(*ServiceDiscoverRequest)(nil),      // 7: protocol.ServiceDiscoverRequest
+	(*ServiceDiscoverResponse)(nil),     // 8: protocol.ServiceDiscoverResponse
+	(*GatewayRouteMessage)(nil),         // 9: protocol.GatewayRouteMessage
+	(*GatewayBroadcastMessage)(nil),     // 10: protocol.GatewayBroadcastMessage
+	(*GatewayKickRequest)(nil),          // 11: protocol.GatewayKickRequest
+	(*PlayerRouteInfo)(nil),             // 12: protocol.PlayerRouteInfo
+	(*PlayerBindServerRequest)(nil),     // 13: protocol.PlayerBindServerRequest
+	(*PlayerBindServerResponse)(nil),    // 14: protocol.PlayerBindServerResponse
+	(*PlayerUnbindServerRequest)(nil),   // 15: protocol.PlayerUnbindServerRequest
+	(*PlayerTransferRequest)(nil),       // 16: protocol.PlayerTransferRequest
+	(*PlayerTransferResponse)(nil),      // 17: protocol.PlayerTransferResponse
+	(*CrossServerRequest)(nil),          // 18: protocol.CrossServerRequest
+	(*CrossServerResponse)(nil),         // 19: protocol.CrossServerResponse
+	(*CrossServerMessage)(nil),          // 20: protocol.CrossServerMessage
+	(*BaseMessage)(nil),                 // 21: protocol.BaseMessage
+	(*InternalMessage)(nil),             // 22: protocol.InternalMessage
+	(*MapEnterRequest)(nil),             // 23: protocol.MapEnterRequest
+	(*MapEnterResponse)(nil),            // 24: protocol.MapEnterResponse
+	(*MapLeaveRequest)(nil),             // 25: protocol.MapLeaveRequest
+	(*MapLeaveResponse)(nil),            // 26: protocol.MapLeaveResponse
+	(*MapMoveRequest)(nil),              // 27: protocol.MapMoveRequest
+	(*MapMoveResponse)(nil),             // 28: protocol.MapMoveResponse
+	(*MapAttackRequest)(nil),            // 29: protocol.MapAttackRequest
+	(*MapAttackResponse)(nil),           // 30: protocol.MapAttackResponse
+	(*MigrationRequest)(nil),            // 31: protocol.MigrationRequest
+	(*MigrationPrepareAck)(nil),         // 32: protocol.MigrationPrepareAck
+	(*MigrationDataTransfer)(nil),       // 33: protocol.MigrationDataTransfer
+	(*MigrationCommitAck)(nil),          // 34: protocol.MigrationCommitAck
+	(*MigrationRollbackNotify)(nil),     // 35: protocol.MigrationRollbackNotify
+	(*MigrationCompleteNotify)(nil),     // 36: protocol.MigrationCompleteNotify
+	(*MigrationHeartbeat)(nil),          // 37: protocol.MigrationHeartbeat
+	(*MigrationStatusQuery)(nil),        // 38: protocol.MigrationStatusQuery
+	(*CrossAllocateRequest)(nil),        // 39: protocol.CrossAllocateRequest
+	(*CrossAllocateResponse)(nil),       // 40: protocol.CrossAllocateResponse
+	(*CrossInstanceEnsureRequest)(nil),  // 41: protocol.CrossInstanceEnsureRequest
+	(*CrossInstanceEnsureResponse)(nil), // 42: protocol.CrossInstanceEnsureResponse
+	(*MigrationStatus)(nil),             // 43: protocol.MigrationStatus
+	nil,                                 // 44: protocol.ServiceInfo.MetadataEntry
 }
 var file_internal_proto_depIdxs = []int32{
 	1,  // 0: protocol.ServiceInfo.service_type:type_name -> protocol.ServiceType
-	40, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
+	44, // 1: protocol.ServiceInfo.metadata:type_name -> protocol.ServiceInfo.MetadataEntry
 	2,  // 2: protocol.ServiceRegisterRequest.service:type_name -> protocol.ServiceInfo
 	1,  // 3: protocol.ServiceDeregisterRequest.service_type:type_name -> protocol.ServiceType
 	1,  // 4: protocol.ServiceHeartbeatRequest.service_type:type_name -> protocol.ServiceType
@@ -3477,7 +3803,7 @@ func file_internal_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_rawDesc), len(file_internal_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   39,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

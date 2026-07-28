@@ -94,6 +94,7 @@ func (ts *TCPService) initMessageRouter() {
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_LEAVE), mapHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_MOVE), mapHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_ATTACK), mapHandler)
+	ts.messageRouter.RegisterHandler(int32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER), mapHandler)
 	// 物品 / 仓库（业务层建设 2026-07-25）
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_LIST), itemHandler)
 	ts.messageRouter.RegisterHandler(int32(protocol.ItemMsgId_MSG_ITEM_USE), itemHandler)
@@ -343,7 +344,8 @@ func shouldDeduplicateGatewayProto(protoId int32) bool {
 		int32(protocol.PlayerMsgId_MSG_PLAYER_LEAVE_GAME),
 		int32(protocol.MapMsgId_MSG_MAP_ENTER),
 		int32(protocol.MapMsgId_MSG_MAP_MOVE),
-		int32(protocol.MapMsgId_MSG_MAP_ATTACK):
+		int32(protocol.MapMsgId_MSG_MAP_ATTACK),
+		int32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER):
 		return true
 	default:
 		return false

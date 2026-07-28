@@ -16,7 +16,8 @@ const (
 	MsgNetMapEnter  MessageType = 1200 // MSG_MAP_ENTER
 	MsgNetMapLeave  MessageType = 1202 // MSG_MAP_LEAVE
 	MsgNetMapMove   MessageType = 1204 // MSG_MAP_MOVE
-	MsgNetMapAttack MessageType = 1206 // MSG_MAP_ATTACK
+	MsgNetMapAttack     MessageType = 1206 // MSG_MAP_ATTACK
+	MsgNetMapCrossEnter MessageType = 1208 // MSG_MAP_CROSS_ENTER（进跨服活动实例，可能落到别的 realm）
 
 	// 物品 / 仓库（业务层建设 2026-07-25，值对齐客户端 protoId ItemMsgId）
 	MsgNetItemList          MessageType = 1300 // MSG_ITEM_LIST
@@ -141,6 +142,17 @@ type NetMapEnterRequest struct {
 	PosX     float32
 	PosY     float32
 	PosZ     float32
+}
+
+// NetCrossEnterRequest 进跨服活动实例（realm §5.1）。目标地图不是玩家给的 mapID——由
+// GlobalServer 分配 + 目标 MapServer 建实例后才确定，故这里只带活动与地图配置。
+type NetCrossEnterRequest struct {
+	PlayerID    id.PlayerIdType
+	ActivityID  int64
+	MapConfigID int32
+	PosX        float32
+	PosY        float32
+	PosZ        float32
 }
 
 type NetMapLeaveRequest struct {
@@ -416,6 +428,8 @@ func ProtoToMessageType(protoId int32) (MessageType, bool) {
 		return MsgNetMapMove, true
 	case 1206:
 		return MsgNetMapAttack, true
+	case 1208:
+		return MsgNetMapCrossEnter, true
 	default:
 		return 0, false
 	}

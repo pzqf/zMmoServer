@@ -18,6 +18,10 @@ type MapOperator interface {
 	Move(playerID id.PlayerIdType, mapID id.MapIdType, pos common.Vector3) error
 	Attack(playerID id.PlayerIdType, mapID id.MapIdType, targetID id.ObjectIdType) (int64, int64, error)
 	Pickup(playerID id.PlayerIdType, mapID id.MapIdType) error
+	// EnterCrossMap 进跨服活动实例（realm §5.1）：由 GlobalServer 分配承载服务器、目标 MapServer
+	// 按 activityID 建/取实例，返回 (承载 MapServer 的 serverID, 实例地图 ID)。
+	// 该 MapServer 可能属于**别的 realm**，此后该玩家的地图消息会定点发往那里。
+	EnterCrossMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (uint32, id.MapIdType, error)
 }
 
 type Player struct {

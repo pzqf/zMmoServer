@@ -79,7 +79,9 @@ func (t *CrossTransport) Call(ctx context.Context, targetServerID int32, targetS
 		return nil, fmt.Errorf("cross transport: no server router")
 	}
 
-	reqID := t.reqRouter.NextRequestID()
+	// 关联器的序号是**进程内**的，必须混入本机 serverID 才全集群唯一——否则收侧按裸 requestID
+	// 去重时，两个不同服务器发来的同号请求会被误判为重放（见 ComposeRequestID）。
+	reqID := ComposeRequestID(t.localServerID, t.reqRouter.NextRequestID())
 	meta := NewRequestMeta(t.localService, t.localServerID)
 	meta.RequestID = reqID
 	meta.TraceID = reqID

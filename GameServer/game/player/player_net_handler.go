@@ -122,6 +122,62 @@ func (p *Player) handleNetMapEnter(msg *PlayerMessage) {
 	}
 }
 
+// handleNetCrossEnter 进跨服活动实例（realm §5.1）。
+//
+// 与普通进图的关键差别：目标地图**不是客户端给的 mapID**——先由 GlobalServer 分配承载服务器、
+// 再由该 MapServer 按 activityID 建/取实例，实例 mapID 是结果而非输入。整条链在玩家自己的
+// actor 上同步等待（与攻击等响应同一模式），故 MapService 侧对每一跳都设了短超时。
+func (p *Player) handleNetCrossEnter(msg *PlayerMessage) {
+	req, ok := msg.Data.(*NetCrossEnterRequest)
+	if !ok {
+		p.sendErrorResponse(msg, "invalid request data")
+		return
+	}
+
+	respond := func(resp *protocol.ClientCrossEnterResponse) {
+		respData, err := proto.Marshal(resp)
+		if err != nil {
+			p.sendErrorResponse(msg, fmt.Sprintf("marshal error: %v", err))
+			return
+		}
+		if msg.Callback != nil {
+			msg.Callback <- &NetResponse{
+				ProtoId: int32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER_RESPONSE),
+				Data:    respData,
+			}
+		}
+	}
+
+	if p.mapOp == nil {
+		respond(&protocol.ClientCrossEnterResponse{
+			Result: 1, ErrorMsg: "map operator not available", ActivityId: req.ActivityID,
+		})
+		return
+	}
+
+	pos := common.Vector3{X: req.PosX, Y: req.PosY, Z: req.PosZ}
+	mapServerID, mapID, err := p.mapOp.EnterCrossMap(req.PlayerID, req.ActivityID, req.MapConfigID, pos)
+	if err != nil {
+		zLog.Error("Failed to enter cross-server map",
+			zap.Int64("player_id", int64(req.PlayerID)),
+			zap.Int64("activity_id", req.ActivityID), zap.Error(err))
+		respond(&protocol.ClientCrossEnterResponse{
+			Result: 1, ErrorMsg: err.Error(), ActivityId: req.ActivityID,
+		})
+		return
+	}
+
+	p.SetCurrentMapID(mapID)
+
+	respond(&protocol.ClientCrossEnterResponse{
+		Result:      0,
+		ActivityId:  req.ActivityID,
+		MapServerId: int32(mapServerID),
+		MapId:       int32(mapID),
+		Pos:         &protocol.Position{X: pos.X, Y: pos.Y, Z: pos.Z},
+	})
+}
+
 func (p *Player) handleNetMapLeave(msg *PlayerMessage) {
 	req, ok := msg.Data.(*NetMapLeaveRequest)
 	if !ok {

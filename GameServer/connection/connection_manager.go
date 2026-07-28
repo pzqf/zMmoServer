@@ -45,6 +45,9 @@ type MapResponseHandler interface {
 	// HandleAttrGrant 处理 MapServer 战斗/结算属性回写（crossserver.MsgInternalAttrGrant，realm ④）：把经验/金币等
 	// 持久变更加到持久化 actor。requestID 幂等去重，防同一次结算重复投递被累加两次。泛化取代原 507 ExpGrant。
 	HandleAttrGrant(requestID uint64, playerID int64, changes []*protocol.AttrChange)
+	// HandleCrossInstanceEnsureResponse 处理跨服实例建/取的应答（621）：payload 为
+	// CrossInstanceEnsureResponse 的 protobuf 字节，按 requestID 回填到等待中的请求。
+	HandleCrossInstanceEnsureResponse(requestID uint64, payload []byte)
 }
 
 type ConnectionManager struct {
@@ -60,6 +63,12 @@ type ConnectionManager struct {
 	mapServerConns     *zMap.TypedMap[string, *MapConnection]
 	mapSessionHandler  *MapSessionHandler
 	mapResponseHandler MapResponseHandler
+	// crossRealmConns 跨 realm 的 MapServer 连接，**按 serverID 索引**（跨服物理路由 ②）。
+	// 不能并进 mapConnections（按 mapID 索引）：跨服实例的 mapID 由各 MapServer 的实例池派生，
+	// 不同 MapServer 会派生出同一个数字，按 mapID 索引必然串到错的服务器上。
+	crossRealmConns *zMap.TypedMap[uint32, *MapConnection]
+	// crossConnMu 串行化"建跨域连接"：两个玩家同时进同一场跨服活动时，若不串行会各建一条 TCP。
+	crossConnMu sync.Mutex
 }
 
 // SetMapResponseHandler 注入 MapServer 响应回填器（通常是 *maps.MapService）。
@@ -97,6 +106,7 @@ func NewConnectionManager(cfg *config.Config) *ConnectionManager {
 		gatewayConnectedChan: make(chan struct{}),
 		mapConnections:       zMap.NewTypedMap[int, *MapConnection](),
 		mapServerConns:       zMap.NewTypedMap[string, *MapConnection](),
+		crossRealmConns:      zMap.NewTypedMap[uint32, *MapConnection](),
 	}
 	cm.mapSessionHandler = NewMapSessionHandler(cm)
 	return cm
@@ -112,40 +122,10 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 
 	zLog.Info("Connecting to MapServer...", zap.String("addr", mapServerAddr), zap.Ints("map_ids", mapIDs))
 
-	host, portStr, err := net.SplitHostPort(mapServerAddr)
+	_, session, err := cm.dialMapServer(mapServerAddr)
 	if err != nil {
-		zLog.Error("Invalid MapServer address", zap.String("addr", mapServerAddr), zap.Error(err))
-		return fmt.Errorf("invalid map server address: %w", err)
-	}
-	port := 30001
-	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
-		zLog.Error("Invalid MapServer port", zap.String("port", portStr), zap.Error(err))
-		return fmt.Errorf("invalid map server port: %w", err)
-	}
-
-	tcpConfig := &zNet.TcpClientConfig{
-		ServerAddr:        host,
-		ServerPort:        port,
-		ChanSize:          1024,
-		HeartbeatDuration: 30,
-		MaxPacketDataSize: 1024 * 1024,
-		AutoReconnect:     true,
-		ReconnectDelay:    5,
-		DisableEncryption: true,
-	}
-
-	client := zNet.NewTcpClient(tcpConfig)
-	client.RegisterDispatcher(cm.mapSessionHandler.Handle)
-
-	if err := client.Connect(); err != nil {
-		zLog.Error("Failed to connect to MapServer", zap.Error(err))
+		zLog.Error("Failed to connect to MapServer", zap.String("addr", mapServerAddr), zap.Error(err))
 		return err
-	}
-
-	session := client.GetSession()
-	if session == nil {
-		zLog.Error("MapServer session is nil after connect")
-		return fmt.Errorf("map server session is nil")
 	}
 
 	mapConn := &MapConnection{
@@ -164,6 +144,99 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 	zLog.Info("Connected to MapServer successfully", zap.String("addr", mapServerAddr), zap.Ints("map_ids", mapIDs))
 
 	return nil
+}
+
+// ConnectToCrossRealmMapServer 连到**别的 realm** 的一台 MapServer（跨服物理路由 ②）。
+// 幂等：已连上直接返回。按 serverID 索引，不进 mapConnections（跨服实例 mapID 会撞号）。
+func (cm *ConnectionManager) ConnectToCrossRealmMapServer(serverID uint32, mapServerAddr string) error {
+	cm.crossConnMu.Lock()
+	defer cm.crossConnMu.Unlock()
+
+	if existing, ok := cm.crossRealmConns.Load(serverID); ok && existing.isConnected {
+		return nil
+	}
+
+	client, session, err := cm.dialMapServer(mapServerAddr)
+	if err != nil {
+		return err
+	}
+	_ = client
+
+	cm.crossRealmConns.Store(serverID, &MapConnection{
+		session:     session,
+		addr:        mapServerAddr,
+		isConnected: true,
+		closeChan:   make(chan struct{}),
+	})
+
+	zLog.Info("Connected to cross-realm MapServer",
+		zap.Uint32("map_server_id", serverID), zap.String("addr", mapServerAddr))
+	return nil
+}
+
+// SendToCrossRealmMapServer 把消息发到指定 realm 的 MapServer（按 serverID 定点，不按 mapID）。
+func (cm *ConnectionManager) SendToCrossRealmMapServer(serverID uint32, protoId int, data []byte) error {
+	conn, exists := cm.crossRealmConns.Load(serverID)
+	if !exists || !conn.isConnected {
+		return fmt.Errorf("cross-realm map server not connected: %d", serverID)
+	}
+	return conn.session.Send(zNet.ProtoIdType(protoId), data)
+}
+
+// IsCrossRealmConnected 是否已连上某跨 realm MapServer。
+func (cm *ConnectionManager) IsCrossRealmConnected(serverID uint32) bool {
+	conn, exists := cm.crossRealmConns.Load(serverID)
+	return exists && conn.isConnected
+}
+
+// DisconnectCrossRealmMapServer 断开某跨 realm 连接（活动结束/服务器下线）。
+func (cm *ConnectionManager) DisconnectCrossRealmMapServer(serverID uint32) {
+	cm.crossConnMu.Lock()
+	defer cm.crossConnMu.Unlock()
+
+	if conn, exists := cm.crossRealmConns.LoadAndDelete(serverID); exists {
+		conn.closeOnce.Do(func() {
+			close(conn.closeChan)
+			if conn.session != nil {
+				conn.session.Close()
+			}
+			conn.isConnected = false
+		})
+		zLog.Info("Disconnected from cross-realm MapServer", zap.Uint32("map_server_id", serverID))
+	}
+}
+
+// dialMapServer 建一条到 MapServer 的 zNet 客户端连接（本 realm / 跨 realm 共用）。
+func (cm *ConnectionManager) dialMapServer(mapServerAddr string) (*zNet.TcpClient, zNet.Session, error) {
+	host, portStr, err := net.SplitHostPort(mapServerAddr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid map server address %q: %w", mapServerAddr, err)
+	}
+	port := 0
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil || port <= 0 {
+		return nil, nil, fmt.Errorf("invalid map server port %q", portStr)
+	}
+
+	client := zNet.NewTcpClient(&zNet.TcpClientConfig{
+		ServerAddr:        host,
+		ServerPort:        port,
+		ChanSize:          1024,
+		HeartbeatDuration: 30,
+		MaxPacketDataSize: 1024 * 1024,
+		AutoReconnect:     true,
+		ReconnectDelay:    5,
+		DisableEncryption: true,
+	})
+	client.RegisterDispatcher(cm.mapSessionHandler.Handle)
+
+	if err := client.Connect(); err != nil {
+		return nil, nil, fmt.Errorf("connect map server %s: %w", mapServerAddr, err)
+	}
+	session := client.GetSession()
+	if session == nil {
+		return nil, nil, fmt.Errorf("map server session is nil after connect: %s", mapServerAddr)
+	}
+	return client, session, nil
 }
 
 func (cm *ConnectionManager) DisconnectFromMapServer(mapIDs []int) {
@@ -230,6 +303,8 @@ func (cm *ConnectionManager) handleMapServerPacket(session zNet.Session, packet 
 		cm.handleItemGrant(meta, baseMsg)
 	case crossserver.MsgInternalAttrGrant:
 		cm.handleAttrGrant(meta, baseMsg)
+	case uint32(protocol.InternalMsgId_MSG_INTERNAL_CROSS_INSTANCE_ENSURE_RESPONSE):
+		cm.handleCrossInstanceEnsureResponse(meta, baseMsg)
 	default:
 		zLog.Info("Received unknown message from MapServer", zap.Uint32("msg_id", baseMsg.MsgId))
 	}
@@ -335,6 +410,15 @@ func (cm *ConnectionManager) handleAttrGrant(meta crossserver.Meta, baseMsg *pro
 		return
 	}
 	cm.mapResponseHandler.HandleAttrGrant(meta.RequestID, n.PlayerId, n.Changes)
+}
+
+// handleCrossInstanceEnsureResponse 跨服实例建/取应答（621）：原样把内层字节按 requestID 回填，
+// 由 MapService 解析（解析放在等待方，连接层不掺业务）。
+func (cm *ConnectionManager) handleCrossInstanceEnsureResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {
+	if cm.mapResponseHandler == nil {
+		return
+	}
+	cm.mapResponseHandler.HandleCrossInstanceEnsureResponse(meta.RequestID, baseMsg.Data)
 }
 
 func (cm *ConnectionManager) handleMapEnterResponse(meta crossserver.Meta, baseMsg *protocol.BaseMessage) {

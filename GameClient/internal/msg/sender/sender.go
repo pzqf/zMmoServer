@@ -103,6 +103,22 @@ func (s *MessageSender) SendMapEnter(playerID int64, mapID int32) error {
 	return s.Send(uint32(protocol.MapMsgId_MSG_MAP_ENTER), data)
 }
 
+// SendCrossEnter 发送进入跨服活动实例请求（realm §5.1）。
+// 目标地图由服务端决定（GlobalServer 分配承载 MapServer + 该 MapServer 按 activityID 建实例），
+// 故客户端只给"哪场活动、用哪张地图配置"，不给 mapID。
+func (s *MessageSender) SendCrossEnter(playerID int64, activityID int64, mapConfigID int32) error {
+	req := &protocol.ClientCrossEnterRequest{
+		PlayerId:    playerID,
+		ActivityId:  activityID,
+		MapConfigId: mapConfigID,
+	}
+	data, err := proto.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return s.Send(uint32(protocol.MapMsgId_MSG_MAP_CROSS_ENTER), data)
+}
+
 // SendMapMove 发送移动请求
 func (s *MessageSender) SendMapMove(playerID int64, mapID int32, x, y, z float32) error {
 	// 移动请求

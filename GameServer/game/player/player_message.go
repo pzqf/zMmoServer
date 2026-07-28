@@ -19,6 +19,8 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		p.handleNetLeaveGame(msg)
 	case MsgNetMapEnter:
 		p.handleNetMapEnter(msg)
+	case MsgNetMapCrossEnter:
+		p.handleNetCrossEnter(msg)
 	case MsgNetMapLeave:
 		p.handleNetMapLeave(msg)
 	case MsgNetMapMove:

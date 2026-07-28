@@ -48,6 +48,8 @@ enum MapMsgId {
   MSG_MAP_MOVE_RESPONSE = 1205;
   MSG_MAP_ATTACK = 1206;
   MSG_MAP_ATTACK_RESPONSE = 1207;
+  MSG_MAP_CROSS_ENTER = 1208;          // 进入跨服活动实例（可能落在别的 realm 的 MapServer 上）
+  MSG_MAP_CROSS_ENTER_RESPONSE = 1209;
   MSG_MAP_ENTER_VIEW = 1220;
   MSG_MAP_LEAVE_VIEW = 1221;
   MSG_MAP_ENTITY_MOVE = 1222;
@@ -137,6 +139,24 @@ message ClientMapLeaveRequest {
 message ClientMapLeaveResponse {
   int32 result = 1;
   string error_msg = 2;
+}
+
+// 进入跨服活动实例请求。activity_id 标识一场跨服活动（同一活动的所有 realm 玩家进同一张实例地图），
+// map_config_id 是该活动用哪张地图配置。玩家可能被送到**别的 realm 的 MapServer** 上。
+message ClientCrossEnterRequest {
+  int64 player_id = 1;
+  int64 activity_id = 2;
+  int32 map_config_id = 3;
+}
+
+// 进入跨服活动实例响应。map_server_id/map_id 用于排查（客户端不据此路由，路由在服务端）。
+message ClientCrossEnterResponse {
+  int32 result = 1;
+  string error_msg = 2;
+  int64 activity_id = 3;
+  int32 map_server_id = 4;
+  int32 map_id = 5;
+  Position pos = 6;
 }
 
 // 地图攻击请求

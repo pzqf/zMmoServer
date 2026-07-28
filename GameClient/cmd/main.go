@@ -34,6 +34,9 @@ func main() {
 	mailTo := flag.Int64("mailTo", 0, "发邮件给该玩家(>0 生效)")
 	mailGold := flag.Int64("mailGold", 0, "邮件金币附件")
 	mailClaim := flag.Bool("mailClaim", false, "登录后拉取邮件并自动领取")
+	// 跨服活动（realm §5.1）：mode=cross 时进入指定活动的跨服实例（可能落到别的 realm 的 MapServer）。
+	crossActivity := flag.Int64("crossActivity", 0, "跨服活动ID(mode=cross 必填)")
+	crossMapConfig := flag.Int("crossMapConfig", 5001, "跨服活动使用的地图配置ID")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -46,6 +49,9 @@ func main() {
 	switch *mode {
 	case "full":
 		runFullTest(*globalServer, *gatewayServer, *account, *password, *playerName, *attackTarget, *attackCount, *idleSeconds, *teamCreate, *teamJoin, *tradeTarget, *tradeGold, *loginPlayerID, *mailTo, *mailGold, *mailClaim)
+	case "cross":
+		runCrossTest(*globalServer, *gatewayServer, *account, *password, *playerName,
+			*crossActivity, int32(*crossMapConfig), *idleSeconds)
 	case "gateway-only":
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
@@ -58,6 +64,109 @@ func main() {
 		fmt.Printf("未知的测试模式: %s\n", *mode)
 		os.Exit(1)
 	}
+}
+
+// runCrossTest 跨服活动 E2E（realm §5.1）：登录本 realm → 进跨服活动实例 → 驻留观察 AOI。
+//
+// 两个不同 realm 各跑一个本进程，用同一个 -crossActivity，即可验证跨服物理路由：
+// 两边打印的 MapServerID/MapID 应完全一致（= 落到同一台 MapServer 的同一张实例图），
+// 且各自 [AOI] 视野里应出现对方的玩家 ID（= 真在同一张地图上，能互相看见）。
+func runCrossTest(globalServer, gatewayServer, account, password, playerName string,
+	activityID int64, mapConfigID int32, idleSeconds int) {
+	fmt.Println("=== 跨服活动测试模式 ===")
+	if activityID <= 0 {
+		fmt.Println("必须指定 -crossActivity（跨服活动ID）")
+		os.Exit(2)
+	}
+
+	c := client.NewClient(globalServer)
+
+	// 注册（跨服 E2E 每次用全新账号：复用旧账号会因已有角色而取不到新角色ID）。
+	fmt.Println("0. 注册账号...")
+	if regResp, err := c.Register(account, password, account+"@test.local"); err != nil {
+		fmt.Printf("注册请求失败: %v\n", err)
+		os.Exit(1)
+	} else if regResp.Result != 0 {
+		fmt.Printf("注册返回: Result=%d ErrorMsg=%s（已存在则继续）\n", regResp.Result, regResp.ErrorMsg)
+	}
+
+	fmt.Println("1. 登录账号...")
+	authResp, err := c.Login(account, password)
+	if err != nil || authResp.Result != 0 {
+		fmt.Printf("登录失败: %v %+v\n", err, authResp)
+		os.Exit(1)
+	}
+	// 必须在 Login **之后**再定 Gateway：Login 会用服务器列表里的地址覆盖它，
+	// 而跨 realm 测试要求两个客户端各自连**指定 realm** 的 Gateway，不能被全局列表带跑。
+	c.SetGatewayAddr(gatewayServer)
+
+	fmt.Println("2. 连接GatewayServer...")
+	if err := c.Connect(); err != nil {
+		fmt.Printf("连接失败: %v\n", err)
+		os.Exit(1)
+	}
+	defer c.Disconnect()
+
+	fmt.Println("3. 验证token...")
+	if err := c.SendTokenVerify(c.GetToken()); err != nil {
+		fmt.Printf("token验证发送失败: %v\n", err)
+		os.Exit(1)
+	}
+	if result, ok := c.WaitTokenVerify(5 * time.Second); !ok || result != 0 {
+		fmt.Printf("token验证失败: result=%d ok=%v\n", result, ok)
+		os.Exit(1)
+	}
+
+	fmt.Println("4. 创建角色...")
+	if err := c.SendPlayerCreate(playerName, 1, 18); err != nil {
+		fmt.Printf("创建角色失败: %v\n", err)
+		os.Exit(1)
+	}
+	playerID := c.GetCreatedPlayerID()
+	if playerID == 0 {
+		fmt.Println("未获取到角色ID")
+		os.Exit(1)
+	}
+	fmt.Printf("角色ID: %d\n", playerID)
+
+	fmt.Println("5. 进入游戏...")
+	if err := c.SendPlayerLogin(playerID); err != nil {
+		fmt.Printf("进入游戏发送失败: %v\n", err)
+		os.Exit(1)
+	}
+	if result, ok := c.WaitPlayerLogin(5 * time.Second); !ok || result != 0 {
+		fmt.Printf("进入游戏失败: result=%d ok=%v\n", result, ok)
+		os.Exit(1)
+	}
+
+	fmt.Printf("6. 进入跨服活动实例 activity=%d mapConfig=%d ...\n", activityID, mapConfigID)
+	if err := c.SendCrossEnter(playerID, activityID, mapConfigID); err != nil {
+		fmt.Printf("跨服进图发送失败: %v\n", err)
+		os.Exit(1)
+	}
+	// 服务端要跑 分配→连外域→建实例→进图，故等待放宽到 10s。
+	result, ok := c.WaitCrossEnter(10 * time.Second)
+	if !ok {
+		fmt.Println("CROSS_ENTER_FAILED: 超时未收到跨服进图响应")
+		os.Exit(1)
+	}
+	if result != 0 {
+		fmt.Printf("CROSS_ENTER_FAILED: Result=%d\n", result)
+		os.Exit(1)
+	}
+	mapServerID, mapID := c.CrossEnterInfo()
+	// 这一行是 E2E 断言的锚点：两个 realm 的输出必须完全一致。
+	fmt.Printf("CROSS_ENTER_OK playerID=%d mapServerID=%d mapID=%d\n", playerID, mapServerID, mapID)
+
+	if idleSeconds > 0 {
+		fmt.Printf("驻留 %ds 观察跨服实例内的 AOI 视野...\n", idleSeconds)
+		time.Sleep(time.Duration(idleSeconds) * time.Second)
+	}
+
+	fmt.Println("7. 登出...")
+	_ = c.SendPlayerLogout()
+	time.Sleep(500 * time.Millisecond)
+	fmt.Println("=== 跨服活动测试结束 ===")
 }
 
 // runFullTest 运行完整测试（全局服+网关服）
