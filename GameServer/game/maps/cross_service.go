@@ -48,6 +48,48 @@ type CrossEnterResult struct {
 	Address     string
 }
 
+const (
+	// crossMaintainTick 跨服资源维护周期。
+	crossMaintainTick = 30 * time.Second
+	// crossConnIdleGrace 跨域连接被判为空闲前的最短存活时间。必须显著大于"连上→建实例→绑定"
+	// 那几百毫秒，否则会把正在进图的玩家的连接收掉。
+	crossConnIdleGrace = 5 * time.Minute
+)
+
+// StartCrossMaintainLoop 周期维护跨服资源：清关联器里超时未回的挂起项 + 回收没人再用的跨域连接。
+// 由 MapService.Start 起；ctx 结束即退出。
+func (ms *MapService) StartCrossMaintainLoop(ctx context.Context) {
+	ticker := time.NewTicker(crossMaintainTick)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ms.crossReqRouter.Cleanup()
+			ms.reapIdleCrossConnections()
+		}
+	}
+}
+
+// reapIdleCrossConnections 断开"已无任何玩家绑定"的跨域连接（活动结束/人走光后不该留着长连）。
+func (ms *MapService) reapIdleCrossConnections() {
+	if ms.connectionManager == nil {
+		return
+	}
+
+	inUse := make(map[uint32]bool)
+	ms.crossBindings.Range(func(_ int64, serverID uint32) bool {
+		inUse[serverID] = true
+		return true
+	})
+
+	for _, serverID := range ms.connectionManager.IdleCrossRealmServerIDs(inUse, crossConnIdleGrace) {
+		zLog.Info("Reaping idle cross-realm connection", zap.Uint32("map_server_id", serverID))
+		ms.connectionManager.DisconnectCrossRealmMapServer(serverID)
+	}
+}
+
 // EnterCrossServerMap 把玩家送进一场跨服活动的实例地图。失败时不留下任何绑定（玩家仍在原 realm）。
 func (ms *MapService) EnterCrossServerMap(playerID id.PlayerIdType, activityID int64, mapConfigID int32, pos common.Vector3) (*CrossEnterResult, error) {
 	if activityID <= 0 {

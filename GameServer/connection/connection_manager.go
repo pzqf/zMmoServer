@@ -83,6 +83,9 @@ type MapConnection struct {
 	isConnected bool
 	closeChan   chan struct{}
 	closeOnce   sync.Once
+	// connectedAt 建连时刻。跨域连接的空闲回收据此留出"已连上但还没绑定玩家"的窗口，
+	// 免得把某个正在进图（连上→建实例→绑定，几百毫秒）的玩家的连接给收了。
+	connectedAt time.Time
 }
 
 type MapSessionHandler struct {
@@ -167,6 +170,7 @@ func (cm *ConnectionManager) ConnectToCrossRealmMapServer(serverID uint32, mapSe
 		addr:        mapServerAddr,
 		isConnected: true,
 		closeChan:   make(chan struct{}),
+		connectedAt: time.Now(),
 	})
 
 	zLog.Info("Connected to cross-realm MapServer",
@@ -189,7 +193,26 @@ func (cm *ConnectionManager) IsCrossRealmConnected(serverID uint32) bool {
 	return exists && conn.isConnected
 }
 
-// DisconnectCrossRealmMapServer 断开某跨 realm 连接（活动结束/服务器下线）。
+// IdleCrossRealmServerIDs 返回"建连已超过 minAge、且不在 inUse 里"的跨域连接 serverID。
+// minAge 是为了留出"已连上但玩家还没绑定"的窗口（连上→建实例→绑定通常几百毫秒），
+// 否则会把正在进图的玩家的连接收掉。
+func (cm *ConnectionManager) IdleCrossRealmServerIDs(inUse map[uint32]bool, minAge time.Duration) []uint32 {
+	now := time.Now()
+	var idle []uint32
+	cm.crossRealmConns.Range(func(serverID uint32, conn *MapConnection) bool {
+		if inUse[serverID] {
+			return true
+		}
+		if now.Sub(conn.connectedAt) < minAge {
+			return true
+		}
+		idle = append(idle, serverID)
+		return true
+	})
+	return idle
+}
+
+// DisconnectCrossRealmMapServer 断开某跨 realm 连接（活动结束/服务器下线/空闲回收）。
 func (cm *ConnectionManager) DisconnectCrossRealmMapServer(serverID uint32) {
 	cm.crossConnMu.Lock()
 	defer cm.crossConnMu.Unlock()

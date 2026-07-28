@@ -155,6 +155,8 @@ func (ms *MapService) Start(ctx context.Context) error {
 	}
 	ms.retryCtx, ms.retryCancel = context.WithCancel(ctx)
 	go ms.outboxRetryLoop()
+	// 跨服资源维护：清关联器超时挂起项 + 回收无人使用的跨域连接（见 cross_service.go）。
+	go ms.StartCrossMaintainLoop(ms.retryCtx)
 
 	// 客户端 AOI 视野改由 MapServer 分层 AOI 单一权威驱动（见 HandleAOINotify）；
 	// GameServer 自建的本地 AOI 订阅（原 subscribeAOIEvents）已移除，避免冗余 + 跨 layer 串视野。
@@ -498,6 +500,14 @@ func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.Map
 
 // HandlePlayerLeaveMap 处理玩家离开地图
 func (ms *MapService) HandlePlayerLeaveMap(playerID id.PlayerIdType, mapID id.MapIdType) error {
+	// 跨服实例先分流：本 GameServer 根本没有这张图的本地 Map 对象（实例在别的 MapServer 上），
+	// 走下面的本地查图路径会在 GetMap 处直接报错返回 —— 于是既不发离开请求（玩家对象永远留在
+	// 跨服实例里），也不解绑（该玩家回本服后，消息还会被定点发去外域那台服务器）。
+	// 客户端的 MSG_MAP_LEAVE 与登出清理都走本函数，所以这条分流是必需的。
+	if _, bound := ms.crossBindings.Load(int64(playerID)); bound {
+		return ms.LeaveCrossServerMap(playerID, mapID)
+	}
+
 	m, err := ms.GetMap(mapID)
 	if err != nil {
 		return err

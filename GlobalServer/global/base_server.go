@@ -143,8 +143,9 @@ func (s *BaseServer) initServiceDiscovery() error {
 	}
 
 	// 跨服活动分配器（realm §5.1 ③）：全区唯一决策方，跨 realm 发现 MapServer 并为每场活动
-	// 粘性选定一台承载服务器。
+	// 粘性选定一台承载服务器。周期清掉空闲过期的分配，否则分配表随历史活动数只增不减。
 	crossmatch.InitAllocator(sd)
+	go s.crossAllocationCleanupLoop()
 
 	s.serviceInfo = &discovery.ServerInfo{
 		ID:            s.serverIDStr,
@@ -162,6 +163,24 @@ func (s *BaseServer) initServiceDiscovery() error {
 
 	go s.heartbeatLoop()
 	return nil
+}
+
+// crossAllocationCleanupLoop 周期释放空闲过期的跨服活动分配（活动早已结束、没人再来问）。
+// 不清的话，分配表随历史活动数只增不减。
+func (s *BaseServer) crossAllocationCleanupLoop() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.GetContext().Done():
+			return
+		case <-ticker.C:
+			if a := crossmatch.GetAllocator(); a != nil {
+				a.Cleanup()
+			}
+		}
+	}
 }
 
 func (s *BaseServer) registerWithRetry() error {

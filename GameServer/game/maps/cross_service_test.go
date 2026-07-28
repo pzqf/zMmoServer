@@ -401,3 +401,82 @@ func TestLeaveCrossServerMap_SendsToCrossServerThenUnbinds(t *testing.T) {
 		t.Fatalf("未在跨服实例中的玩家应报错")
 	}
 }
+
+// TestHandlePlayerLeaveMap_UnbindsCrossPlayer 客户端的 MSG_MAP_LEAVE 与登出清理走的都是
+// HandlePlayerLeaveMap（不是 LeaveCrossServerMap）。它必须为跨服玩家分流，否则：
+//   - 本 GameServer 没有跨服实例那张图的本地 Map 对象 → GetMap 直接报错返回 →
+//     **离开请求根本没发出去**，玩家对象永远留在外域的实例里；
+//   - **绑定没清** → 该玩家回本服后，进本地图的消息还会被定点发去外域那台服务器。
+func TestHandlePlayerLeaveMap_UnbindsCrossPlayer(t *testing.T) {
+	const (
+		crossServerID = uint32(201)
+		instanceMapID = int32(100011)
+		playerID      = 60006
+	)
+
+	fakeMap := newFakeMapServer(t, crossServerID, instanceMapID)
+	global := fakeGlobalServer(t, crossServerID, "2", fakeMap.addr, false)
+	ms, _ := newTestMapService(t, 101, hostPort(global.URL))
+
+	result, err := ms.EnterCrossServerMap(playerID, 70006, 5001, common.Vector3{})
+	if err != nil {
+		t.Fatalf("EnterCrossServerMap: %v", err)
+	}
+
+	// 走普通离开路径（= 客户端 MSG_MAP_LEAVE / 登出清理的那条）。
+	if err := ms.HandlePlayerLeaveMap(playerID, result.MapID); err != nil {
+		t.Fatalf("HandlePlayerLeaveMap 不应报错（跨服玩家应被分流处理）: %v", err)
+	}
+
+	waitFor(t, "离开请求送达外域", func() bool { return len(fakeMap.leaves()) == 1 })
+	if got := fakeMap.leaves()[0]; int32(got.MapId) != instanceMapID {
+		t.Fatalf("离开请求应发往跨服实例 %d, got %d", instanceMapID, got.MapId)
+	}
+	if _, bound := ms.IsInCrossServerInstance(playerID); bound {
+		t.Fatalf("普通离开路径也必须解绑，否则该玩家回本服后消息仍被发去外域")
+	}
+}
+
+// TestReapIdleCrossConnections 没有玩家再绑定的跨域连接会被回收；但**刚建连的不能收**——
+// 否则会把正在进图（连上→建实例→绑定，几百毫秒）的玩家的连接掐掉。
+func TestReapIdleCrossConnections(t *testing.T) {
+	const (
+		crossServerID = uint32(201)
+		instanceMapID = int32(100012)
+		playerID      = 60007
+	)
+
+	fakeMap := newFakeMapServer(t, crossServerID, instanceMapID)
+	global := fakeGlobalServer(t, crossServerID, "2", fakeMap.addr, false)
+	ms, cm := newTestMapService(t, 101, hostPort(global.URL))
+
+	result, err := ms.EnterCrossServerMap(playerID, 70007, 5001, common.Vector3{})
+	if err != nil {
+		t.Fatalf("EnterCrossServerMap: %v", err)
+	}
+
+	// 玩家还在里面 → 不能回收。
+	ms.reapIdleCrossConnections()
+	if !cm.IsCrossRealmConnected(crossServerID) {
+		t.Fatalf("有玩家绑定时不得回收连接")
+	}
+
+	// 玩家离开后，连接虽已无人使用，但建连不足 grace 时间，仍不回收（防掐掉在途进图）。
+	if err := ms.HandlePlayerLeaveMap(playerID, result.MapID); err != nil {
+		t.Fatalf("leave: %v", err)
+	}
+	ms.reapIdleCrossConnections()
+	if !cm.IsCrossRealmConnected(crossServerID) {
+		t.Fatalf("刚建连的空闲连接不应被立刻回收（会掐掉正在进图的玩家）")
+	}
+
+	// 越过 grace 后才回收。
+	idle := cm.IdleCrossRealmServerIDs(map[uint32]bool{}, 0)
+	if len(idle) != 1 || idle[0] != crossServerID {
+		t.Fatalf("grace=0 时该连接应被判为空闲, got %v", idle)
+	}
+	cm.DisconnectCrossRealmMapServer(crossServerID)
+	if cm.IsCrossRealmConnected(crossServerID) {
+		t.Fatalf("回收后不应仍标记为已连接")
+	}
+}
