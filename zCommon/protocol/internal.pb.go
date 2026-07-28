@@ -1742,12 +1742,19 @@ func (x *InternalMessage) GetTargetServerId() int32 {
 
 // 地图进入请求
 type MapEnterRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PlayerId      int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
-	MapId         int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
-	X             float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
-	Y             float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
-	Z             float32                `protobuf:"fixed32,5,opt,name=z,proto3" json:"z,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	PlayerId int64                  `protobuf:"varint,1,opt,name=player_id,json=playerId,proto3" json:"player_id,omitempty"`
+	MapId    int64                  `protobuf:"varint,2,opt,name=map_id,json=mapId,proto3" json:"map_id,omitempty"`
+	X        float32                `protobuf:"fixed32,3,opt,name=x,proto3" json:"x,omitempty"`
+	Y        float32                `protobuf:"fixed32,4,opt,name=y,proto3" json:"y,omitempty"`
+	Z        float32                `protobuf:"fixed32,5,opt,name=z,proto3" json:"z,omitempty"`
+	// 进场属性快照（realm 铁律1：GameServer 持久权威下发只读快照，MapServer 据此初始化 object.Player 战斗数值，
+	// 而非恒为默认 level 1）。0 值表示未提供、MapServer 沿用默认。
+	Level         int32 `protobuf:"varint,6,opt,name=level,proto3" json:"level,omitempty"`
+	MaxHp         int32 `protobuf:"varint,7,opt,name=max_hp,json=maxHp,proto3" json:"max_hp,omitempty"`
+	Hp            int32 `protobuf:"varint,8,opt,name=hp,proto3" json:"hp,omitempty"`
+	Attack        int32 `protobuf:"varint,9,opt,name=attack,proto3" json:"attack,omitempty"`
+	Defense       int32 `protobuf:"varint,10,opt,name=defense,proto3" json:"defense,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1813,6 +1820,41 @@ func (x *MapEnterRequest) GetY() float32 {
 func (x *MapEnterRequest) GetZ() float32 {
 	if x != nil {
 		return x.Z
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetMaxHp() int32 {
+	if x != nil {
+		return x.MaxHp
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetHp() int32 {
+	if x != nil {
+		return x.Hp
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetAttack() int32 {
+	if x != nil {
+		return x.Attack
+	}
+	return 0
+}
+
+func (x *MapEnterRequest) GetDefense() int32 {
+	if x != nil {
+		return x.Defense
 	}
 	return 0
 }
@@ -2500,13 +2542,19 @@ const file_internal_proto_rawDesc = "" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x1c\n" +
 	"\ttimestamp\x18\x03 \x01(\x03R\ttimestamp\x12(\n" +
 	"\x10source_server_id\x18\x04 \x01(\x05R\x0esourceServerId\x12(\n" +
-	"\x10target_server_id\x18\x05 \x01(\x05R\x0etargetServerId\"o\n" +
+	"\x10target_server_id\x18\x05 \x01(\x05R\x0etargetServerId\"\xde\x01\n" +
 	"\x0fMapEnterRequest\x12\x1b\n" +
 	"\tplayer_id\x18\x01 \x01(\x03R\bplayerId\x12\x15\n" +
 	"\x06map_id\x18\x02 \x01(\x03R\x05mapId\x12\f\n" +
 	"\x01x\x18\x03 \x01(\x02R\x01x\x12\f\n" +
 	"\x01y\x18\x04 \x01(\x02R\x01y\x12\f\n" +
-	"\x01z\x18\x05 \x01(\x02R\x01z\"\xa7\x01\n" +
+	"\x01z\x18\x05 \x01(\x02R\x01z\x12\x14\n" +
+	"\x05level\x18\x06 \x01(\x05R\x05level\x12\x15\n" +
+	"\x06max_hp\x18\a \x01(\x05R\x05maxHp\x12\x0e\n" +
+	"\x02hp\x18\b \x01(\x05R\x02hp\x12\x16\n" +
+	"\x06attack\x18\t \x01(\x05R\x06attack\x12\x18\n" +
+	"\adefense\x18\n" +
+	" \x01(\x05R\adefense\"\xa7\x01\n" +
 	"\x10MapEnterResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x1b\n" +
 	"\terror_msg\x18\x02 \x01(\tR\berrorMsg\x12\x1b\n" +

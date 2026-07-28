@@ -261,7 +261,7 @@ func (ts *TCPService) handleMapEnterRequest(session zNet.Session, baseMsg *proto
 	}
 
 	if ts.mapService != nil {
-		err := ts.mapService.HandlePlayerEnterMap(req.PlayerId, req.MapId, req.X, req.Y, req.Z)
+		err := ts.mapService.HandlePlayerEnterMap(req.PlayerId, req.MapId, req.X, req.Y, req.Z, req.Level, req.Hp)
 		if err != nil {
 			zLog.Error("Failed to handle player enter map", zap.Error(err))
 			resp := &protocol.MapEnterResponse{

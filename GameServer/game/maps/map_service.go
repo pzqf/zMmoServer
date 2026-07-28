@@ -419,6 +419,19 @@ func (ms *MapService) sendMapEnterRequest(playerID id.PlayerIdType, mapID id.Map
 		Y:        pos.Y,
 		Z:        pos.Z,
 	}
+	// 进场属性快照（铁律1）：从持久 actor 取只读快照下发，MapServer 据此初始化 object.Player 战斗数值，
+	// 而非恒为默认 level 1。只读快照、不是第二权威——MapServer 战斗改的是瞬时态，持久变更走 AttrGrant 回流。
+	if ms.playerManager != nil {
+		if p, perr := ms.playerManager.GetPlayer(playerID); perr == nil && p != nil {
+			if a := p.GetAttrs(); a != nil {
+				req.Level = a.GetLevel()
+				req.MaxHp = int32(a.GetMaxHP())
+				req.Hp = int32(a.GetHP())
+				req.Attack = a.GetStrength() // 简化派生（装备系统启用后再叠加真实攻防）
+				req.Defense = a.GetStamina()
+			}
+		}
+	}
 	reqData, err := proto.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal map enter request: %w", err)

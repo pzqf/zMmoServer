@@ -10,6 +10,7 @@ import (
 	"github.com/pzqf/zEngine/zInstance"
 	"github.com/pzqf/zEngine/zLog"
 	"github.com/pzqf/zMmoServer/MapServer/maps/dungeon"
+	"github.com/pzqf/zMmoServer/MapServer/maps/object"
 	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 )
@@ -173,8 +174,10 @@ func (mm *MapManager) GetMap(mapID id.MapIdType) *Map {
 	return m
 }
 
-// HandlePlayerEnterMap 处理玩家进入地图
-func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z float32) error {
+// HandlePlayerEnterMap 处理玩家进入地图。level/hp 为 GameServer 下发的进场属性快照
+// （realm 铁律1：持久权威在 GameServer，MapServer 据快照初始化 object.Player 战斗数值，
+// 否则玩家恒为 object 默认 level 1、依赖等级/血量的玩法静默用默认值）。0 值=未提供、沿用默认。
+func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z float32, level, hp int32) error {
 	var m *Map
 	actualMapID := id.MapIdType(mapID)
 	// 可分线逻辑图：经分配器选/建一层，玩家实际进的是派生层图（对客户端/GameServer 透明，②-b）。
@@ -198,6 +201,22 @@ func (mm *MapManager) HandlePlayerEnterMap(playerID int64, mapID int64, x, y, z 
 		return err
 	}
 	mm.setPlayerMap(playerID, actualMapID) // 记玩家实际所在地图，供后续 op resolve
+	// 应用 GameServer 下发的进场属性快照。经地图 actor(Do)串行设置，与 AddPlayer 同在 m 上有序执行。
+	if level > 0 || hp > 0 {
+		objID := id.ObjectIdType(playerID)
+		m.Do(func() {
+			if obj := m.GetObject(objID); obj != nil {
+				if p, ok := obj.(*object.Player); ok {
+					if level > 0 {
+						p.SetLevel(level)
+					}
+					if hp > 0 {
+						p.SetHealth(hp)
+					}
+				}
+			}
+		})
+	}
 	// 测试用掉落种子：map 1001 无怪、无真实掉落，故用 ZMMO_TEST_LOOT 在玩家落点旁放一件可拾取物，
 	// 供拾取闭环 E2E。生产路径掉落来自 combat 击杀（见 handleMonsterDeath）。
 	if os.Getenv("ZMMO_TEST_LOOT") == "1" {

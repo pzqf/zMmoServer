@@ -246,6 +246,13 @@ message MapEnterRequest {
   float x = 3;
   float y = 4;
   float z = 5;
+  // 进场属性快照（realm 铁律1：GameServer 持久权威下发只读快照，MapServer 据此初始化 object.Player 战斗数值，
+  // 而非恒为默认 level 1）。0 值表示未提供、MapServer 沿用默认。
+  int32 level = 6;
+  int32 max_hp = 7;
+  int32 hp = 8;
+  int32 attack = 9;
+  int32 defense = 10;
 }
 
 // 地图进入响应

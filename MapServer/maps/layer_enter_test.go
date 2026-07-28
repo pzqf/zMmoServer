@@ -17,10 +17,10 @@ func TestLayerEnter_SplitAndResolve(t *testing.T) {
 	})
 
 	// 玩家 1、2 进同一逻辑图。
-	if err := mm.HandlePlayerEnterMap(1, logical, 100, 0, 100); err != nil {
+	if err := mm.HandlePlayerEnterMap(1, logical, 100, 0, 100, 0, 0); err != nil {
 		t.Fatalf("p1 enter: %v", err)
 	}
-	if err := mm.HandlePlayerEnterMap(2, logical, 100, 0, 100); err != nil {
+	if err := mm.HandlePlayerEnterMap(2, logical, 100, 0, 100, 0, 0); err != nil {
 		t.Fatalf("p2 enter: %v", err)
 	}
 
@@ -69,7 +69,7 @@ func TestLayerEnter_NonLayerableUsesLogical(t *testing.T) {
 		t.Fatalf("CreateMap 失败")
 	}
 
-	if err := mm.HandlePlayerEnterMap(7, logical, 10, 0, 10); err != nil {
+	if err := mm.HandlePlayerEnterMap(7, logical, 10, 0, 10, 0, 0); err != nil {
 		t.Fatalf("enter: %v", err)
 	}
 	// 未启用分线 → 不建层，玩家在逻辑图本身。
