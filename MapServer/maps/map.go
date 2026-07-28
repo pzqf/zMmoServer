@@ -7,6 +7,7 @@ import (
 	"time"
 
 	aoi "github.com/pzqf/zEngine/zAoi"
+	"github.com/pzqf/zEngine/zActor"
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/config/models"
 	"github.com/pzqf/zCommon/crossserver"
@@ -73,9 +74,7 @@ type Map struct {
 	createdAt         time.Time
 
 	// 单写者 Actor（MAP-2）：所有对象状态改动串行到 cmdCh 上的这条 goroutine 执行。见 map_actor.go。
-	cmdCh    chan func()
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	runner *zActor.Runner
 }
 
 const defaultGridSize = 50.0

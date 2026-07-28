@@ -4,8 +4,7 @@ import (
 	"time"
 
 	"github.com/pzqf/zCommon/common/id"
-	"github.com/pzqf/zEngine/zLog"
-	"go.uber.org/zap"
+	"github.com/pzqf/zEngine/zActor"
 )
 
 // 单写者 / Actor 模型（MAP-2、并连带缓解 MAP-6/7/8）
@@ -18,76 +17,38 @@ import (
 // 取出对象指针后对其字段的读写是裸的 → 真实数据竞争（-race 可直接抓到）。
 //
 // 本模型让"每张地图独占一条 goroutine"串行处理所有会改动对象状态的工作：帧更新（postTick）
-// 与网络命令（Do）都投递到同一条命令队列，由 run() 逐个执行。所有对象改动都只在这条 goroutine
-// 上发生，从根上消除竞争。内部辅助方法（AddObject/RemoveObject/MoveObject/attack*Locked 等）
-// 只在这条 goroutine 上被调用，绝不能再自行投递 Do（会造成自投递死锁）。
-//
-// 见 docs/审查发现.md MAP-2。
+// 与网络命令（Do）都投递到同一条命令队列，逐个执行——从根上消除竞争。承载由 zEngine 的
+// zActor.Runner（单写者闭包串行器）提供：同步 Do、合帧 PostTick、每命令 panic 隔离。
+// 此前本文件自造的等价实现已下沉为引擎能力（见 zEngine/zActor/runner.go）。
+// 内部辅助方法（AddObject/RemoveObject/MoveObject/attack*Locked 等）只在这条 goroutine 上被
+// 调用，绝不能再自行投递 Do（会造成自投递死锁）。
 
 const mapCmdChanSize = 1024
 
-// startActor 启动地图的单写者 goroutine。由 NewMap 调用一次。
+// startActor 启动地图的单写者 Runner。由 NewMap 调用一次。
 func (m *Map) startActor() {
-	m.cmdCh = make(chan func(), mapCmdChanSize)
-	m.stopCh = make(chan struct{})
-	go m.run()
-}
-
-func (m *Map) run() {
-	for {
-		select {
-		case <-m.stopCh:
-			return
-		case fn := <-m.cmdCh:
-			m.safeExec(fn)
-		}
-	}
-}
-
-// safeExec 执行单条命令并兜底 panic，避免单条命令崩掉整张地图的 goroutine。
-func (m *Map) safeExec(fn func()) {
-	defer func() {
-		if r := recover(); r != nil {
-			zLog.Error("map actor command panic recovered",
-				zap.Int32("map_id", int32(m.mapID)), zap.Any("panic", r))
-		}
-	}()
-	fn()
+	m.runner = zActor.NewRunner(int64(m.mapID), mapCmdChanSize)
+	m.runner.Start()
 }
 
 // Do 把 fn 投递到地图 goroutine 上同步执行并等待其完成（请求-响应语义，供网络入口拿返回值）。
-// 若 actor 未启动（部分单元测试直接构造 Map 且不经 NewMap）或已停止，则就地执行以保持行为不变。
+// 若 actor 未启动（部分单元测试直接构造 Map 且不经 NewMap），就地执行以保持行为不变。
 // 注意：绝不能在地图 goroutine 内部再调用 Do（自投递死锁）——内部逻辑一律直接调用 *Locked 方法。
 func (m *Map) Do(fn func()) {
-	if m.cmdCh == nil {
+	if m.runner == nil {
 		fn()
 		return
 	}
-	done := make(chan struct{})
-	wrapped := func() {
-		defer close(done)
-		fn()
-	}
-	select {
-	case m.cmdCh <- wrapped:
-		<-done
-	case <-m.stopCh:
-		// 地图正在停止：尽力就地执行，保证调用方不永久阻塞。
-		m.safeExec(fn)
-	}
+	m.runner.Do(fn)
 }
 
-// postTick 把一帧更新投递到地图 goroutine。若队列已满（上一帧尚未处理完）则丢弃本帧（合帧），
+// postTick 把一帧更新合帧投递到地图 goroutine。若队列已满（上一帧尚未处理完）则丢弃本帧，
 // 避免慢帧堆积拖垮内存/时序。由全局游戏主循环按固定节拍对每张地图调用。
 func (m *Map) postTick(dt time.Duration) {
-	if m.cmdCh == nil {
+	if m.runner == nil {
 		return
 	}
-	select {
-	case m.cmdCh <- func() { m.tick(dt) }:
-	default:
-		// 队列满：本帧丢弃（下一拍再来）。
-	}
+	m.runner.PostTick(func() { m.tick(dt) })
 }
 
 // tick 在地图 goroutine 上执行一帧的全部子系统更新（AI/Buff/玩家/技能/事件）。
@@ -115,9 +76,7 @@ func (m *Map) tick(dt time.Duration) {
 
 // StopActor 停止地图 goroutine（幂等）。
 func (m *Map) StopActor() {
-	m.stopOnce.Do(func() {
-		if m.stopCh != nil {
-			close(m.stopCh)
-		}
-	})
+	if m.runner != nil {
+		m.runner.Stop()
+	}
 }
