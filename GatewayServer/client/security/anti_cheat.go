@@ -19,9 +19,14 @@ type AntiCheatManager struct {
 	cancel       context.CancelFunc
 }
 
-// ClientStats 客户端行为统计
+// ClientStats 客户端行为统计。
+//
+// 统计**主体**（Subject）由调用方决定，见 GatewayServer/client/message_handler.go 的 cheatSubject：
+// 已认证会话用 `acct:<账号ID>`，未认证阶段才回退 `ip:<地址>`。
+// ⚠ 别改回按 IP 聚合：CGNAT/网吧下大量玩家共用一个出口 IP，动作数叠加会一人超标、全楼连坐；
+// 也别改回按 sessionID：重连即换 ID、统计清零，检测会被绕过（SEC-4 的原始教训）。
 type ClientStats struct {
-	IP              string
+	Subject         string
 	LoginTime       time.Time
 	LastActionTime  time.Time
 	WindowStart     time.Time // SEC-4: 当前速率统计窗口起点，每分钟滚动重置 ActionCount/ErrorCount
@@ -49,17 +54,17 @@ func NewAntiCheatManager(cfg *config.Config) *AntiCheatManager {
 }
 
 // RecordClientAction 记录客户端行为
-func (acm *AntiCheatManager) RecordClientAction(ip string, packetSize int) {
+func (acm *AntiCheatManager) RecordClientAction(subject string, packetSize int) {
 	now := time.Now()
-	stats, exists := acm.clientStats.Load(ip)
+	stats, exists := acm.clientStats.Load(subject)
 	if !exists {
 		stats = &ClientStats{
-			IP:             ip,
+			Subject:        subject,
 			LoginTime:      now,
 			LastActionTime: now,
 			WindowStart:    now,
 		}
-		acm.clientStats.Store(ip, stats)
+		acm.clientStats.Store(subject, stats)
 	}
 
 	// SEC-4: 每分钟滚动重置速率窗口。此前用 `time.Since(LoginTime) < 1min` 判定→登录一分钟后
@@ -79,8 +84,8 @@ func (acm *AntiCheatManager) RecordClientAction(ip string, packetSize int) {
 }
 
 // RecordError 记录错误
-func (acm *AntiCheatManager) RecordError(ip string, errorType string) {
-	stats, exists := acm.clientStats.Load(ip)
+func (acm *AntiCheatManager) RecordError(subject string, errorType string) {
+	stats, exists := acm.clientStats.Load(subject)
 	if !exists {
 		return
 	}
@@ -94,9 +99,9 @@ func (acm *AntiCheatManager) RecordError(ip string, errorType string) {
 		Severity:    1,
 	}
 
-	reports, _ := acm.cheatReports.Load(ip)
+	reports, _ := acm.cheatReports.Load(subject)
 	reports = append(reports, report)
-	acm.cheatReports.Store(ip, reports)
+	acm.cheatReports.Store(subject, reports)
 }
 
 // checkAbnormalBehavior 检查异常行为
@@ -105,21 +110,21 @@ func (acm *AntiCheatManager) checkAbnormalBehavior(stats *ClientStats) {
 
 	// SEC-4: 窗口内动作数超上限即判违规（窗口每分钟由 RecordClientAction 滚动重置）。
 	if ac.MaxActionsPerMinute > 0 && stats.ActionCount > ac.MaxActionsPerMinute {
-		acm.reportCheat(stats.IP, "HighActionRate", "Too many actions in short time", 3)
+		acm.reportCheat(stats.Subject, "HighActionRate", "Too many actions in short time", 3)
 		stats.AbnormalActions++
 	}
 
 	if ac.MaxErrorRatio > 0 && stats.ActionCount > 0 {
 		errorRatio := float64(stats.ErrorCount) / float64(stats.ActionCount)
 		if errorRatio > ac.MaxErrorRatio {
-			acm.reportCheat(stats.IP, "HighErrorRate", "Too many errors", 2)
+			acm.reportCheat(stats.Subject, "HighErrorRate", "Too many errors", 2)
 			stats.AbnormalActions++
 		}
 	}
 }
 
 // reportCheat 报告作弊行为
-func (acm *AntiCheatManager) reportCheat(ip, cheatType, description string, severity int) {
+func (acm *AntiCheatManager) reportCheat(subject, cheatType, description string, severity int) {
 	report := &CheatReport{
 		Time:        time.Now(),
 		Type:        cheatType,
@@ -127,22 +132,22 @@ func (acm *AntiCheatManager) reportCheat(ip, cheatType, description string, seve
 		Severity:    severity,
 	}
 
-	reports, _ := acm.cheatReports.Load(ip)
+	reports, _ := acm.cheatReports.Load(subject)
 	reports = append(reports, report)
-	acm.cheatReports.Store(ip, reports)
+	acm.cheatReports.Store(subject, reports)
 
 	zLog.Warn("Cheat detected",
-		zap.String("ip", ip),
+		zap.String("subject", subject),
 		zap.String("type", cheatType),
 		zap.String("description", description),
 		zap.Int("severity", severity))
 }
 
 // CheckClientStatus 检查客户端状态
-func (acm *AntiCheatManager) CheckClientStatus(ip string) (bool, string) {
+func (acm *AntiCheatManager) CheckClientStatus(subject string) (bool, string) {
 	ac := acm.config.AntiCheat
 
-	stats, exists := acm.clientStats.Load(ip)
+	stats, exists := acm.clientStats.Load(subject)
 	if !exists {
 		return true, ""
 	}
@@ -155,7 +160,7 @@ func (acm *AntiCheatManager) CheckClientStatus(ip string) (bool, string) {
 		return false, "Too many abnormal actions"
 	}
 
-	reports, _ := acm.cheatReports.Load(ip)
+	reports, _ := acm.cheatReports.Load(subject)
 	maxHighSeverity := ac.MaxHighSeverityReports
 	if maxHighSeverity <= 0 {
 		maxHighSeverity = 3
@@ -186,16 +191,16 @@ func (acm *AntiCheatManager) CleanupInactiveClients() {
 	now := time.Now()
 	var toDelete []string
 
-	acm.clientStats.Range(func(ip string, stats *ClientStats) bool {
+	acm.clientStats.Range(func(subject string, stats *ClientStats) bool {
 		if now.Sub(stats.LastActionTime) > inactiveTimeout {
-			toDelete = append(toDelete, ip)
+			toDelete = append(toDelete, subject)
 		}
 		return true
 	})
 
-	for _, ip := range toDelete {
-		acm.clientStats.Delete(ip)
-		acm.cheatReports.Delete(ip)
+	for _, subject := range toDelete {
+		acm.clientStats.Delete(subject)
+		acm.cheatReports.Delete(subject)
 	}
 }
 

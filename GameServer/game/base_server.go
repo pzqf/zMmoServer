@@ -282,6 +282,12 @@ func (s *BaseServer) OnAfterStart() error {
 		go s.HealthChecker.Start(s.GetContext())
 	}
 
+	// 资产周期存盘（崩溃安全）：背包/技能/仓库/buff/任务只活在 actor 内存，此前只有登出/优雅关服
+	// 才写库——崩溃丢的是本次登录以来的**全部**资产变更。见 player/player_assets_dirty.go。
+	if ls := s.PlayerManager.GetLoginService(); ls != nil {
+		go ls.StartAssetPersistLoop(s.GetContext(), playerservice.SaveInterval())
+	}
+
 	s.SetState(zServer.StateReady, "server ready")
 	s.SetState(zServer.StateHealthy, "server healthy")
 	zLog.Info("Game server is healthy")

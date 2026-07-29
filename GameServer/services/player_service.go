@@ -61,6 +61,9 @@ func (ps *PlayerService) SetSyncProvider(fn func()) {
 	ps.syncProvider = fn
 }
 
+// SaveInterval 周期存盘间隔（属性与资产共用同一节奏，便于统一调优）。
+func SaveInterval() time.Duration { return resolveSaveInterval() }
+
 // resolveSaveInterval 周期存盘间隔：默认 30s，可经 ZMMO_SAVE_INTERVAL（秒）调优/测试。下限 1s。
 func resolveSaveInterval() time.Duration {
 	if v := os.Getenv("ZMMO_SAVE_INTERVAL"); v != "" {

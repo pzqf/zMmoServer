@@ -31,11 +31,15 @@ type SecurityManagerInterface interface {
 	RemoveConnection(ip string)
 }
 
-// AntiCheatManagerInterface 防作弊管理器接口
+// AntiCheatManagerInterface 防作弊管理器接口。
+//
+// subject = 统计**主体**，由调用方决定（见 client/message_handler.go 的 cheatSubject）：
+// 已认证会话用 `acct:<账号ID>`、未认证阶段回退 `ip:<地址>`。
+// ⚠ 别传裸 IP：NAT/CGNAT 下大量玩家共用出口 IP，会一人超标、全楼连坐。
 type AntiCheatManagerInterface interface {
-	RecordClientAction(ip string, packetSize int)
-	RecordError(ip string, errorType string)
-	CheckClientStatus(ip string) (bool, string)
+	RecordClientAction(subject string, packetSize int)
+	RecordError(subject string, errorType string)
+	CheckClientStatus(subject string) (bool, string)
 	StartCleanupTask(ctx context.Context)
 	Stop()
 }

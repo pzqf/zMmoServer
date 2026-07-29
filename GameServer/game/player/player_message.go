@@ -12,6 +12,15 @@ func (p *Player) handleMessage(msg *PlayerMessage) {
 		zap.Int("source", int(msg.Source)),
 		zap.Uint32("type", uint32(msg.Type)))
 
+	// 资产存盘的脏标记（崩溃安全）：背包/技能/仓库/buff/任务只活在 actor 内存里，
+	// 原本只有**登出**和**关服**才写库——进程崩溃/被 kill 就丢掉本次登录以来的全部资产变更。
+	// 这里按消息类型标脏，由 LoginService 的周期存盘把脏玩家写回，丢失窗口收敛到一个存盘间隔。
+	// 集中在这一处标记（而不是散落到每个 mgr 的写方法）便于长期保持正确：
+	// 新增会改资产的消息类型时，只需往 assetMutatingMessages 里加一行。
+	if assetMutatingMessages[msg.Type] {
+		p.MarkAssetsDirty()
+	}
+
 	switch msg.Type {
 	case MsgNetEnterGame:
 		p.handleNetEnterGame(msg)

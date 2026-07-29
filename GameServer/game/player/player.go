@@ -2,6 +2,7 @@ package player
 
 import (
 	"sync"
+	"sync/atomic"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zCommon/game"
@@ -40,6 +41,9 @@ type Player struct {
 	currentMap  id.MapIdType
 	sessionID   interface{}
 	clientSender common.ClientSender
+	// assetsDirty 资产（背包/技能/仓库/buff/任务）有未落库的变更。
+	// 见 player_assets_dirty.go：这些资产原本只在登出/关服才写库，崩溃会丢掉整场游戏的变更。
+	assetsDirty atomic.Bool
 }
 
 func NewPlayer(playerID id.PlayerIdType, accountID id.AccountIdType, name string) *Player {

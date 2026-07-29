@@ -1,7 +1,9 @@
 package player
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/pzqf/zCommon/common/id"
 	"github.com/pzqf/zEngine/zLog"
@@ -153,6 +155,52 @@ func (ls *LoginService) LeaveGame(playerID id.PlayerIdType) error {
 
 	zLog.Info("Player left game successfully", zap.Int64("player_id", int64(playerID)))
 	return nil
+}
+
+// PersistDirtyAssets 把**有未落库资产变更**的在线玩家写回 DB，返回本次落库的玩家数。
+//
+// 崩溃安全（2026-07-29）：背包/技能/仓库/buff/任务只活在 actor 内存里，此前只有登出与优雅关服
+// 才写库——进程崩溃/被 kill 丢的是**本次登录以来的全部资产变更**，不是"最近一次存盘之后"。
+// 周期调用本函数后，丢失窗口收敛到一个存盘间隔。
+//
+// 只存脏玩家：干净玩家跳过，避免每轮对全体在线玩家做「先清后插」的重写。
+// 先取走脏标记再存盘（TakeAssetsDirty 的语义），存盘期间的新变更会重新置脏、下轮再存，不会被吞掉。
+func (ls *LoginService) PersistDirtyAssets() int {
+	players := ls.playerManager.GetAllPlayers()
+	saved := 0
+	for _, p := range players {
+		if !p.TakeAssetsDirty() {
+			continue
+		}
+		savePlayerAssets(ls.playerService, p, p.GetPlayerID())
+		saved++
+	}
+	if saved > 0 {
+		zLog.Debug("Persisted dirty player assets", zap.Int("count", saved))
+	}
+	return saved
+}
+
+// StartAssetPersistLoop 周期把脏资产写回 DB，直到 ctx 结束。由 GameServer 启动时 go 起。
+// 间隔复用属性存盘的 ZMMO_SAVE_INTERVAL（默认 30s），两者语义一致、便于统一调优。
+func (ls *LoginService) StartAssetPersistLoop(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	zLog.Info("Player asset persist loop started", zap.Duration("interval", interval))
+	for {
+		select {
+		case <-ctx.Done():
+			// 退出前再落一次，尽量少丢（优雅关服另有 PersistAllOnline 兜底）。
+			ls.PersistDirtyAssets()
+			return
+		case <-ticker.C:
+			ls.PersistDirtyAssets()
+		}
+	}
 }
 
 // PersistAllOnline 关服时把所有在线玩家落库（属性 sync→缓存 + 背包/技能/仓库存盘）+ 清理跨玩家会话。

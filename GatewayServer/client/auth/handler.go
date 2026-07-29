@@ -34,11 +34,20 @@ func (ah *AuthHandler) SetGameServerProxy(gsp proxy.GameServerProxy) {
 // IsAuthenticated 判断该会话是否已通过 token 校验（HandleTokenVerify 里已绑定 AccountID）。
 // 网关据此做鉴权门禁：未认证的会话不得把任意消息转发给 GameServer（SEC-1）。
 func (ah *AuthHandler) IsAuthenticated(sessionID zNet.SessionIdType) bool {
+	return ah.AccountOf(sessionID) != 0
+}
+
+// AccountOf 返回该会话已绑定的账号 ID（未认证返回 0）。
+// 反作弊据此按**账号**而非 IP 统计——见 message_handler.go 的说明。
+func (ah *AuthHandler) AccountOf(sessionID zNet.SessionIdType) int64 {
 	if ah.connMgr == nil {
-		return false
+		return 0
 	}
 	info, ok := ah.connMgr.GetSessionInfo(sessionID)
-	return ok && info.AccountID != 0
+	if !ok {
+		return 0
+	}
+	return int64(info.AccountID)
 }
 
 func (ah *AuthHandler) HandleTokenVerify(session zNet.Session, tokenString string) error {
