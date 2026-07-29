@@ -27,6 +27,7 @@ import (
 	"github.com/pzqf/zMmoServer/GameServer/net/protolayer"
 	playerservice "github.com/pzqf/zMmoServer/GameServer/services"
 	"github.com/pzqf/zMmoServer/GameServer/session"
+	"github.com/pzqf/zUtil/zMap"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -52,6 +53,11 @@ type TCPService struct {
 	gatewayInbox      consistency.InboxStore
 	dedupeHits        atomic.Uint64
 	onDedupeHit       func(total uint64)
+	// clientLanes: 按客户端分道处理（见 client_lane.go）。Gateway↔GameServer 是一条连接承载
+	// 全服玩家，而 zNet 会话是单 goroutine 收发共用——handler 若在该 goroutine 上同步等 actor，
+	// 会把全服的收发一起卡住（实测并发 8 即自锁）。故路由/handler 一律投到各客户端自己的道上跑。
+	clientLanes *zMap.TypedMap[zNet.SessionIdType, *clientLane]
+	laneStop    chan struct{}
 }
 
 func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager, sessionManager *session.SessionManager, playerManager *player.PlayerManager, playerService *playerservice.PlayerService, playerHandler *handler.PlayerHandler, mapService *maps.MapService, loginService *player.LoginService, protocol protolayer.Protocol) *TCPService {
@@ -68,6 +74,8 @@ func NewTCPService(cfg *config.Config, connManager *connection.ConnectionManager
 		isRunning:      false,
 		gatewayInbox:   consistency.NewMemoryInbox(),
 		messageRouter:  msgHandler.NewRouter(),
+		clientLanes:    zMap.NewTypedMap[zNet.SessionIdType, *clientLane](),
+		laneStop:       make(chan struct{}),
 	}
 }
 
@@ -187,6 +195,10 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to start TCP service: %v", err)
 	}
 
+	// 空闲客户端处理道回收（见 client_lane.go）。
+	ts.wg.Add(1)
+	go ts.laneReapLoop()
+
 	ts.isRunning = true
 
 	zLog.Info("TCP service started successfully", zap.String("addr", ts.config.Server.ListenAddr))
@@ -203,6 +215,11 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 
 	if ts.tcpServer != nil {
 		ts.tcpServer.Close()
+	}
+
+	// 停所有客户端处理道（先停网络再停道：不会再有新消息投进来）。
+	if ts.laneStop != nil {
+		close(ts.laneStop)
 	}
 
 	// 停止地图服务
@@ -223,7 +240,9 @@ func (ts *TCPService) Stop(ctx context.Context) error {
 func (ts *TCPService) handleConnectionMessage(session zNet.Session, packet *zNet.NetPacket) error {
 	// 处理消息
 	sessionID := session.GetSid()
-	zLog.Info("Received message", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", int32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
+	// 热路径日志一律 Debug：这行对**每个包**都执行，Info 级别下几千 QPS 就是每秒上万行落盘，
+	// 日志本身成了主要开销（实测吞吐天花板就压在这类地方）。排查时开 Debug 即可。
+	zLog.Debug("Received message", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", int32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
 
 	// 记录 Gateway 会话，供服务端主动推送（AOI 视野等）复用同一 zNet 通道
 	ts.gatewaySession.Store(session)
@@ -310,7 +329,7 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 	actualProtoId := int32(crossMsg.Message.GetMsgId())
 	clientSessionID := zNet.SessionIdType(crossMsg.Message.GetSessionId())
 
-	zLog.Info("Received message from Gateway",
+	zLog.Debug("Received message from Gateway",
 		zap.Int32("outer_proto_id", protoId),
 		zap.Int32("inner_proto_id", actualProtoId),
 		zap.Uint64("client_session_id", uint64(clientSessionID)),
@@ -321,11 +340,10 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 	}
 
 	if ts.messageRouter != nil {
-		if err := ts.messageRouter.Handle(session, actualProtoId, payload); err != nil {
-			zLog.Error("Failed to handle message via router",
-				zap.Int32("proto_id", actualProtoId),
-				zap.Error(err))
-		}
+		// 投到该客户端自己的处理道后立刻返回：**绝不在会话 goroutine 上跑 handler**。
+		// handler 会阻塞等玩家 actor 回调，而这条 goroutine 还要负责排空 sendChan——
+		// 在这里同步执行会让全服玩家的收发一起停摆，压到并发 8 就自锁（见 client_lane.go）。
+		ts.dispatchToLane(session, clientSessionID, actualProtoId, payload)
 		return
 	}
 

@@ -92,7 +92,7 @@ func (h *MapHandler) handleMapEnter(session zNet.Session, data []byte) error {
 	playerID := id.PlayerIdType(req.PlayerId)
 	mapID := id.MapIdType(req.MapId)
 	clientSessionID := getClientSessionID(session)
-	zLog.Info("Map enter request", zap.Int64("player_id", int64(playerID)), zap.Int32("map_id", req.MapId))
+	zLog.Debug("Map enter request", zap.Int64("player_id", int64(playerID)), zap.Int32("map_id", req.MapId))
 
 	if mapID <= 0 && h.mapService != nil {
 		mapID = h.mapService.GetDefaultMapID()
@@ -338,7 +338,7 @@ func (h *MapHandler) handleMapAttack(session zNet.Session, data []byte) error {
 	mapID := id.MapIdType(req.MapId)
 	targetID := id.ObjectIdType(req.TargetId)
 	clientSessionID := getClientSessionID(session)
-	zLog.Info("Map attack request", zap.Int64("player_id", int64(playerID)), zap.Int64("target_id", int64(targetID)))
+	zLog.Debug("Map attack request", zap.Int64("player_id", int64(playerID)), zap.Int64("target_id", int64(targetID)))
 
 	msg, callback := player.NewPlayerMessageWithCallback(
 		playerID, player.SourceGateway, player.MsgNetMapAttack,

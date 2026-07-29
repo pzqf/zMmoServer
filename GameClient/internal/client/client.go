@@ -252,6 +252,22 @@ func (c *Client) WaitMapEnter(timeout time.Duration) (int32, bool) {
 	return c.messageHandler.WaitFor(uint32(protocol.MapMsgId_MSG_MAP_ENTER_RESPONSE), timeout)
 }
 
+// DrainMapOpSignals 丢弃移动/攻击响应上残留的信号（闭环压测每轮发送前调用）。
+func (c *Client) DrainMapOpSignals() {
+	c.messageHandler.Drain(uint32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE))
+	c.messageHandler.Drain(uint32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE))
+}
+
+// WaitMapMoveAfter 等待**本次请求发出之后**到达的移动响应（闭环压测用，严格关联）。
+func (c *Client) WaitMapMoveAfter(since time.Time, timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitForAfter(uint32(protocol.MapMsgId_MSG_MAP_MOVE_RESPONSE), since, timeout)
+}
+
+// WaitMapAttackAfter 等待**本次请求发出之后**到达的攻击响应（闭环压测用，严格关联）。
+func (c *Client) WaitMapAttackAfter(since time.Time, timeout time.Duration) (int32, bool) {
+	return c.messageHandler.WaitForAfter(uint32(protocol.MapMsgId_MSG_MAP_ATTACK_RESPONSE), since, timeout)
+}
+
 // SendCrossEnter 进入跨服活动实例（realm §5.1）。
 func (c *Client) SendCrossEnter(playerID int64, activityID int64, mapConfigID int32) error {
 	return c.messageSender.SendCrossEnter(playerID, activityID, mapConfigID)

@@ -4,10 +4,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pzqf/zMmoServer/GameClient/internal/client"
+	"github.com/pzqf/zMmoServer/GameClient/internal/msg/handler"
 	"github.com/pzqf/zMmoServer/GameClient/internal/test/concurrency"
+	"github.com/pzqf/zMmoServer/GameClient/internal/test/loadtest"
 	"github.com/pzqf/zMmoServer/GameClient/internal/test/longtest"
 )
 
@@ -37,6 +41,10 @@ func main() {
 	// 跨服活动（realm §5.1）：mode=cross 时进入指定活动的跨服实例（可能落到别的 realm 的 MapServer）。
 	crossActivity := flag.Int64("crossActivity", 0, "跨服活动ID(mode=cross 必填)")
 	crossMapConfig := flag.Int("crossMapConfig", 5001, "跨服活动使用的地图配置ID")
+	// 闭环压测（mode=loadtest）：每客户端"发一条等一条"，量真实的服务端吞吐与延迟分位。
+	loadOp := flag.String("loadOp", "move", "压测操作: move(不含MapServer往返) / attack(含MapServer往返)")
+	loadClients := flag.String("loadClients", "1,2,4,8,16,32", "压测并发梯度(逗号分隔)")
+	loadDuration := flag.Int("loadDuration", 10, "每档并发的压测时长(秒)")
 	flag.Parse()
 
 	fmt.Println("=== GameClient 启动 ===")
@@ -56,6 +64,8 @@ func main() {
 		runGatewayOnlyTest(*gatewayServer)
 	case "global-only":
 		runGlobalOnlyTest(*globalServer, *account, *password)
+	case "loadtest":
+		runLoadTest(*globalServer, *gatewayServer, *loadOp, *loadClients, *loadDuration)
 	case "concurrency":
 		runConcurrencyTest(*gatewayServer, *clientCount, *messageCount)
 	case "long-test":
@@ -525,6 +535,63 @@ func runGlobalOnlyTest(globalServer, account, password string) {
 func runConcurrencyTest(gatewayServer string, clientCount, messageCount int) {
 	fmt.Println("=== 并发测试模式 ===")
 	concurrency.RunConcurrencyTest(gatewayServer, clientCount, messageCount, 1, 1001, 2)
+}
+
+// runLoadTest 闭环压测：按并发梯度逐档跑，输出吞吐与延迟分位。
+//
+// 看什么：**吞吐是否随并发上升**。若并发翻倍而吞吐不动、延迟等比例变长，
+// 说明服务端存在串行瓶颈（请求在某处排队），这正是要量出来的东西。
+func runLoadTest(globalServer, gatewayServer, op, clientsSpec string, durationSec int) {
+	fmt.Println("=== 闭环压测模式 ===")
+	// 压测期间关掉客户端的人类可读输出，否则量的是终端刷屏速度。
+	handler.SetQuiet(true)
+
+	var grades []int
+	for _, s := range strings.Split(clientsSpec, ",") {
+		n, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil || n <= 0 {
+			fmt.Printf("无效的并发档位: %q\n", s)
+			return
+		}
+		grades = append(grades, n)
+	}
+
+	runStamp := time.Now().Unix()
+	fmt.Printf("操作=%s 并发梯度=%v 每档时长=%ds 账号批次=%d\n\n", op, grades, durationSec, runStamp)
+
+	var results []*loadtest.Result
+	for i, n := range grades {
+		res, err := loadtest.Run(loadtest.Config{
+			GlobalAddr:  globalServer,
+			GatewayAddr: gatewayServer,
+			Clients:     n,
+			Duration:    time.Duration(durationSec) * time.Second,
+			Op:          loadtest.Op(op),
+			MapID:       1001,
+			// 账号前缀带**本次运行的时间戳**：复用上一轮的账号会因该账号已有角色而建号失败
+			// （拿不到 playerID），压测直接跑不起来。每轮全新账号最省事。
+			AccountPfx: fmt.Sprintf("l%d%s%d", runStamp, op, i),
+		})
+		if err != nil {
+			fmt.Printf("并发=%d 档位失败: %v\n", n, err)
+			continue
+		}
+		results = append(results, res)
+		res.Print()
+	}
+
+	fmt.Println("\n=== 汇总 ===")
+	fmt.Printf("%-8s %-12s %-12s %-12s %-12s\n", "并发", "吞吐(次/秒)", "p50", "p95", "p99")
+	for _, r := range results {
+		fmt.Printf("%-8d %-12.1f %-12v %-12v %-12v\n", r.Clients, r.Throughput, r.P50, r.P95, r.P99)
+	}
+	if len(results) >= 2 {
+		first, last := results[0], results[len(results)-1]
+		scale := last.Throughput / first.Throughput
+		concurrencyScale := float64(last.Clients) / float64(first.Clients)
+		fmt.Printf("\n并发放大 %.0f 倍 → 吞吐放大 %.2f 倍（理想为接近并发放大倍数；接近 1 = 服务端串行）\n",
+			concurrencyScale, scale)
+	}
 }
 
 // runLongTest 运行长时测试
