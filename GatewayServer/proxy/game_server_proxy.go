@@ -286,7 +286,7 @@ func (gsp *gameServerProxy) flushPendingMessages() {
 }
 
 func (gsp *gameServerProxy) handleGameServerMessage(session zNet.Session, packet *zNet.NetPacket) error {
-	zLog.Info("Received message from GameServer", zap.Uint32("proto_id", uint32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
+	zLog.Debug("Received message from GameServer", zap.Uint32("proto_id", uint32(packet.ProtoId)), zap.Int("data_size", len(packet.Data)))
 	gsp.processGameServerMessage(packet.Data)
 	return nil
 }
@@ -323,7 +323,7 @@ func (gsp *gameServerProxy) processGameServerMessage(data []byte) {
 	clientData := baseMsg.Data
 	msgID := baseMsg.MsgId
 
-	zLog.Info("Received response from GameServer",
+	zLog.Debug("Received response from GameServer",
 		zap.Uint32("msg_id", msgID),
 		zap.Uint64("session_id", uint64(sessionID)),
 		zap.Int("data_size", len(clientData)))
@@ -402,6 +402,6 @@ func (gsp *gameServerProxy) sendToGameServerInternal(sessionID zNet.SessionIdTyp
 		return err
 	}
 
-	zLog.Info("Message sent to GameServer", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", protoId), zap.Int("data_len", len(data)))
+	zLog.Debug("Message sent to GameServer", zap.Uint64("session_id", uint64(sessionID)), zap.Int32("proto_id", protoId), zap.Int("data_len", len(data)))
 	return nil
 }

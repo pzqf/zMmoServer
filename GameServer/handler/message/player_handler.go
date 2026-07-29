@@ -16,7 +16,21 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// ClientSessionCarrier 由投递方随消息一起带上的**客户端**会话号。
+//
+// Gateway↔GameServer 只有一条连接、承载全服玩家，所以"这条消息属于哪个客户端"必须随消息走。
+// 此前是把它 SetObj 到共享的 Gateway 会话对象上、handler 再 GetObj 取回——那只在
+// "收包后立刻同步执行 handler"时成立。改成按客户端分道异步执行后，handler 真正跑起来时
+// 该字段可能已被**另一个客户端**的消息覆盖，回包就发给错的人了。
+type ClientSessionCarrier interface {
+	ClientSessionID() zNet.SessionIdType
+}
+
 func getClientSessionID(session zNet.Session) zNet.SessionIdType {
+	// 优先用随消息带来的值（分道投递会包一层，见 net/service/client_lane.go）。
+	if carrier, ok := session.(ClientSessionCarrier); ok {
+		return carrier.ClientSessionID()
+	}
 	if tcpSess, ok := session.(*zNet.TcpServerSession); ok {
 		if obj := tcpSess.GetObj(); obj != nil {
 			if sid, ok := obj.(zNet.SessionIdType); ok {

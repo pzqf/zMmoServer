@@ -103,6 +103,21 @@ func (ts *TCPService) Start(ctx context.Context) error {
 	if ts.metricsRecorder != nil {
 		opts = append(opts, zNet.WithServerMetrics(ts.metricsRecorder))
 	}
+
+	// ★ MapServer 的"客户端"是 GameServer，不是玩家 ★
+	// zNet 默认的 DDoS 阈值是按**单个玩家**定的（默认 10000 包/秒），而 GameServer→MapServer
+	// 是**一条连接承载全服玩家**的内部链路，正常业务量轻易越过它——一越限 zNet 就断开该连接，
+	// GameServer 侧所有地图消息随即全部失败、outbox 灌满死信（实测并发一上来就复现）。
+	// 内部链路的对端是可信服务、由部署网络隔离保护，不该套用面向公网玩家的限速。
+	opts = append(opts, zNet.WithDDoSConfig(&zNet.DDoSConfig{
+		MaxConnPerIP:      10000,
+		ConnTimeWindow:    60,
+		MaxPacketsPerIP:   50000000, // 内部链路不限包频率
+		PacketTimeWindow:  1,
+		MaxBytesPerIP:     1 << 40, // 内部链路不限流量
+		TrafficTimeWindow: 60,
+		BanDuration:       60,
+	}))
 	ts.tcpServer = zNet.NewTcpServer(tcpConfig, opts...)
 
 	// 注册消息处理器

@@ -46,6 +46,20 @@ type laneJob struct {
 	payload []byte
 }
 
+// laneSession 包一层 Gateway 会话，把**本条消息所属的客户端会话号**随消息带下去。
+//
+// 必须这样带：Gateway↔GameServer 只有一条连接承载全服玩家，原来是把客户端会话号
+// SetObj 到共享的会话对象上、handler 再 GetObj 取——那只在"收包后立刻同步执行 handler"时成立。
+// 分道后 handler 在别的 goroutine 上晚一步执行，那个字段早被**另一个客户端**的消息覆盖了，
+// 回包就发给错的人（表现为随机丢响应/串包）。
+type laneSession struct {
+	zNet.Session
+	clientSessionID zNet.SessionIdType
+}
+
+// ClientSessionID 实现 message.ClientSessionCarrier。
+func (s laneSession) ClientSessionID() zNet.SessionIdType { return s.clientSessionID }
+
 // clientLane 一个客户端的处理道：一条队列 + 一个 goroutine，顺序执行该客户端的消息。
 type clientLane struct {
 	jobs     chan laneJob
@@ -81,7 +95,12 @@ func (ts *TCPService) dispatchToLane(session zNet.Session, clientSessionID zNet.
 	lane.touch()
 
 	select {
-	case lane.jobs <- laneJob{session: session, protoID: protoID, payload: payload}:
+	case lane.jobs <- laneJob{
+		// 包一层把客户端会话号随消息带下去，见 laneSession 的说明。
+		session: laneSession{Session: session, clientSessionID: clientSessionID},
+		protoID: protoID,
+		payload: payload,
+	}:
 	default:
 		// 只丢这个客户端自己的包：他在刷包，不该影响别人。
 		zLog.Warn("Client lane queue full, dropping packet",

@@ -77,6 +77,11 @@ func (cm *ConnectionManager) SetMapResponseHandler(h MapResponseHandler) {
 }
 
 type MapConnection struct {
+	// client zNet 客户端本体。**发送时必须经它取当前 session**，不能缓存 session：
+	// 连接断开重连后 zNet 会换一个新 session，缓存的旧 session 一写就是
+	// "use of closed network connection"，且永远不会自愈（实测下 GameServer→MapServer
+	// 断一次后所有地图消息永久失败、outbox 全进死信，只能重启进程）。
+	client      *zNet.TcpClient
 	session     zNet.Session
 	addr        string
 	mapIDs      []int
@@ -125,13 +130,14 @@ func (cm *ConnectionManager) ConnectToMapServer(mapServerAddr string, mapIDs []i
 
 	zLog.Info("Connecting to MapServer...", zap.String("addr", mapServerAddr), zap.Ints("map_ids", mapIDs))
 
-	_, session, err := cm.dialMapServer(mapServerAddr)
+	client, session, err := cm.dialMapServer(mapServerAddr)
 	if err != nil {
 		zLog.Error("Failed to connect to MapServer", zap.String("addr", mapServerAddr), zap.Error(err))
 		return err
 	}
 
 	mapConn := &MapConnection{
+		client:      client,
 		session:     session,
 		addr:        mapServerAddr,
 		mapIDs:      mapIDs,
@@ -163,9 +169,9 @@ func (cm *ConnectionManager) ConnectToCrossRealmMapServer(serverID uint32, mapSe
 	if err != nil {
 		return err
 	}
-	_ = client
 
 	cm.crossRealmConns.Store(serverID, &MapConnection{
+		client:      client,
 		session:     session,
 		addr:        mapServerAddr,
 		isConnected: true,
@@ -184,7 +190,7 @@ func (cm *ConnectionManager) SendToCrossRealmMapServer(serverID uint32, protoId 
 	if !exists || !conn.isConnected {
 		return fmt.Errorf("cross-realm map server not connected: %d", serverID)
 	}
-	return conn.session.Send(zNet.ProtoIdType(protoId), data)
+	return conn.currentSession().Send(zNet.ProtoIdType(protoId), data)
 }
 
 // IsCrossRealmConnected 是否已连上某跨 realm MapServer。
@@ -284,7 +290,22 @@ func (cm *ConnectionManager) SendToMap(mapID int, protoId int, data []byte) erro
 		return fmt.Errorf("map server not connected for map %d", mapID)
 	}
 
-	return mapConn.session.Send(zNet.ProtoIdType(protoId), data)
+	return mapConn.currentSession().Send(zNet.ProtoIdType(protoId), data)
+}
+
+// currentSession 取当前有效的 zNet 会话。
+//
+// 必须每次现取：zNet 客户端 AutoReconnect 重连后会换一个新 session，
+// 若一直用建连时缓存的那个，链路断一次之后所有发送都是
+// "use of closed network connection"，而且**永远不自愈**——
+// 实测 GameServer→MapServer 断开后地图消息全失败、outbox 全进死信，只能重启进程。
+func (c *MapConnection) currentSession() zNet.Session {
+	if c.client != nil {
+		if s := c.client.GetSession(); s != nil {
+			return s
+		}
+	}
+	return c.session
 }
 
 // handleMapServerPacket 处理 MapServer 回程消息。统一经共用 codec 解包

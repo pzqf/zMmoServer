@@ -183,8 +183,26 @@ func (ts *TCPService) Start(ctx context.Context) error {
 		TimestampTolerance:  ts.config.Server.TimestampTolerance,
 	}
 
+	// ★ GameServer 的"客户端"是 Gateway，不是玩家 ★
+	// zNet 默认 DDoS 阈值按**单个玩家**定（默认 10000 包/秒），而 Gateway↔GameServer 是
+	// **一条连接承载全服玩家**的内部链路，正常业务量轻易越过它——一越限 zNet 就断开该连接，
+	// 全服玩家一起掉线，且 GameServer 侧看到的只是"Packet rate limit exceeded"这一行。
+	// 内部链路的对端是可信服务、由部署网络隔离保护，不该套用面向公网玩家的限速。
+	// （同样的坑在 MapServer 侧也有，一并修了。）
+	internalDDoS := &zNet.DDoSConfig{
+		MaxConnPerIP:      10000,
+		ConnTimeWindow:    60,
+		MaxPacketsPerIP:   50000000, // 内部链路不限包频率
+		PacketTimeWindow:  1,
+		MaxBytesPerIP:     1 << 40, // 内部链路不限流量
+		TrafficTimeWindow: 60,
+		BanDuration:       60,
+	}
+
 	// 创建zNet.TcpServer（用于Gateway连接）
-	ts.tcpServer = zNet.NewTcpServer(tcpConfig, zNet.WithLogger(zLog.GetStandardLogger()))
+	ts.tcpServer = zNet.NewTcpServer(tcpConfig,
+		zNet.WithLogger(zLog.GetStandardLogger()),
+		zNet.WithDDoSConfig(internalDDoS))
 
 	// 注册消息处理器
 	ts.tcpServer.RegisterDispatcher(ts.handleConnectionMessage)
@@ -335,9 +353,10 @@ func (ts *TCPService) handleGatewayMessage(session zNet.Session, protoId int32, 
 		zap.Uint64("client_session_id", uint64(clientSessionID)),
 		zap.Int("data_size", len(payload)))
 
-	if tcpSess, ok := session.(*zNet.TcpServerSession); ok {
-		tcpSess.SetObj(clientSessionID)
-	}
+	// ⚠ 不要在这里 SetObj(clientSessionID) 再让 handler 去 GetObj 取：
+	// Gateway↔GameServer 是一条连接承载全服玩家，这个字段是**共享**的；
+	// 分道后 handler 在别的 goroutine 上晚一步执行，取到的可能已是另一个客户端的会话号，
+	// 回包就发给错的人。客户端会话号改为随消息带下去（见 client_lane.go 的 laneSession）。
 
 	if ts.messageRouter != nil {
 		// 投到该客户端自己的处理道后立刻返回：**绝不在会话 goroutine 上跑 handler**。
